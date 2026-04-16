@@ -112,6 +112,26 @@ label{display:block;font-size:10px;color:var(--MU);text-transform:uppercase;lett
 .tab.on{color:var(--R);border-bottom-color:var(--R);}
 .scr{display:none;padding:14px;flex-direction:column;gap:12px;}
 .scr.on{display:flex;}
+.scr > *{width:100%;}
+.scr > .card, .scr > div{width:100%;}
+
+/* Escalonar tipografia em telas grandes */
+@media(min-width:1280px){
+ body{font-size:14px;}
+ .card.cp{padding:20px;}
+ .sl{font-size:11px;}
+ .sv{font-size:26px;}
+ .btn{padding:11px 20px;font-size:14px;}
+ .btn.sm{padding:8px 14px;font-size:13px;}
+ .chip{padding:8px 16px;font-size:12px;}
+ input,textarea{font-size:14px;padding:12px 16px;}
+}
+@media(min-width:1600px){
+ body{font-size:15px;}
+ .card.cp{padding:24px;}
+ .sl{font-size:12px;}
+ .sv{font-size:28px;}
+}
 .ex-sbar{display:flex;gap:3px;background:var(--C1);border-radius:12px;padding:3px;border:1px solid var(--BR);}
 .ex-stab{flex:1;padding:8px 4px;border-radius:10px;border:none;cursor:pointer;font-size:11px;font-weight:600;font-family:var(--FONT-H);background:transparent;color:var(--MU);transition:all .2s;}
 .ex-stab.on{background:var(--R);color:#fff;}
@@ -180,51 +200,55 @@ body.light .cd.hg span{color:#3d6225!important;}
  .scr{padding:14px;gap:12px;}
 }
 
-/* Tablet (769px - 1023px): sidebar compacta */
+/* Tablet (769px - 1023px): sidebar compacta, conteúdo ocupa todo o resto */
 @media(min-width:769px) and (max-width:1023px){
  #app{max-width:100%;}
  .tabs{display:none!important;}
  .hdr{display:none!important;}
  .sidebar{display:flex!important;flex-direction:column;width:200px;height:100vh;background:var(--SB-BG);border-right:1px solid var(--BR);position:fixed;left:0;top:0;z-index:100;}
- .main-content{margin-left:200px;max-width:100%;padding:0;}
- .scr{padding:18px 24px;gap:14px;}
+ .main-content{margin-left:200px;max-width:none;padding:0;}
+ .scr{padding:20px 28px;gap:14px;}
 }
 
-/* Desktop pequeno (1024px - 1279px): sidebar 220px */
+/* Desktop pequeno (1024px - 1279px): conteúdo usa toda a largura disponível */
 @media(min-width:1024px) and (max-width:1279px){
  #app{max-width:100%;}
  .tabs{display:none!important;}
  .hdr{display:none!important;}
  .sidebar{display:flex!important;flex-direction:column;width:220px;height:100vh;background:var(--SB-BG);border-right:1px solid var(--BR);position:fixed;left:0;top:0;z-index:100;}
- .main-content{margin-left:220px;max-width:100%;padding:0;}
- .scr{padding:22px 28px;gap:16px;}
+ .main-content{margin-left:220px;max-width:none;padding:0;}
+ .scr{padding:24px 36px;gap:16px;}
 }
 
-/* Desktop médio (1280px - 1599px): sidebar 240px, conteúdo fluido até 1400px centralizado */
+/* Desktop médio (1280px - 1599px): conteúdo ocupa TODA largura após sidebar */
 @media(min-width:1280px) and (max-width:1599px){
  #app{max-width:100%;}
  .tabs{display:none!important;}
  .hdr{display:none!important;}
  .sidebar{display:flex!important;flex-direction:column;width:240px;height:100vh;background:var(--SB-BG);border-right:1px solid var(--BR);position:fixed;left:0;top:0;z-index:100;}
- .main-content{margin-left:240px;max-width:1400px;padding:0 28px;}
- .scr{padding:26px 0;gap:18px;}
+ .main-content{margin-left:240px;max-width:none;padding:0;}
+ .scr{padding:28px 44px;gap:18px;}
 }
 
-/* Desktop grande (1600px+): sidebar 260px, conteúdo max 1560px centralizado */
-@media(min-width:1600px){
+/* Desktop grande (1600px - 1919px): ~88% da tela, centralizado em ultra */
+@media(min-width:1600px) and (max-width:1919px){
  #app{max-width:100%;}
  .tabs{display:none!important;}
  .hdr{display:none!important;}
  .sidebar{display:flex!important;flex-direction:column;width:260px;height:100vh;background:var(--SB-BG);border-right:1px solid var(--BR);position:fixed;left:0;top:0;z-index:100;}
- .main-content{margin-left:260px;max-width:1560px;padding:0 40px;}
- .scr{padding:30px 0;gap:20px;}
+ .main-content{margin-left:260px;max-width:none;padding:0;}
+ .scr{padding:32px 64px;gap:20px;}
 }
 
-/* Ultra-wide (1920px+): conteúdo max 1720px, margens geradas pela flex */
+/* Ultra-wide (1920px+): limita em 1720px centralizado (~85-90% de 1920) */
 @media(min-width:1920px){
- .main-content{margin-left:260px;max-width:calc(100vw - 260px);padding:0;display:flex;justify-content:center;}
+ #app{max-width:100%;}
+ .tabs{display:none!important;}
+ .hdr{display:none!important;}
+ .sidebar{display:flex!important;flex-direction:column;width:260px;height:100vh;background:var(--SB-BG);border-right:1px solid var(--BR);position:fixed;left:0;top:0;z-index:100;}
+ .main-content{margin-left:260px;max-width:none;padding:0;display:flex;justify-content:center;}
  .main-content > *{width:100%;max-width:1720px;}
- .scr{padding:32px 48px;gap:22px;}
+ .scr{padding:36px 72px;gap:22px;}
 }
 
 .sidebar{display:none;}
