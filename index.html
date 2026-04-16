@@ -193,6 +193,9 @@ body.light .cd.hg span{color:#3d6225!important;}
 
 /* ── LAYOUT RESPONSIVO COMPLETO ─── */
 
+/* Base: main-content sempre preenche espaço disponível no flex container */
+.main-content{flex:1 1 0%;min-width:0;width:100%;}
+
 /* Mobile (até 768px): navegação por tabs, conteúdo em coluna */
 @media(max-width:768px){
  .sidebar{display:none!important;}
@@ -230,7 +233,7 @@ body.light .cd.hg span{color:#3d6225!important;}
  .scr{padding:28px 44px;gap:18px;}
 }
 
-/* Desktop grande (1600px - 1919px): ~88% da tela, centralizado em ultra */
+/* Desktop grande (1600px - 1919px) */
 @media(min-width:1600px) and (max-width:1919px){
  #app{max-width:100%;}
  .tabs{display:none!important;}
