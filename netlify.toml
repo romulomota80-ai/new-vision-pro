@@ -1,0 +1,43 @@
+# Configuração de deploy do Netlify — New Vision E-Commerce Pro
+
+[build]
+  # Sem build — é HTML estático
+  publish = "."
+  command = ""
+
+[build.environment]
+  # Usa imagem de build atualizada (Ubuntu 22.04)
+  NODE_VERSION = "20"
+
+# Proxy das chamadas /api/* pro backend Hetzner
+[[redirects]]
+  from = "/api/*"
+  to = "http://5.75.186.38:3000/api/:splat"
+  status = 200
+  force = true
+
+# SPA fallback — qualquer rota não encontrada cai no index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Headers de segurança
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Cache longo para imagens (logo, favicon) — 30 dias
+[[headers]]
+  for = "/*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000, immutable"
+
+# Cache curto para HTML — 5 minutos (pra mudanças propagarem rápido)
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=300, must-revalidate"
