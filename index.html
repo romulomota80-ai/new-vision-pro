@@ -691,7 +691,6 @@ function fv(v){ return (v||0).toLocaleString("pt-BR",{style:"currency",currency:
 function fk(v){ var n=v||0; return Math.abs(n)>=1000?"R$ "+(n/1000).toFixed(1)+"k":fv(n); }
 function fkc(v){ var n=v||0; if(n>=1e6)return(n/1e6).toFixed(1)+"M"; if(n>=1000)return(n/1000).toFixed(n>=10000?0:1)+"k"; return "R$"+n.toFixed(0); }
 function fd(d){ return d?new Date(d+"T12:00:00").toLocaleDateString("pt-BR"):""; }
-function uid(){ return Math.random().toString(36).slice(2,7); }
 function ge(id){ return document.getElementById(id); }
 function tc(){ return MPS.reduce(function(a,m){ return a.concat(m.contas); },[]); }
 function cR(m){ return EXT.filter(function(e){ return e.mes===m&&!isMov(e.cat); }).reduce(function(s,e){ return s+e.val; },0); }
@@ -699,7 +698,6 @@ function cM(m){ return EXT.filter(function(e){ return e.mes===m&&isMov(e.cat); }
 function bdg(c,sm){ var cor=CC[c]||"#4a4e9a",mv=isMov(c),s=sm?10:11; return '<span style="font-size:'+s+'px;padding:2px 7px;border-radius:20px;font-weight:700;white-space:nowrap;background:'+(mv?"rgba(184,134,11,.12)":cor+"20")+';color:'+(mv?"#b8860b":cor)+';border:1px solid '+(mv?"rgba(184,134,11,.3)":cor+"40")+';">'+c+(mv?" ↕":"")+'</span>'; }
 function mgb(v,sm){ var n=parseFloat(v)||0,c=n>=40?"#5a8a3a":n>=25?"#b8860b":"#a04040"; return '<span style="display:inline-flex;align-items:center;background:'+c+'18;border:1px solid '+c+'35;color:'+c+';font-size:'+(sm?10:12)+'px;font-weight:800;border-radius:6px;padding:'+(sm?"2px 6px":"4px 10px")+';">'+v+'%</span>'; }
 function getPer(){ if(PER==="mes")return[MES];if(PER==="t1")return MESES.slice(0,3);if(PER==="t2")return MESES.slice(3,6);if(PER==="s1")return MESES.slice(0,6);if(PER==="s2")return MESES.slice(6,12);if(PER==="ano")return MESES;if(PER==="cu"){var i=MESES.indexOf(CUI),j=MESES.indexOf(CUF);return(i>=0&&j>=i)?MESES.slice(i,j+1):[MES];}return[MES]; }
-function f2u(file){ return new Promise(function(r,j){ var fr=new FileReader(); fr.onload=function(){r(fr.result);}; fr.onerror=j; fr.readAsDataURL(file); }); }
 function toast(msg, ok){ var t=ge("toast"); t.textContent=msg; t.style.borderColor=ok===false?"#a04040":"var(--G)"; t.style.color=ok===false?"#a04040":"var(--G)"; t.classList.add("show"); setTimeout(function(){t.classList.remove("show");},2500); }
 
 // ═══ VIEWER DE COMPROVANTE/BOLETO (modal) ══════════════════════
@@ -1189,7 +1187,6 @@ async function pagarBol(id){
  toast("Boleto marcado como pago!"); rBo();
  } catch(e){ toast("Erro: "+e.message,false); }
 }
-async function pagarBolCal(id){ await pagarBol(id); rCal(); }
 
 async function delBol(id){
  var b=BOL.filter(function(x){return x.id===id;})[0];
@@ -1561,7 +1558,7 @@ function rLu(){
 function cRow(ic,lbl,sub,val,cor){ return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--BR);"><div style="display:flex;gap:8px;"><span>'+ic+'</span><div><div style="font-size:12px;color:var(--MU);">'+lbl+'</div><div style="font-size:10px;color:var(--MU);opacity:.6;">'+sub+'</div></div></div><span style="font-size:15px;font-weight:800;color:'+(val<0?"#a04040":cor)+';">'+fv(val)+'</span></div>'; }
 
 // ═══ IA ═════════════════════════════════════════════════════════
-function rIA(){ ge("ia-sg").innerHTML=IA_S.map(function(s){return'<button onclick="iaSend(\''+s.replace(/'/g,"&#39;")+'\')" style="background:rgba(100,0,20,.3);border:1px solid rgba(201,33,39,.3);color:#ffcccc;border-radius:20px;padding:5px 11px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:600;margin-bottom:2px;">'+s+'</button>';}).join(""); rMsgs(); }
+function rIA(){ ge("ia-sg").innerHTML=IA_S.map(function(s){return'<button onclick="iaSend(\''+s.replace(/'/g,"&#39;")+'\')" style="background:rgba(201,33,39,.08);border:1px solid rgba(201,33,39,.25);color:var(--R);border-radius:20px;padding:5px 11px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:600;margin-bottom:2px;">'+s+'</button>';}).join(""); rMsgs(); }
 function rMsgs(){ var a=ge("ia-msgs"); a.innerHTML=MSGS.map(function(m){return'<div class="cm'+(m.r==="u"?" u":"")+'">'+'<div class="cav" style="background:'+(m.r==="u"?"rgba(201,33,39,.1)":"var(--C2)")+';border:1px solid '+(m.r==="u"?"rgba(201,33,39,.25)":"var(--BR)")+';">'+(m.r==="u"?(U?U.av:"RY"):"NV")+'</div><div class="cb'+(m.r==="u"?" u":"")+'">'+m.t+'</div></div>';}).join(""); a.scrollTop=a.scrollHeight; }
 function iaSend(txt){ if(typeof txt!=="string")txt=""; txt=txt.trim(); if(!txt){txt=ge("ia-in").value.trim();} if(!txt)return; ge("ia-in").value=""; MSGS.push({r:"u",t:txt}); rMsgs();
  var a=ge("ia-msgs"),ld=document.createElement("div"); ld.className="cm"; ld.innerHTML='<div class="cav" style="background:var(--C2);border:1px solid var(--BR);">NV</div><div class="cb"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>'; a.appendChild(ld); a.scrollTop=a.scrollHeight;
