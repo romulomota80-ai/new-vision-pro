@@ -1568,46 +1568,25 @@ function iaSend(txt){ if(typeof txt!=="string")txt=""; txt=txt.trim(); if(!txt){
  var ctx="NEW VISION E-COMM PRO (banco: Supabase)\nREGRA: TECIDO/FORNECEDORES/TRANSPORTADORAS = movimentações de controle (NÃO subtraem do lucro).\nGASTOS FIXOS MENSAIS: "+fv(fxTot)+"\nCUSTOS: "+Object.keys(gr).map(function(m){return m+":"+fv(gr[m]);}).join("|")+" MOVIM.: "+Object.keys(gm).map(function(m){return m+":"+fv(gm[m]);}).join("|")+" RECEITAS: ";
  Object.keys(REC).forEach(function(m){var fa=all.reduce(function(s,c){return s+(REC[m][c.id]?REC[m][c.id].f||0:0);},0);if(!fa)return;var la=all.reduce(function(s,c){return s+(REC[m][c.id]?REC[m][c.id].l||0:0);},0),aa=all.reduce(function(s,c){return s+(REC[m][c.id]?REC[m][c.id].a||0:0);},0),sa=la-aa-(gr[m]||0);ctx+=m+":Fat"+fv(fa)+"Sob"+fv(sa)+"Mg"+(fa>0?((sa/fa)*100).toFixed(1):0)+"% | ";});
  ctx+="\nBOLETOS: "+BOL.filter(function(b){return b.st==="p";}).map(function(b){return b.desc+":"+fv(b.val)+"vence"+b.ven;}).join("|");
- // ── Chamar IA via backend (evita CORS) ──────────────────────
- var endpoint = BACKEND_URL
- ? BACKEND_URL + '/api/chat'
- : '/api/chat';
-
- var fetchOpts;
- if(BACKEND_URL){
- // Backend próprio — envia histórico limpo
- fetchOpts = {
+ // ── Chamar IA via backend (proxy Netlify → nginx → PM2) ────────
+ var endpoint = BACKEND_URL ? BACKEND_URL + '/api/chat' : '/api/chat';
+ var fetchOpts = {
  method:'POST',
  headers:{'Content-Type':'application/json'},
  body:JSON.stringify({
- messages:MSGS.map(function(m){return{role:m.r==='u'?'user':'assistant',content:m.t};})
+ messages:MSGS.map(function(m){return{role:m.r==='u'?'user':'assistant',content:m.t};}),
+ contexto:ctx
  })
  };
- } else {
- // Fallback direto (não funciona em produção por CORS, só em dev)
- fetchOpts = {
- method:'POST',
- headers:{'Content-Type':'application/json'},
- body:JSON.stringify({
- model:'claude-sonnet-4-20250514',max_tokens:800,
- system:'IA Analista da New Vision E-Commerce Pro. Português, direto.\nTECIDO/FORNECEDORES/TRANSPORTADORAS = movimentações de controle — NUNCA some como custo real.\n'+ctx,
- messages:MSGS.map(function(m){return{role:m.r==='u'?'user':'assistant',content:m.t};})
- })
- };
- }
 
  fetch(endpoint,fetchOpts).then(function(r){return r.json();}).then(function(dt){
- var rp = BACKEND_URL
- ? (dt.resposta||'Erro.')
- : ((dt.content||[]).map(function(i){return i.text||'';}).join('')||'Erro.');
+ // Backend retorna {"resposta": "..."}. Fallback pro formato Anthropic direto caso mude no futuro.
+ var rp = dt.resposta || (dt.content||[]).map(function(i){return i.text||'';}).join('') || 'Sem resposta da IA.';
  a.removeChild(ld);MSGS.push({r:'ai',t:rp});rMsgs();
- }).catch(function(){
+ }).catch(function(err){
  a.removeChild(ld);
- if(!BACKEND_URL){
- MSGS.push({r:'ai',t:'A IA ainda não está configurada.\n\nO servidor backend precisa ser instalado para a IA funcionar.\n\nEnquanto isso, você pode usar todas as outras funcionalidades do sistema normalmente.'});
- } else {
+ console.error('Erro IA:', err);
  MSGS.push({r:'ai',t:'Erro de conexão com o servidor. Verifique se o backend está online.'});
- }
  rMsgs();
  });
 }
