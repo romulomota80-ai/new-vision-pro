@@ -9,10 +9,10 @@
   # Usa imagem de build atualizada (Ubuntu 22.04)
   NODE_VERSION = "20"
 
-# Proxy das chamadas /api/* pro backend Hetzner
+# Proxy das chamadas /api/* pro backend Hetzner (via nginx HTTPS)
 [[redirects]]
   from = "/api/*"
-  to = "http://5.75.186.38:3000/api/:splat"
+  to = "https://api.newvisionpro.com.br/api/:splat"
   status = 200
   force = true
 
