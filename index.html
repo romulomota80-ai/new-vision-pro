@@ -776,7 +776,7 @@ async function carregarTudo(){
 
  // Boletos
  BOL = (rBol.data||[]).map(function(r){
- var link = r.link_pdf || r.arquivo_url || "";
+ var link = r.arquivo_url || "";
  return {
  id:r.id, desc:r.descricao, val:parseFloat(r.valor),
  ven:r.vencimento, st:r.status==="pago"?"pago":"p",
@@ -1229,25 +1229,24 @@ function boFechar(){ ge("bo-form").style.display="none"; }
 async function boSalvar(){
  var d=(ge("bo-de").value||"").trim(),v=parseFloat(ge("bo-vl").value),vc=ge("bo-vc").value;
  if(!d||!v||!vc){toast("Preencha descrição, valor e vencimento!",false);return;}
+ // Payload mínimo comum
  var payload={
  descricao:d, valor:v, vencimento:vc, status:"pendente",
  categoria:ge("bo-ct").value, recorrente:false,
  tipo: BO_TIPO
  };
  if(BO_TIPO === "pix"){
+ // PIX: só adiciona favorecido e chave_pix (opcionais)
  var fav=(ge("bo-fav").value||"").trim();
  var pix=(ge("bo-pix").value||"").trim();
- // Favorecido e chave PIX são OPCIONAIS
- payload.favorecido = fav || null;
- payload.chave_pix = pix || null;
- payload.codigo_barras = "";
- payload.link_pdf = null;
+ if(fav) payload.favorecido = fav;
+ if(pix) payload.chave_pix = pix;
  } else {
+ // Boleto: só adiciona codigo_barras e arquivo_url se preenchidos
+ var cod=(ge("bo-cd").value||"").trim();
  var lk=(ge("bo-lk").value||"").trim();
- payload.codigo_barras = ge("bo-cd").value||"";
- payload.link_pdf = lk||null;
- payload.favorecido = null;
- payload.chave_pix = null;
+ if(cod) payload.codigo_barras = cod;
+ if(lk) payload.arquivo_url = lk;
  }
  setBtn("btn-bo-sv",true);
  try {
@@ -1256,12 +1255,12 @@ async function boSalvar(){
  BOL.push({
  id:data.id, desc:d, val:v, ven:vc, st:"p",
  cat:data.categoria, rec:false,
- cod:data.codigo_barras||"", link:data.link_pdf||"", arq:null,
+ cod:data.codigo_barras||"", link:data.arquivo_url||"", arq:null,
  tipo:data.tipo||"boleto", chave:data.chave_pix||"", fav:data.favorecido||""
  });
  ge("bo-form").style.display="none"; CAL_D=null; rBo();
  toast((BO_TIPO==="pix"?"PIX":"Boleto")+" salvo no banco!");
- } catch(e){ toast("Erro: "+e.message,false); }
+ } catch(e){ toast("Erro: "+e.message,false); console.error("Erro boSalvar:", e); }
  setBtn("btn-bo-sv",false);
 }
 
