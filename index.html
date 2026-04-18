@@ -612,8 +612,8 @@ body.light .cd.hg span{color:#3d6225!important;}
  <div class="bo-campo-boleto"><label>Código de barras</label><input type="text" id="bo-cd" placeholder="Cole o código" style="font-family:monospace;font-size:11px;"></div>
  <div class="bo-campo-boleto"><label>Link do boleto (PDF)</label><input type="url" id="bo-lk" placeholder="https://... (opcional)"></div>
  <!-- Campos só PIX -->
- <div class="bo-campo-pix" style="display:none;"><label>Favorecido</label><input type="text" id="bo-fav" placeholder="Ex: João da Silva ou Fornecedor X"></div>
- <div class="bo-campo-pix" style="display:none;"><label>Chave PIX</label><input type="text" id="bo-pix" placeholder="CPF, CNPJ, e-mail, telefone ou aleatória"></div>
+ <div class="bo-campo-pix" style="display:none;"><label>Favorecido <span style="color:var(--MU);font-weight:400;">(opcional)</span></label><input type="text" id="bo-fav" placeholder="Ex: João da Silva ou Fornecedor X"></div>
+ <div class="bo-campo-pix" style="display:none;"><label>Chave PIX <span style="color:var(--MU);font-weight:400;">(opcional)</span></label><input type="text" id="bo-pix" placeholder="CPF, CNPJ, e-mail, telefone ou aleatória"></div>
  <div style="display:flex;gap:8px;"><button class="btn" onclick="boSalvar()" style="flex:1;" id="btn-bo-sv">Salvar</button><button class="btn g" onclick="boFechar()">Cancelar</button></div>
  </div>
  </div>
@@ -1237,9 +1237,9 @@ async function boSalvar(){
  if(BO_TIPO === "pix"){
  var fav=(ge("bo-fav").value||"").trim();
  var pix=(ge("bo-pix").value||"").trim();
- if(!fav||!pix){toast("Preencha favorecido e chave PIX!",false);return;}
- payload.favorecido = fav;
- payload.chave_pix = pix;
+ // Favorecido e chave PIX são OPCIONAIS
+ payload.favorecido = fav || null;
+ payload.chave_pix = pix || null;
  payload.codigo_barras = "";
  payload.link_pdf = null;
  } else {
