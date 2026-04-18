@@ -2003,55 +2003,162 @@ function rCfImport(){
  // Botões de ação
  h += '<div style="display:flex;gap:8px;margin-bottom:14px;">';
  if(s.erros>0){
- // Achar o primeiro erro pra mostrar exemplo
- var primeiroErro = IMP_DATA.filter(function(r){return r._status==='erro';})[0];
- var msgErro = primeiroErro ? primeiroErro._erro : 'Erro desconhecido';
- var linhaErro = primeiroErro ? ('linha '+(IMP_DATA.indexOf(primeiroErro)+1)) : '';
  h += '<div style="flex:1;padding:10px;background:rgba(160,64,64,.08);border:1px solid rgba(160,64,64,.3);border-radius:8px;color:#a04040;font-size:11px;">'+
- '<div style="font-weight:700;margin-bottom:4px;">⚠️ Corrija os erros antes de importar</div>'+
- '<div style="opacity:.9;"><b>Exemplo '+linhaErro+':</b> '+msgErro+'</div>'+
+ '<div style="font-weight:700;margin-bottom:4px;">⚠️ Existem '+s.erros+' linha(s) com erro</div>'+
+ '<div style="opacity:.9;">Corrija abaixo editando os campos ou remova as linhas problemáticas.</div>'+
  '</div>';
- } else {
- h += '<button class="btn" style="flex:1;" id="btn-imp-go" onclick="impConfirmar()">Importar '+s.validas+' lançamentos</button>';
+ }
+ if(s.erros===0 && s.validas>0){
+ h += '<button class="btn" style="flex:1;" id="btn-imp-go" onclick="impConfirmar()">✅ Importar '+s.validas+' lançamentos</button>';
+ } else if(s.validas===0){
+ h += '<div style="flex:1;padding:10px;background:rgba(160,64,64,.08);border:1px solid rgba(160,64,64,.3);border-radius:8px;color:#a04040;font-size:11px;">Nenhum lançamento válido para importar</div>';
  }
  h += '<button class="btn g" onclick="impReset()">Cancelar / Novo arquivo</button>';
  h += '</div>';
 
- // Tabela de preview (primeiras 20 linhas)
- h += '<div style="background:var(--C1);border:1px solid var(--BR);border-radius:10px;overflow:auto;max-height:400px;">'+
+ // Filtros de visualização
+ if(!IMP_FILTRO) IMP_FILTRO = s.erros>0 ? 'erros' : 'todas';
+ h += '<div style="display:flex;gap:6px;margin-bottom:10px;font-size:11px;">';
+ var filtros = [
+ {id:'todas', label:'Todas ('+IMP_DATA.length+')'},
+ {id:'erros', label:'❌ Erros ('+s.erros+')'},
+ {id:'duplicatas', label:'⚠️ Duplicatas ('+s.duplicatas+')'},
+ {id:'validas', label:'✅ Válidas ('+s.validas+')'}
+ ];
+ filtros.forEach(function(f){
+ var ativo = IMP_FILTRO===f.id;
+ h += '<button onclick="impSetFiltro(\''+f.id+'\')" style="padding:6px 10px;border-radius:6px;border:1px solid var(--BR);background:'+(ativo?'var(--AC)':'var(--C1)')+';color:'+(ativo?'#fff':'var(--FG)')+';cursor:pointer;font-size:11px;">'+f.label+'</button>';
+ });
+ h += '</div>';
+
+ // Tabela de preview
+ h += '<div style="background:var(--C1);border:1px solid var(--BR);border-radius:10px;overflow:auto;max-height:500px;">'+
  '<table style="width:100%;font-size:11px;border-collapse:collapse;">'+
- '<thead style="position:sticky;top:0;background:var(--C2);"><tr>'+
- '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--BR);">#</th>'+
- '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--BR);">Status</th>'+
- '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--BR);">Data</th>'+
- '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--BR);">Categoria</th>'+
+ '<thead style="position:sticky;top:0;background:var(--C2);z-index:2;"><tr>'+
+ '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--BR);width:30px;">#</th>'+
+ '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--BR);width:40px;">St</th>'+
+ '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--BR);width:115px;">Data</th>'+
+ '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--BR);width:180px;">Categoria</th>'+
  '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--BR);">Descrição</th>'+
- '<th style="padding:8px;text-align:right;border-bottom:1px solid var(--BR);">Valor</th>'+
+ '<th style="padding:8px;text-align:right;border-bottom:1px solid var(--BR);width:110px;">Valor</th>'+
+ '<th style="padding:8px;text-align:center;border-bottom:1px solid var(--BR);width:60px;">Ações</th>'+
  '</tr></thead><tbody>';
 
- var limite = Math.min(IMP_DATA.length, 50);
- for(var i=0;i<limite;i++){
- var r = IMP_DATA[i];
+ // Filtrar linhas conforme filtro
+ var indicesVisiveis = [];
+ IMP_DATA.forEach(function(r, i){
+ if(IMP_FILTRO==='todas') indicesVisiveis.push(i);
+ else if(IMP_FILTRO==='erros' && r._status==='erro') indicesVisiveis.push(i);
+ else if(IMP_FILTRO==='duplicatas' && r._status==='duplicata') indicesVisiveis.push(i);
+ else if(IMP_FILTRO==='validas' && r._status==='valida') indicesVisiveis.push(i);
+ });
+
+ if(indicesVisiveis.length===0){
+ h += '<tr><td colspan="7" style="padding:20px;text-align:center;color:var(--MU);">Nenhum lançamento com esse filtro</td></tr>';
+ } else {
+ var limite = Math.min(indicesVisiveis.length, 100);
+ for(var j=0;j<limite;j++){
+ var idx = indicesVisiveis[j];
+ var r = IMP_DATA[idx];
+ var isErro = r._status==='erro';
  var icone = r._status==='valida'?'✅':(r._status==='duplicata'?'⚠️':'❌');
  var cor = r._status==='valida'?'':(r._status==='duplicata'?'background:rgba(184,134,11,.05);':'background:rgba(160,64,64,.05);');
- var infoErro = r._erro ? ' <span style="font-size:10px;color:#a04040;">('+r._erro+')</span>' : '';
+ var estaEditando = IMP_EDIT===idx;
+
+ if(estaEditando){
+ // Modo edição inline
+ var optsCat = '<option value="">Selecione...</option>'+CATS.map(function(c){
+ return '<option value="'+c+'"'+(c===r.categoria?' selected':'')+'>'+c+'</option>';
+ }).join('');
+ h += '<tr style="background:rgba(201,33,39,.04);border-bottom:2px solid var(--AC);">'+
+ '<td style="padding:6px 8px;color:var(--MU);">'+(idx+1)+'</td>'+
+ '<td style="padding:6px 8px;">✏️</td>'+
+ '<td style="padding:4px;"><input type="date" id="imp-ed-data" value="'+(r.data||'')+'" style="width:100%;padding:4px;border:1px solid var(--BR);border-radius:4px;font-size:11px;"></td>'+
+ '<td style="padding:4px;"><select id="imp-ed-cat" style="width:100%;padding:4px;border:1px solid var(--BR);border-radius:4px;font-size:11px;">'+optsCat+'</select></td>'+
+ '<td style="padding:4px;"><input type="text" id="imp-ed-desc" value="'+(r.descricao||'').replace(/"/g,'&quot;')+'" style="width:100%;padding:4px;border:1px solid var(--BR);border-radius:4px;font-size:11px;"></td>'+
+ '<td style="padding:4px;"><input type="number" step="0.01" id="imp-ed-val" value="'+(isNaN(r.valor)?'':r.valor)+'" style="width:100%;padding:4px;border:1px solid var(--BR);border-radius:4px;font-size:11px;text-align:right;"></td>'+
+ '<td style="padding:4px;text-align:center;">'+
+ '<button onclick="impSalvarEdit('+idx+')" style="background:var(--AC);color:#fff;border:none;border-radius:4px;padding:4px 8px;font-size:10px;cursor:pointer;margin-right:2px;" title="Salvar">💾</button>'+
+ '<button onclick="impCancelarEdit()" style="background:none;border:1px solid var(--BR);border-radius:4px;padding:3px 6px;font-size:10px;cursor:pointer;" title="Cancelar">✕</button>'+
+ '</td>'+
+ '</tr>';
+ } else {
+ // Modo normal (visualização)
+ var infoErro = r._erro ? '<div style="font-size:10px;color:#a04040;margin-top:2px;">'+r._erro+'</div>' : '';
  h += '<tr style="'+cor+'border-bottom:1px solid var(--BR);">'+
- '<td style="padding:6px 8px;color:var(--MU);">'+(i+1)+'</td>'+
- '<td style="padding:6px 8px;">'+icone+infoErro+'</td>'+
- '<td style="padding:6px 8px;">'+(r.data||'?')+'</td>'+
- '<td style="padding:6px 8px;">'+(r.categoria||'?')+'</td>'+
- '<td style="padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;">'+(r.descricao||'?')+'</td>'+
- '<td style="padding:6px 8px;text-align:right;font-weight:700;">'+(isNaN(r.valor)?'?':fv(r.valor))+'</td>'+
+ '<td style="padding:6px 8px;color:var(--MU);">'+(idx+1)+'</td>'+
+ '<td style="padding:6px 8px;">'+icone+'</td>'+
+ '<td style="padding:6px 8px;">'+(r.data||'<span style="color:#a04040;">?</span>')+infoErro+'</td>'+
+ '<td style="padding:6px 8px;">'+(r.categoria||'<span style="color:#a04040;">?</span>')+'</td>'+
+ '<td style="padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:250px;">'+(r.descricao||'<span style="color:#a04040;">?</span>')+'</td>'+
+ '<td style="padding:6px 8px;text-align:right;font-weight:700;">'+(isNaN(r.valor)?'<span style="color:#a04040;">?</span>':fv(r.valor))+'</td>'+
+ '<td style="padding:6px 8px;text-align:center;">'+
+ '<button onclick="impIniciarEdit('+idx+')" style="background:none;border:1px solid var(--BR);border-radius:4px;padding:3px 6px;font-size:11px;cursor:pointer;margin-right:2px;" title="Editar">✏️</button>'+
+ '<button onclick="impRemoverLinha('+idx+')" style="background:none;border:1px solid var(--BR);border-radius:4px;padding:3px 6px;font-size:11px;cursor:pointer;color:#a04040;" title="Remover">🗑️</button>'+
+ '</td>'+
  '</tr>';
  }
- h += '</tbody></table>';
- if(IMP_DATA.length>50){
- h += '<div style="padding:8px;text-align:center;font-size:11px;color:var(--MU);border-top:1px solid var(--BR);">Mostrando 50 de '+IMP_DATA.length+' linhas. Importação processa TODAS.</div>';
  }
- h += '</div>';
+ if(indicesVisiveis.length>100){
+ h += '<tr><td colspan="7" style="padding:8px;text-align:center;font-size:11px;color:var(--MU);">Mostrando 100 de '+indicesVisiveis.length+'. Use filtros para ver grupos específicos.</td></tr>';
+ }
+ }
+ h += '</tbody></table></div>';
  }
 
  ge("cf-c").innerHTML = h;
+}
+
+// Funções de edição inline
+var IMP_EDIT = null;
+var IMP_FILTRO = null;
+
+function impSetFiltro(f){
+ IMP_FILTRO = f;
+ rCfImport();
+}
+
+function impIniciarEdit(idx){
+ IMP_EDIT = idx;
+ rCfImport();
+}
+
+function impCancelarEdit(){
+ IMP_EDIT = null;
+ rCfImport();
+}
+
+function impSalvarEdit(idx){
+ var r = IMP_DATA[idx];
+ var data = ge("imp-ed-data").value;
+ var cat = ge("imp-ed-cat").value;
+ var desc = ge("imp-ed-desc").value.trim();
+ var val = parseFloat(ge("imp-ed-val").value);
+
+ r.data = data;
+ r.categoria = cat;
+ r.descricao = desc;
+ r.valor = val;
+ // Atualiza mes baseado na data
+ if(/^\d{4}-\d{2}-\d{2}$/.test(data)){
+ var d = new Date(data+'T00:00:00');
+ if(!isNaN(d)){
+ var meses=['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
+ r.mes = meses[d.getMonth()];
+ }
+ }
+
+ IMP_EDIT = null;
+ impValidar(); // revalida tudo
+ toast("Linha "+(idx+1)+" atualizada");
+}
+
+function impRemoverLinha(idx){
+ if(!confirm("Remover a linha "+(idx+1)+"?\n\nEla não será importada. Essa ação só afeta a tela de import, não o CSV original."))return;
+ IMP_DATA.splice(idx, 1);
+ IMP_EDIT = null;
+ impValidar();
+ toast("Linha removida");
 }
 
 function impCarregarArquivo(ev){
@@ -2206,14 +2313,14 @@ function impValidar(){
 }
 
 function impReset(){
- IMP_DATA = null; IMP_STATUS = null;
+ IMP_DATA = null; IMP_STATUS = null; IMP_EDIT = null; IMP_FILTRO = null;
  var f = ge("imp-file"); if(f) f.value = '';
  rCfImport();
 }
 
 async function impConfirmar(){
  if(!IMP_DATA || !IMP_STATUS) return;
- if(IMP_STATUS.erros>0){ toast("Corrija os erros antes de importar", false); return; }
+ if(IMP_STATUS.erros>0){ toast("Corrija todos os erros antes de importar", false); return; }
  if(IMP_STATUS.validas===0){ toast("Nenhum lançamento válido para importar", false); return; }
 
  var ok = confirm(
