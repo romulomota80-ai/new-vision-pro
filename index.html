@@ -604,9 +604,18 @@ body.light .cd.hg span{color:#3d6225!important;}
  <div class="card" id="bo-form" style="display:none;">
  <div id="bo-form-title" style="padding:13px;border-bottom:1px solid var(--BR);font-size:14px;font-weight:700;">Novo Boleto</div>
  <div style="padding:14px;display:flex;flex-direction:column;gap:11px;">
+ <!-- Toggle Único/Parcelado (só pra PIX) -->
+ <div class="bo-campo-pix" style="display:none;">
+ <label>Tipo de pagamento</label>
+ <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+ <button type="button" class="btn" id="bo-mod-un" onclick="boModo('unico')">Único</button>
+ <button type="button" class="btn g" id="bo-mod-pa" onclick="boModo('parcelado')">Parcelado</button>
+ </div>
+ </div>
  <div><label>Descrição</label><input type="text" id="bo-de" placeholder="Ex: Aluguel galpão"></div>
- <div><label>Valor (R$)</label><input type="number" id="bo-vl"></div>
- <div><label>Vencimento</label><input type="date" id="bo-vc"></div>
+ <!-- Valor e vencimento só aparecem no modo único -->
+ <div class="bo-campo-unico"><label>Valor (R$)</label><input type="number" id="bo-vl"></div>
+ <div class="bo-campo-unico"><label>Vencimento</label><input type="date" id="bo-vc"></div>
  <div><label>Categoria</label><select id="bo-ct"></select></div>
  <!-- Campos só BOLETO -->
  <div class="bo-campo-boleto"><label>Código de barras</label><input type="text" id="bo-cd" placeholder="Cole o código" style="font-family:monospace;font-size:11px;"></div>
@@ -614,6 +623,15 @@ body.light .cd.hg span{color:#3d6225!important;}
  <!-- Campos só PIX -->
  <div class="bo-campo-pix" style="display:none;"><label>Favorecido <span style="color:var(--MU);font-weight:400;">(opcional)</span></label><input type="text" id="bo-fav" placeholder="Ex: João da Silva ou Fornecedor X"></div>
  <div class="bo-campo-pix" style="display:none;"><label>Chave PIX <span style="color:var(--MU);font-weight:400;">(opcional)</span></label><input type="text" id="bo-pix" placeholder="CPF, CNPJ, e-mail, telefone ou aleatória"></div>
+ <!-- Área de parcelas (só no modo parcelado) -->
+ <div class="bo-campo-parcelado" style="display:none;">
+ <label style="margin-bottom:8px;display:block;">Parcelas</label>
+ <div id="bo-parcelas" style="display:flex;flex-direction:column;gap:8px;"></div>
+ <button type="button" class="btn g sm" onclick="boParcelaAdd()" style="margin-top:8px;width:100%;">+ Adicionar parcela</button>
+ <div id="bo-parcelas-total" style="margin-top:10px;padding:10px;background:var(--C2);border-radius:8px;display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;">
+ <span>Total:</span><span id="bo-parcelas-soma" style="color:var(--R);">R$ 0,00</span>
+ </div>
+ </div>
  <div style="display:flex;gap:8px;"><button class="btn" onclick="boSalvar()" style="flex:1;" id="btn-bo-sv">Salvar</button><button class="btn g" onclick="boFechar()">Cancelar</button></div>
  </div>
  </div>
@@ -676,6 +694,8 @@ var U = null; // usuário logado
 var MSGS = [];
 var luA="re", boA="pe", cfA="mp", exTab="la";
 var BO_TIPO = "boleto"; // filtro de sub-aba: 'boleto' ou 'pix'
+var BO_MODO = "unico"; // modo do form PIX: 'unico' ou 'parcelado'
+var BO_PARCELAS = []; // array de {data, valor} para modo parcelado
 var evMeses = ["JANEIRO","FEVEREIRO"]; // só meses com dados — corrigido em carregarTudo
 var PER="mes", MES="JANEIRO", CUI="JANEIRO", CUF="MARÇO", LM="JANEIRO";
 var CAL_M = new Date().getMonth();
@@ -782,7 +802,8 @@ async function carregarTudo(){
  ven:r.vencimento, st:r.status==="pago"?"pago":"p",
  cat:r.categoria, rec:r.recorrente, cod:r.codigo_barras||"", link:link,
  arq:r.arquivo_url?{url:r.arquivo_url,nome:r.arquivo_nome}:null,
- tipo:r.tipo||"boleto", chave:r.chave_pix||"", fav:r.favorecido||""
+ tipo:r.tipo||"boleto", chave:r.chave_pix||"", fav:r.favorecido||"",
+ parc_at:r.parcela_atual||null, parc_tot:r.parcela_total||null
  };
  });
 
@@ -1213,13 +1234,85 @@ function boAjustarCamposForm(){
  document.querySelectorAll(".bo-campo-pix").forEach(function(el){
  el.style.display = mostrarBol ? "none" : "block";
  });
+ // Ajusta modo (único/parcelado) — parcelado só existe pra PIX
+ if(mostrarBol) BO_MODO = "unico";
+ boAjustarModoCampos();
  var titulo = ge("bo-form-title");
- if(titulo) titulo.textContent = mostrarBol ? "Novo Boleto" : "Novo PIX";
+ if(titulo) titulo.textContent = mostrarBol ? "Novo Boleto" : (BO_MODO==="parcelado"?"Novo PIX Parcelado":"Novo PIX");
+}
+
+function boAjustarModoCampos(){
+ var parcelado = BO_MODO === "parcelado";
+ document.querySelectorAll(".bo-campo-unico").forEach(function(el){
+ el.style.display = parcelado ? "none" : "block";
+ });
+ document.querySelectorAll(".bo-campo-parcelado").forEach(function(el){
+ el.style.display = parcelado ? "block" : "none";
+ });
+ // Atualiza aparência dos botões de modo
+ var bUn = ge("bo-mod-un"), bPa = ge("bo-mod-pa");
+ if(bUn) bUn.className = "btn" + (BO_MODO==="unico" ? "" : " g");
+ if(bPa) bPa.className = "btn" + (BO_MODO==="parcelado" ? "" : " g");
+ var titulo = ge("bo-form-title");
+ if(titulo && BO_TIPO==="pix") titulo.textContent = parcelado ? "Novo PIX Parcelado" : "Novo PIX";
+}
+
+function boModo(m){
+ BO_MODO = m;
+ boAjustarModoCampos();
+ // Se entrou em parcelado e está vazio, inicializa com 2 parcelas
+ if(m === "parcelado" && BO_PARCELAS.length === 0){
+ BO_PARCELAS = [{data:"", valor:""}, {data:"", valor:""}];
+ }
+ boRenderParcelas();
+}
+
+function boRenderParcelas(){
+ var cont = ge("bo-parcelas");
+ if(!cont) return;
+ var h = "";
+ BO_PARCELAS.forEach(function(p, i){
+ h += '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:end;padding:10px;background:var(--C2);border:1px solid var(--BR);border-radius:8px;">'+
+ '<div><label style="font-size:10px;color:var(--MU);">Parcela '+(i+1)+' - Vencimento</label><input type="date" id="bo-pc-d-'+i+'" value="'+(p.data||'')+'" onchange="boParcelaSet('+i+',\'data\',this.value)" style="width:100%;"></div>'+
+ '<div><label style="font-size:10px;color:var(--MU);">Valor (R$)</label><input type="number" step="0.01" id="bo-pc-v-'+i+'" value="'+(p.valor||'')+'" onchange="boParcelaSet('+i+',\'valor\',this.value)" placeholder="0,00" style="width:100%;"></div>'+
+ '<button type="button" onclick="boParcelaRemover('+i+')" style="background:none;border:1px solid var(--BR);color:#a04040;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:12px;height:38px;" title="Remover">🗑️</button>'+
+ '</div>';
+ });
+ cont.innerHTML = h;
+ boParcelaAtualizarTotal();
+}
+
+function boParcelaSet(i, campo, valor){
+ if(!BO_PARCELAS[i]) return;
+ BO_PARCELAS[i][campo] = valor;
+ boParcelaAtualizarTotal();
+}
+
+function boParcelaAdd(){
+ BO_PARCELAS.push({data:"", valor:""});
+ boRenderParcelas();
+}
+
+function boParcelaRemover(i){
+ if(BO_PARCELAS.length <= 1){
+ toast("Precisa ter pelo menos 1 parcela", false);
+ return;
+ }
+ BO_PARCELAS.splice(i, 1);
+ boRenderParcelas();
+}
+
+function boParcelaAtualizarTotal(){
+ var soma = BO_PARCELAS.reduce(function(s,p){ var v=parseFloat(p.valor); return s + (isNaN(v)?0:v); }, 0);
+ var el = ge("bo-parcelas-soma");
+ if(el) el.textContent = fv(soma);
 }
 
 function boNovo(){
  ["bo-de","bo-vl","bo-vc","bo-cd","bo-lk","bo-fav","bo-pix"].forEach(function(id){var e=ge(id);if(e)e.value="";});
  ge("bo-ct").value="";
+ BO_MODO = "unico";
+ BO_PARCELAS = [];
  boAjustarCamposForm();
  ge("bo-form").style.display="block";
  ge("bo-form").scrollIntoView({behavior:"smooth"});
@@ -1227,22 +1320,77 @@ function boNovo(){
 function boFechar(){ ge("bo-form").style.display="none"; }
 
 async function boSalvar(){
- var d=(ge("bo-de").value||"").trim(),v=parseFloat(ge("bo-vl").value),vc=ge("bo-vc").value;
- if(!d||!v||!vc){toast("Preencha descrição, valor e vencimento!",false);return;}
- // Payload mínimo comum
+ var d=(ge("bo-de").value||"").trim();
+ if(!d){toast("Preencha a descrição!",false);return;}
+ var categoria = ge("bo-ct").value;
+
+ // ═══ MODO PARCELADO (só PIX) ═══
+ if(BO_TIPO === "pix" && BO_MODO === "parcelado"){
+ if(BO_PARCELAS.length === 0){toast("Adicione pelo menos 1 parcela",false);return;}
+ var invalida = null;
+ for(var i=0; i<BO_PARCELAS.length; i++){
+ var p = BO_PARCELAS[i];
+ var v0 = parseFloat(p.valor);
+ if(!p.data || isNaN(v0) || v0<=0){ invalida = i+1; break; }
+ }
+ if(invalida){toast("Parcela "+invalida+" incompleta (data e valor)",false);return;}
+
+ var fav=(ge("bo-fav").value||"").trim();
+ var pix=(ge("bo-pix").value||"").trim();
+ var total = BO_PARCELAS.length;
+
+ setBtn("btn-bo-sv",true);
+ try {
+ var salvos = 0;
+ for(var k=0; k<BO_PARCELAS.length; k++){
+ var parc = BO_PARCELAS[k];
+ var payload = {
+ descricao: d,
+ valor: parseFloat(parc.valor),
+ vencimento: parc.data,
+ status: "pendente",
+ categoria: categoria,
+ recorrente: false,
+ tipo: "pix",
+ parcela_atual: k+1,
+ parcela_total: total
+ };
+ if(fav) payload.favorecido = fav;
+ if(pix) payload.chave_pix = pix;
+
+ var {data:rd, error} = await sb.from("boletos").insert(payload).select().single();
+ if(error) throw error;
+ BOL.push({
+ id:rd.id, desc:rd.descricao, val:parseFloat(rd.valor), ven:rd.vencimento, st:"p",
+ cat:rd.categoria, rec:false,
+ cod:"", link:"", arq:null,
+ tipo:"pix", chave:rd.chave_pix||"", fav:rd.favorecido||"",
+ parc_at:rd.parcela_atual, parc_tot:rd.parcela_total
+ });
+ salvos++;
+ }
+ ge("bo-form").style.display="none"; CAL_D=null; rBo();
+ toast("✅ "+salvos+" parcelas PIX salvas!");
+ BO_PARCELAS = [];
+ } catch(e){ toast("Erro: "+e.message,false); console.error("Erro boSalvar parcelado:", e); }
+ setBtn("btn-bo-sv",false);
+ return;
+ }
+
+ // ═══ MODO ÚNICO (boleto OU PIX único) ═══
+ var v=parseFloat(ge("bo-vl").value), vc=ge("bo-vc").value;
+ if(!v||!vc){toast("Preencha valor e vencimento!",false);return;}
  var payload={
  descricao:d, valor:v, vencimento:vc, status:"pendente",
- categoria:ge("bo-ct").value, recorrente:false,
+ categoria:categoria, recorrente:false,
  tipo: BO_TIPO
  };
  if(BO_TIPO === "pix"){
- // PIX: só adiciona favorecido e chave_pix (opcionais)
- var fav=(ge("bo-fav").value||"").trim();
- var pix=(ge("bo-pix").value||"").trim();
- if(fav) payload.favorecido = fav;
- if(pix) payload.chave_pix = pix;
+ var fav2=(ge("bo-fav").value||"").trim();
+ var pix2=(ge("bo-pix").value||"").trim();
+ if(fav2) payload.favorecido = fav2;
+ if(pix2) payload.chave_pix = pix2;
  } else {
- // Boleto: só adiciona codigo_barras e arquivo_url se preenchidos
  var cod=(ge("bo-cd").value||"").trim();
  var lk=(ge("bo-lk").value||"").trim();
  if(cod) payload.codigo_barras = cod;
@@ -1256,7 +1404,8 @@ async function boSalvar(){
  id:data.id, desc:d, val:v, ven:vc, st:"p",
  cat:data.categoria, rec:false,
  cod:data.codigo_barras||"", link:data.arquivo_url||"", arq:null,
- tipo:data.tipo||"boleto", chave:data.chave_pix||"", fav:data.favorecido||""
+ tipo:data.tipo||"boleto", chave:data.chave_pix||"", fav:data.favorecido||"",
+ parc_at:null, parc_tot:null
  });
  ge("bo-form").style.display="none"; CAL_D=null; rBo();
  toast((BO_TIPO==="pix"?"PIX":"Boleto")+" salvo no banco!");
@@ -1350,10 +1499,11 @@ function rBo(){
  var urgBg=mu?"rgba(201,33,39,.08)":ug?"rgba(160,82,45,.06)":"var(--C1)";
  var urgBorder=mu?"rgba(201,33,39,.3)":ug?"rgba(160,82,45,.2)":"var(--BR)";
  var isPix = (b.tipo||"boleto") === "pix";
+ var badgeParc = (b.parc_at && b.parc_tot) ? '<span style="font-size:10px;color:#6b4e8a;background:rgba(107,78,138,.12);padding:1px 7px;border-radius:5px;border:1px solid rgba(107,78,138,.3);font-weight:700;margin-left:5px;">'+b.parc_at+'/'+b.parc_tot+'</span>' : '';
  return '<div style="background:'+urgBg+';border:1px solid '+urgBorder+';border-radius:14px;padding:14px;">'+
  '<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:10px;">'+
  '<div style="flex:1;min-width:0;">'+
- '<div style="font-size:13px;font-weight:700;margin-bottom:5px;">'+(isPix?'⚡ ':'')+b.desc+'</div>'+
+ '<div style="font-size:13px;font-weight:700;margin-bottom:5px;">'+(isPix?'⚡ ':'')+b.desc+badgeParc+'</div>'+
  '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">'+
  '<span style="font-size:11px;color:var(--MU);">Vence '+fd(b.ven)+'</span>'+
  bdg(b.cat,true)+
@@ -1398,10 +1548,11 @@ function rBo(){
  '</div>'+
  pg.map(function(b){
  var isPix = (b.tipo||"boleto") === "pix";
+ var badgeParcP = (b.parc_at && b.parc_tot) ? '<span style="font-size:10px;color:#6b4e8a;background:rgba(107,78,138,.12);padding:1px 7px;border-radius:5px;border:1px solid rgba(107,78,138,.3);font-weight:700;margin-left:5px;">'+b.parc_at+'/'+b.parc_tot+'</span>' : '';
  return '<div class="card" style="padding:14px;border-color:rgba(90,138,58,.2);">'+
  '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">'+
  '<div style="flex:1;min-width:0;">'+
- '<div style="font-size:13px;font-weight:700;margin-bottom:5px;">'+(isPix?'⚡ ':'')+b.desc+'</div>'+
+ '<div style="font-size:13px;font-weight:700;margin-bottom:5px;">'+(isPix?'⚡ ':'')+b.desc+badgeParcP+'</div>'+
  '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">'+
  '<span style="font-size:10px;background:rgba(90,138,58,.1);color:#5a8a3a;border:1px solid rgba(90,138,58,.3);padding:1px 7px;border-radius:5px;font-weight:700;">Pago</span>'+
  bdg(b.cat,true)+
