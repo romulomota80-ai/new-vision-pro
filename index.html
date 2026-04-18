@@ -621,6 +621,13 @@ body.light .cd.hg span{color:#3d6225!important;}
  <div class="bo-campo-boleto"><label>Código de barras</label><input type="text" id="bo-cd" placeholder="Cole o código" style="font-family:monospace;font-size:11px;"></div>
  <div class="bo-campo-boleto"><label>Link do boleto (PDF)</label><input type="url" id="bo-lk" placeholder="https://... (opcional)"></div>
  <!-- Campos só PIX -->
+ <div class="bo-campo-pix" style="display:none;">
+ <label>Fornecedor <span style="color:var(--MU);font-weight:400;">(opcional — preenche chave, nome e categoria)</span></label>
+ <div style="position:relative;">
+ <input type="text" id="bo-fo-busca" placeholder="🔍 Digite para buscar fornecedor..." oninput="boFoBuscar(this.value)" onfocus="boFoAbrir()" autocomplete="off" style="width:100%;padding:8px 10px;border:1px solid var(--BR);border-radius:8px;">
+ <div id="bo-fo-lista" style="display:none;position:absolute;top:100%;left:0;right:0;max-height:220px;overflow-y:auto;background:var(--C1);border:1px solid var(--BR);border-top:none;border-radius:0 0 8px 8px;z-index:10;box-shadow:0 4px 8px rgba(0,0,0,.1);"></div>
+ </div>
+ </div>
  <div class="bo-campo-pix" style="display:none;"><label>Favorecido <span style="color:var(--MU);font-weight:400;">(opcional)</span></label><input type="text" id="bo-fav" placeholder="Ex: João da Silva ou Fornecedor X"></div>
  <div class="bo-campo-pix" style="display:none;"><label>Chave PIX <span style="color:var(--MU);font-weight:400;">(opcional)</span></label><input type="text" id="bo-pix" placeholder="CPF, CNPJ, e-mail, telefone ou aleatória"></div>
  <!-- Área de parcelas (só no modo parcelado) -->
@@ -651,10 +658,11 @@ body.light .cd.hg span{color:#3d6225!important;}
 
  <!-- CONFIG -->
  <div id="s-cf" class="scr">
- <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:6px;">
+ <div style="display:grid;grid-template-columns:repeat(5, 1fr);gap:6px;">
  <button class="btn" id="cf-mp" onclick="cfAba('mp')">Marketplaces</button>
  <button class="btn g" id="cf-ca" onclick="cfAba('ca')">Categorias</button>
  <button class="btn g" id="cf-fx" onclick="cfAba('fx')">Gastos Fixos</button>
+ <button class="btn g" id="cf-fo" onclick="cfAba('fo')">Fornecedores</button>
  <button class="btn g" id="cf-im" onclick="cfAba('im')">Importar</button>
  </div>
  <div id="cf-c"></div>
@@ -709,6 +717,7 @@ var REC = {}; // receitas { MES: { conta_id: {f,l,a} } }
 var FIXOS = []; // gastos_fixos
 var CATS = []; // categorias
 var CC = {}; // { nome: cor }
+var FORN = []; // fornecedores
 
 var MESES = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO",
  "JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"];
@@ -777,14 +786,15 @@ async function initSupabase(){
 
 // ═══ CARREGAR TODOS OS DADOS ════════════════════════════════════
 async function carregarTudo(){
- var [rLanc, rBol, rMps, rContas, rRec, rFixos, rCats] = await Promise.all([
+ var [rLanc, rBol, rMps, rContas, rRec, rFixos, rCats, rForn] = await Promise.all([
  sb.from("lancamentos").select("*").order("data",{ascending:false}),
  sb.from("boletos").select("*").order("vencimento"),
  sb.from("marketplaces").select("*"),
  sb.from("contas").select("*"),
  sb.from("receitas").select("*"),
  sb.from("gastos_fixos").select("*").order("id"),
- sb.from("categorias").select("*").order("nome")
+ sb.from("categorias").select("*").order("nome"),
+ sb.from("fornecedores").select("*").eq("ativo",true).order("nome")
  ]);
 
  // Lançamentos
@@ -835,6 +845,13 @@ async function carregarTudo(){
  CC[r.nome] = r.cor || "#4a4e9a";
  if(r.is_movimentacao && MOV.indexOf(r.nome)<0) MOV.push(r.nome);
  });
+
+ // Fornecedores
+ FORN = (rForn.data||[]).map(function(r){ return {
+ id:r.id, nome:r.nome, cnpj:r.cnpj_cpf||"", chave:r.chave_pix||"",
+ tel:r.telefone||"", cat:r.categoria_padrao||"", obs:r.observacoes||"",
+ ativo:r.ativo
+ }; });
 
  popularSelects();
  atualizarFxInfo();
@@ -1309,7 +1326,7 @@ function boParcelaAtualizarTotal(){
 }
 
 function boNovo(){
- ["bo-de","bo-vl","bo-vc","bo-cd","bo-lk","bo-fav","bo-pix"].forEach(function(id){var e=ge(id);if(e)e.value="";});
+ ["bo-de","bo-vl","bo-vc","bo-cd","bo-lk","bo-fav","bo-pix","bo-fo-busca"].forEach(function(id){var e=ge(id);if(e)e.value="";});
  ge("bo-ct").value="";
  BO_MODO = "unico";
  BO_PARCELAS = [];
@@ -1317,7 +1334,61 @@ function boNovo(){
  ge("bo-form").style.display="block";
  ge("bo-form").scrollIntoView({behavior:"smooth"});
 }
-function boFechar(){ ge("bo-form").style.display="none"; }
+function boFechar(){ ge("bo-form").style.display="none"; boFoFechar(); }
+
+// ═══ Busca de fornecedor no form PIX ═════════════════════════════
+function boFoAbrir(){
+ boFoBuscar(ge("bo-fo-busca").value || "");
+}
+function boFoFechar(){
+ var l = ge("bo-fo-lista"); if(l) l.style.display = "none";
+}
+function boFoBuscar(termo){
+ var lista = ge("bo-fo-lista");
+ if(!lista) return;
+ termo = (termo||"").toLowerCase().trim();
+ var match = FORN.filter(function(f){
+ if(!termo) return true;
+ return (f.nome||"").toLowerCase().indexOf(termo)>=0
+ || (f.cnpj||"").toLowerCase().indexOf(termo)>=0
+ || (f.chave||"").toLowerCase().indexOf(termo)>=0;
+ }).slice(0, 20);
+
+ if(match.length === 0){
+ lista.innerHTML = '<div style="padding:10px;text-align:center;color:var(--MU);font-size:12px;">'+(FORN.length===0?'Nenhum fornecedor cadastrado.<br>Vá em Config → Fornecedores':'Nenhum resultado para "'+termo+'"')+'</div>';
+ } else {
+ lista.innerHTML = match.map(function(f){
+ return '<div onclick="boFoSelecionar('+f.id+')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--BR);" onmouseover="this.style.background=\'var(--C2)\';" onmouseout="this.style.background=\'transparent\';">'+
+ '<div style="font-size:13px;font-weight:700;">'+f.nome+'</div>'+
+ '<div style="font-size:10px;color:var(--MU);margin-top:2px;">'+
+ (f.chave?'⚡ '+f.chave:'sem chave PIX cadastrada')+
+ (f.cat?' · '+f.cat:'')+
+ '</div>'+
+ '</div>';
+ }).join('');
+ }
+ lista.style.display = "block";
+}
+function boFoSelecionar(id){
+ var f = FORN.filter(function(x){return x.id===id;})[0];
+ if(!f) return;
+ ge("bo-fo-busca").value = f.nome;
+ ge("bo-fav").value = f.nome;
+ if(f.chave) ge("bo-pix").value = f.chave;
+ if(f.cat) ge("bo-ct").value = f.cat;
+ boFoFechar();
+ toast("✓ Dados de "+f.nome+" preenchidos");
+}
+
+// Fechar dropdown quando clica fora
+document.addEventListener("click", function(e){
+ var input = ge("bo-fo-busca");
+ var lista = ge("bo-fo-lista");
+ if(!input || !lista) return;
+ if(e.target !== input && !lista.contains(e.target)){
+ boFoFechar();
+ }
+});
 
 async function boSalvar(){
  var d=(ge("bo-de").value||"").trim();
@@ -1859,11 +1930,12 @@ function iaSend(txt){ if(typeof txt!=="string")txt=""; txt=txt.trim(); if(!txt){
 }
 
 // ═══ CONFIG ══════════════════════════════════════════════════════
-function cfAba(a){ cfA=a; ge("cf-mp").className="btn"+(a==="mp"?"":" g"); ge("cf-ca").className="btn"+(a==="ca"?"":" g"); ge("cf-fx").className="btn"+(a==="fx"?"":" g"); ge("cf-im").className="btn"+(a==="im"?"":" g"); rCf(); }
+function cfAba(a){ cfA=a; ge("cf-mp").className="btn"+(a==="mp"?"":" g"); ge("cf-ca").className="btn"+(a==="ca"?"":" g"); ge("cf-fx").className="btn"+(a==="fx"?"":" g"); ge("cf-fo").className="btn"+(a==="fo"?"":" g"); ge("cf-im").className="btn"+(a==="im"?"":" g"); rCf(); }
 function rCf(){
  if(cfA==="mp") rCfMp();
  else if(cfA==="ca") rCfCa();
  else if(cfA==="im") rCfImport();
+ else if(cfA==="fo") rCfForn();
  else rFixos();
 }
 
@@ -2223,6 +2295,141 @@ async function fxToggle(id){
  FIXOS=FIXOS.map(function(fx){return fx.id===id?Object.assign({},fx,{ativo:novoAtivo}):fx;});
  atualizarFxInfo(); rFixos();
  } catch(e){ toast("Erro: "+e.message,false); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FORNECEDORES — CRUD + busca
+// ═══════════════════════════════════════════════════════════════
+var FO_EID = null; // id em edição (null = novo)
+var FO_BUSCA = ""; // filtro de busca
+
+function rCfForn(){
+ var busca = FO_BUSCA.toLowerCase().trim();
+ var lista = FORN.filter(function(f){
+ if(!busca) return true;
+ return (f.nome||"").toLowerCase().indexOf(busca)>=0
+ || (f.cnpj||"").toLowerCase().indexOf(busca)>=0
+ || (f.chave||"").toLowerCase().indexOf(busca)>=0;
+ });
+
+ var h = '<div style="margin-bottom:14px;">'+
+ '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'+
+ '<div style="font-size:14px;font-weight:700;">'+FORN.length+' fornecedor(es) cadastrado(s)</div>'+
+ '<button class="btn sm" onclick="foNovo()">+ Fornecedor</button>'+
+ '</div>'+
+ '<input type="text" id="fo-busca" placeholder="🔍 Buscar por nome, CNPJ ou chave PIX..." value="'+busca+'" oninput="foSetBusca(this.value)" style="width:100%;padding:10px;border:1px solid var(--BR);border-radius:8px;font-size:13px;">'+
+ '</div>';
+
+ // Formulário (aparece quando FO_EID for setado como 'new' ou um ID)
+ if(FO_EID !== null){
+ var f = FO_EID === 'new' ? {nome:'', cnpj:'', chave:'', tel:'', cat:'', obs:''} : FORN.filter(function(x){return x.id===FO_EID;})[0];
+ if(!f && FO_EID !== 'new'){ FO_EID = null; return rCfForn(); }
+ var optsCat = '<option value="">Nenhuma (escolher toda vez)</option>'+CATS.map(function(c){
+ return '<option value="'+c+'"'+(c===f.cat?' selected':'')+'>'+c+'</option>';
+ }).join('');
+ h += '<div class="card" style="padding:14px;margin-bottom:14px;background:var(--C1);border:2px solid var(--AC);">'+
+ '<div style="font-size:13px;font-weight:700;margin-bottom:12px;">'+(FO_EID==='new'?'Novo Fornecedor':'Editando: '+f.nome)+'</div>'+
+ '<div style="display:flex;flex-direction:column;gap:10px;">'+
+ '<div><label>Nome *</label><input type="text" id="fo-nome" value="'+(f.nome||'').replace(/"/g,'&quot;')+'" placeholder="Ex: LING Tecidos"></div>'+
+ '<div><label>CNPJ ou CPF <span style="color:var(--MU);font-weight:400;">(opcional)</span></label><input type="text" id="fo-cnpj" value="'+(f.cnpj||'').replace(/"/g,'&quot;')+'" placeholder="Ex: 11.222.333/0001-44"></div>'+
+ '<div><label>Chave PIX <span style="color:var(--MU);font-weight:400;">(opcional)</span></label><input type="text" id="fo-chave" value="'+(f.chave||'').replace(/"/g,'&quot;')+'" placeholder="CPF, CNPJ, email, telefone ou aleatória"></div>'+
+ '<div><label>Telefone/WhatsApp <span style="color:var(--MU);font-weight:400;">(opcional)</span></label><input type="text" id="fo-tel" value="'+(f.tel||'').replace(/"/g,'&quot;')+'" placeholder="(11) 99999-9999"></div>'+
+ '<div><label>Categoria padrão <span style="color:var(--MU);font-weight:400;">(opcional)</span></label><select id="fo-cat">'+optsCat+'</select></div>'+
+ '<div><label>Observações <span style="color:var(--MU);font-weight:400;">(opcional)</span></label><textarea id="fo-obs" rows="2" style="width:100%;padding:8px;border:1px solid var(--BR);border-radius:8px;font-family:inherit;font-size:13px;resize:vertical;">'+(f.obs||'')+'</textarea></div>'+
+ '<div style="display:flex;gap:8px;margin-top:6px;"><button class="btn" onclick="foSalvar()" style="flex:1;" id="btn-fo-sv">Salvar</button><button class="btn g" onclick="foFechar()">Cancelar</button></div>'+
+ '</div>'+
+ '</div>';
+ }
+
+ // Lista
+ if(lista.length === 0){
+ h += '<div class="card cp" style="text-align:center;color:var(--MU);padding:36px;">'+(busca?'Nenhum fornecedor encontrado com "'+busca+'"':'Nenhum fornecedor cadastrado ainda.<br>Clique em "+ Fornecedor" para adicionar o primeiro.')+'</div>';
+ } else {
+ h += '<div style="display:flex;flex-direction:column;gap:8px;">';
+ lista.forEach(function(f){
+ h += '<div class="card" style="padding:12px 14px;">'+
+ '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">'+
+ '<div style="flex:1;min-width:0;">'+
+ '<div style="font-size:13px;font-weight:700;margin-bottom:4px;">'+f.nome+'</div>'+
+ '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--MU);">'+
+ (f.cnpj?'<span>📋 '+f.cnpj+'</span>':'')+
+ (f.chave?'<span>⚡ '+f.chave+'</span>':'')+
+ (f.tel?'<span>📱 '+f.tel+'</span>':'')+
+ (f.cat?'<span style="color:var(--AC);font-weight:700;">'+f.cat+'</span>':'')+
+ '</div>'+
+ (f.obs?'<div style="font-size:11px;color:var(--MU);margin-top:6px;font-style:italic;">"'+f.obs+'"</div>':'')+
+ '</div>'+
+ '<div style="display:flex;gap:4px;flex-shrink:0;">'+
+ '<button onclick="foEditar('+f.id+')" style="background:none;border:1px solid var(--BR);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:11px;" title="Editar">✏️</button>'+
+ '<button onclick="foDel('+f.id+')" style="background:none;border:1px solid var(--BR);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:11px;color:#a04040;" title="Excluir">🗑️</button>'+
+ '</div>'+
+ '</div>'+
+ '</div>';
+ });
+ h += '</div>';
+ }
+
+ ge("cf-c").innerHTML = h;
+
+ // Foco na busca se for a primeira entrada
+ var inpB = ge("fo-busca");
+ if(inpB && busca) inpB.focus();
+}
+
+function foSetBusca(v){ FO_BUSCA = v; rCfForn(); }
+function foNovo(){ FO_EID = 'new'; rCfForn(); }
+function foEditar(id){ FO_EID = id; rCfForn(); }
+function foFechar(){ FO_EID = null; rCfForn(); }
+
+async function foSalvar(){
+ var nome = (ge("fo-nome").value||"").trim();
+ if(!nome){ toast("Nome é obrigatório!", false); return; }
+ var payload = { nome: nome };
+ var cnpj = (ge("fo-cnpj").value||"").trim();
+ var chave = (ge("fo-chave").value||"").trim();
+ var tel = (ge("fo-tel").value||"").trim();
+ var cat = ge("fo-cat").value;
+ var obs = (ge("fo-obs").value||"").trim();
+ if(cnpj) payload.cnpj_cpf = cnpj;
+ if(chave) payload.chave_pix = chave;
+ if(tel) payload.telefone = tel;
+ if(cat) payload.categoria_padrao = cat;
+ if(obs) payload.observacoes = obs;
+
+ setBtn("btn-fo-sv",true);
+ try {
+ if(FO_EID === 'new'){
+ var {data, error} = await sb.from("fornecedores").insert(payload).select().single();
+ if(error) throw error;
+ FORN.push({id:data.id, nome:data.nome, cnpj:data.cnpj_cpf||"", chave:data.chave_pix||"", tel:data.telefone||"", cat:data.categoria_padrao||"", obs:data.observacoes||"", ativo:true});
+ FORN.sort(function(a,b){return (a.nome||"").localeCompare(b.nome||"");});
+ toast("Fornecedor "+data.nome+" cadastrado!");
+ } else {
+ var {error} = await sb.from("fornecedores").update(payload).eq("id", FO_EID);
+ if(error) throw error;
+ FORN = FORN.map(function(f){
+ return f.id === FO_EID ? Object.assign({}, f, {nome:nome, cnpj:cnpj, chave:chave, tel:tel, cat:cat, obs:obs}) : f;
+ });
+ FORN.sort(function(a,b){return (a.nome||"").localeCompare(b.nome||"");});
+ toast("Fornecedor atualizado!");
+ }
+ FO_EID = null;
+ rCfForn();
+ } catch(e){ toast("Erro: "+e.message, false); console.error("Erro foSalvar:", e); }
+ setBtn("btn-fo-sv",false);
+}
+
+async function foDel(id){
+ var f = FORN.filter(function(x){return x.id===id;})[0];
+ if(!f) return;
+ if(!confirm('Excluir fornecedor "'+f.nome+'"?\n\nOs PIX já cadastrados com este fornecedor NÃO serão afetados (o nome continua salvo neles).\n\nEsta ação não pode ser desfeita.')) return;
+ try {
+ var {error} = await sb.from("fornecedores").delete().eq("id", id);
+ if(error) throw error;
+ FORN = FORN.filter(function(x){return x.id!==id;});
+ toast("Fornecedor excluído");
+ rCfForn();
+ } catch(e){ toast("Erro: "+e.message, false); }
 }
 
 // ═══════════════════════════════════════════════════════════════
