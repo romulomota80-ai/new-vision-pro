@@ -2137,11 +2137,14 @@ function impParseLinha(linha){
 }
 
 function impValidar(){
+ // Normalizar acentos Unicode (NFC) — resolve diferença entre NFC/NFD
+ function norm(s){ return (s||'').normalize('NFC').trim(); }
+
  // CATS é array de strings (nomes das categorias), não array de objetos
- var catsValidas = CATS.slice(); // cópia do array de nomes
+ var catsValidas = CATS.map(norm); // cópia normalizada do array de nomes
  // Mapa de quais são movimentações (vem do array global MOV)
  var catsMovim = {};
- CATS.forEach(function(nome){ catsMovim[nome] = MOV.indexOf(nome) >= 0; });
+ CATS.forEach(function(nome){ catsMovim[norm(nome)] = MOV.indexOf(nome) >= 0; });
 
  var validas=0, duplicatas=0, erros=0, valorTotal=0;
  var porMes = {};
@@ -2162,10 +2165,14 @@ function impValidar(){
  r._status='erro'; r._erro='Data inválida (esperado YYYY-MM-DD)'; erros++; return;
  }
 
- // 2. Categoria existe
- if(catsValidas.indexOf(r.categoria)<0){
+ // 2. Categoria existe (compara normalizado)
+ var catNorm = norm(r.categoria);
+ if(catsValidas.indexOf(catNorm)<0){
  r._status='erro'; r._erro='Categoria "'+r.categoria+'" não existe no sistema'; erros++; return;
  }
+ // Atualiza categoria no registro pra forma normalizada (pra gravar no banco com acento certo)
+ var idxCat = catsValidas.indexOf(catNorm);
+ r.categoria = CATS[idxCat]; // usa o nome exato do banco
 
  // 3. Descrição preenchida
  if(!r.descricao){
@@ -2178,7 +2185,7 @@ function impValidar(){
  }
 
  // Garantir is_movimentacao consistente com categoria
- r.is_movimentacao = catsMovim[r.categoria] || false;
+ r.is_movimentacao = catsMovim[catNorm] || false;
 
  // 5. Checar duplicata
  var k = r.data + '|' + r.valor.toFixed(2) + '|' + r.descricao.toLowerCase().trim();
