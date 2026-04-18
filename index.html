@@ -2003,7 +2003,14 @@ function rCfImport(){
  // Botões de ação
  h += '<div style="display:flex;gap:8px;margin-bottom:14px;">';
  if(s.erros>0){
- h += '<div style="flex:1;padding:10px;background:rgba(160,64,64,.08);border:1px solid rgba(160,64,64,.3);border-radius:8px;color:#a04040;font-size:11px;">⚠️ Corrija os erros antes de importar</div>';
+ // Achar o primeiro erro pra mostrar exemplo
+ var primeiroErro = IMP_DATA.filter(function(r){return r._status==='erro';})[0];
+ var msgErro = primeiroErro ? primeiroErro._erro : 'Erro desconhecido';
+ var linhaErro = primeiroErro ? ('linha '+(IMP_DATA.indexOf(primeiroErro)+1)) : '';
+ h += '<div style="flex:1;padding:10px;background:rgba(160,64,64,.08);border:1px solid rgba(160,64,64,.3);border-radius:8px;color:#a04040;font-size:11px;">'+
+ '<div style="font-weight:700;margin-bottom:4px;">⚠️ Corrija os erros antes de importar</div>'+
+ '<div style="opacity:.9;"><b>Exemplo '+linhaErro+':</b> '+msgErro+'</div>'+
+ '</div>';
  } else {
  h += '<button class="btn" style="flex:1;" id="btn-imp-go" onclick="impConfirmar()">Importar '+s.validas+' lançamentos</button>';
  }
@@ -2027,9 +2034,10 @@ function rCfImport(){
  var r = IMP_DATA[i];
  var icone = r._status==='valida'?'✅':(r._status==='duplicata'?'⚠️':'❌');
  var cor = r._status==='valida'?'':(r._status==='duplicata'?'background:rgba(184,134,11,.05);':'background:rgba(160,64,64,.05);');
- h += '<tr style="'+cor+'border-bottom:1px solid var(--BR);" title="'+(r._erro||'')+'">'+
+ var infoErro = r._erro ? ' <span style="font-size:10px;color:#a04040;">('+r._erro+')</span>' : '';
+ h += '<tr style="'+cor+'border-bottom:1px solid var(--BR);">'+
  '<td style="padding:6px 8px;color:var(--MU);">'+(i+1)+'</td>'+
- '<td style="padding:6px 8px;">'+icone+'</td>'+
+ '<td style="padding:6px 8px;">'+icone+infoErro+'</td>'+
  '<td style="padding:6px 8px;">'+(r.data||'?')+'</td>'+
  '<td style="padding:6px 8px;">'+(r.categoria||'?')+'</td>'+
  '<td style="padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;">'+(r.descricao||'?')+'</td>'+
@@ -2129,9 +2137,11 @@ function impParseLinha(linha){
 }
 
 function impValidar(){
- var catsValidas = CATS.map(function(c){return c.nome;});
+ // CATS é array de strings (nomes das categorias), não array de objetos
+ var catsValidas = CATS.slice(); // cópia do array de nomes
+ // Mapa de quais são movimentações (vem do array global MOV)
  var catsMovim = {};
- CATS.forEach(function(c){ catsMovim[c.nome] = c.is_movimentacao; });
+ CATS.forEach(function(nome){ catsMovim[nome] = MOV.indexOf(nome) >= 0; });
 
  var validas=0, duplicatas=0, erros=0, valorTotal=0;
  var porMes = {};
