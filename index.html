@@ -621,10 +621,11 @@ body.light .cd.hg span{color:#3d6225!important;}
 
  <!-- CONFIG -->
  <div id="s-cf" class="scr">
- <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+ <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:6px;">
  <button class="btn" id="cf-mp" onclick="cfAba('mp')">Marketplaces</button>
  <button class="btn g" id="cf-ca" onclick="cfAba('ca')">Categorias</button>
  <button class="btn g" id="cf-fx" onclick="cfAba('fx')">Gastos Fixos</button>
+ <button class="btn g" id="cf-im" onclick="cfAba('im')">Importar</button>
  </div>
  <div id="cf-c"></div>
  </div><!-- /s-cf -->
@@ -1592,10 +1593,11 @@ function iaSend(txt){ if(typeof txt!=="string")txt=""; txt=txt.trim(); if(!txt){
 }
 
 // ═══ CONFIG ══════════════════════════════════════════════════════
-function cfAba(a){ cfA=a; ge("cf-mp").className="btn"+(a==="mp"?"":" g"); ge("cf-ca").className="btn"+(a==="ca"?"":" g"); ge("cf-fx").className="btn"+(a==="fx"?"":" g"); rCf(); }
+function cfAba(a){ cfA=a; ge("cf-mp").className="btn"+(a==="mp"?"":" g"); ge("cf-ca").className="btn"+(a==="ca"?"":" g"); ge("cf-fx").className="btn"+(a==="fx"?"":" g"); ge("cf-im").className="btn"+(a==="im"?"":" g"); rCf(); }
 function rCf(){
  if(cfA==="mp") rCfMp();
  else if(cfA==="ca") rCfCa();
+ else if(cfA==="im") rCfImport();
  else rFixos();
 }
 
@@ -1955,6 +1957,297 @@ async function fxToggle(id){
  FIXOS=FIXOS.map(function(fx){return fx.id===id?Object.assign({},fx,{ativo:novoAtivo}):fx;});
  atualizarFxInfo(); rFixos();
  } catch(e){ toast("Erro: "+e.message,false); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// IMPORTAR CSV — tela de import de lançamentos históricos
+// ═══════════════════════════════════════════════════════════════
+var IMP_DATA = null; // dados parseados do CSV
+var IMP_STATUS = null; // resultado da validação
+
+function rCfImport(){
+ var h = ''+
+ '<div style="margin-bottom:16px;">'+
+ '<div style="font-size:14px;font-weight:700;margin-bottom:4px;">Importar lançamentos via CSV</div>'+
+ '<div style="font-size:11px;color:var(--MU);line-height:1.5;">Use esta ferramenta para importar lançamentos em massa a partir de uma planilha (CSV).<br>As colunas esperadas são: <code style="background:var(--C2);padding:1px 4px;border-radius:3px;">data, mes, categoria, descricao, valor, is_movimentacao</code>. Outras colunas são ignoradas.</div>'+
+ '</div>';
+
+ if(!IMP_DATA){
+ // Estado inicial — upload
+ h += '<div style="background:var(--C1);border:2px dashed var(--BR);border-radius:12px;padding:30px;text-align:center;">'+
+ '<div style="font-size:32px;margin-bottom:8px;">📂</div>'+
+ '<div style="font-size:13px;font-weight:600;margin-bottom:4px;">Selecione o arquivo CSV</div>'+
+ '<div style="font-size:11px;color:var(--MU);margin-bottom:14px;">Formato UTF-8, separado por vírgula</div>'+
+ '<input type="file" id="imp-file" accept=".csv,text/csv" style="display:none;" onchange="impCarregarArquivo(event)">'+
+ '<button class="btn" onclick="document.getElementById(\'imp-file\').click()">Escolher arquivo...</button>'+
+ '</div>';
+ } else {
+ // Estado com dados — preview + ações
+ var s = IMP_STATUS;
+ h += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">'+
+ '<div style="background:var(--C1);border:1px solid var(--BR);border-radius:10px;padding:10px;"><div style="font-size:10px;color:var(--MU);">TOTAL</div><div style="font-size:18px;font-weight:800;">'+IMP_DATA.length+'</div></div>'+
+ '<div style="background:rgba(90,138,58,.08);border:1px solid rgba(90,138,58,.3);border-radius:10px;padding:10px;"><div style="font-size:10px;color:#5a8a3a;">✅ VÁLIDAS</div><div style="font-size:18px;font-weight:800;color:#5a8a3a;">'+s.validas+'</div></div>'+
+ '<div style="background:rgba(184,134,11,.08);border:1px solid rgba(184,134,11,.3);border-radius:10px;padding:10px;"><div style="font-size:10px;color:#b8860b;">⚠️ DUPLICATAS</div><div style="font-size:18px;font-weight:800;color:#b8860b;">'+s.duplicatas+'</div></div>'+
+ '<div style="background:rgba(160,64,64,.08);border:1px solid rgba(160,64,64,.3);border-radius:10px;padding:10px;"><div style="font-size:10px;color:#a04040;">❌ ERROS</div><div style="font-size:18px;font-weight:800;color:#a04040;">'+s.erros+'</div></div>'+
+ '</div>';
+
+ // Resumo por mês
+ h += '<div style="background:var(--C1);border:1px solid var(--BR);border-radius:10px;padding:12px;margin-bottom:14px;">'+
+ '<div style="font-size:12px;font-weight:700;margin-bottom:8px;">Distribuição</div>';
+ Object.keys(s.porMes).forEach(function(m){
+ h += '<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid var(--BR);"><span>'+m+'</span><span>'+s.porMes[m].count+' lanç · '+fv(s.porMes[m].valor)+'</span></div>';
+ });
+ h += '<div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0 0;font-weight:700;"><span>TOTAL</span><span>'+fv(s.valorTotal)+'</span></div>';
+ h += '</div>';
+
+ // Botões de ação
+ h += '<div style="display:flex;gap:8px;margin-bottom:14px;">';
+ if(s.erros>0){
+ h += '<div style="flex:1;padding:10px;background:rgba(160,64,64,.08);border:1px solid rgba(160,64,64,.3);border-radius:8px;color:#a04040;font-size:11px;">⚠️ Corrija os erros antes de importar</div>';
+ } else {
+ h += '<button class="btn" style="flex:1;" id="btn-imp-go" onclick="impConfirmar()">Importar '+s.validas+' lançamentos</button>';
+ }
+ h += '<button class="btn g" onclick="impReset()">Cancelar / Novo arquivo</button>';
+ h += '</div>';
+
+ // Tabela de preview (primeiras 20 linhas)
+ h += '<div style="background:var(--C1);border:1px solid var(--BR);border-radius:10px;overflow:auto;max-height:400px;">'+
+ '<table style="width:100%;font-size:11px;border-collapse:collapse;">'+
+ '<thead style="position:sticky;top:0;background:var(--C2);"><tr>'+
+ '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--BR);">#</th>'+
+ '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--BR);">Status</th>'+
+ '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--BR);">Data</th>'+
+ '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--BR);">Categoria</th>'+
+ '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--BR);">Descrição</th>'+
+ '<th style="padding:8px;text-align:right;border-bottom:1px solid var(--BR);">Valor</th>'+
+ '</tr></thead><tbody>';
+
+ var limite = Math.min(IMP_DATA.length, 50);
+ for(var i=0;i<limite;i++){
+ var r = IMP_DATA[i];
+ var icone = r._status==='valida'?'✅':(r._status==='duplicata'?'⚠️':'❌');
+ var cor = r._status==='valida'?'':(r._status==='duplicata'?'background:rgba(184,134,11,.05);':'background:rgba(160,64,64,.05);');
+ h += '<tr style="'+cor+'border-bottom:1px solid var(--BR);" title="'+(r._erro||'')+'">'+
+ '<td style="padding:6px 8px;color:var(--MU);">'+(i+1)+'</td>'+
+ '<td style="padding:6px 8px;">'+icone+'</td>'+
+ '<td style="padding:6px 8px;">'+(r.data||'?')+'</td>'+
+ '<td style="padding:6px 8px;">'+(r.categoria||'?')+'</td>'+
+ '<td style="padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;">'+(r.descricao||'?')+'</td>'+
+ '<td style="padding:6px 8px;text-align:right;font-weight:700;">'+(isNaN(r.valor)?'?':fv(r.valor))+'</td>'+
+ '</tr>';
+ }
+ h += '</tbody></table>';
+ if(IMP_DATA.length>50){
+ h += '<div style="padding:8px;text-align:center;font-size:11px;color:var(--MU);border-top:1px solid var(--BR);">Mostrando 50 de '+IMP_DATA.length+' linhas. Importação processa TODAS.</div>';
+ }
+ h += '</div>';
+ }
+
+ ge("cf-c").innerHTML = h;
+}
+
+function impCarregarArquivo(ev){
+ var file = ev.target.files[0];
+ if(!file)return;
+ var reader = new FileReader();
+ reader.onload = function(e){
+ try {
+ impParsearCSV(e.target.result);
+ } catch(err){
+ toast("Erro ao ler CSV: "+err.message, false);
+ }
+ };
+ reader.readAsText(file, 'UTF-8');
+}
+
+function impParsearCSV(texto){
+ // Parser de CSV simples — respeita aspas
+ var linhas = texto.split(/\r?\n/).filter(function(l){return l.trim();});
+ if(linhas.length<2){ toast("CSV vazio ou sem dados", false); return; }
+
+ var cabecalho = impParseLinha(linhas[0]).map(function(c){return c.trim().toLowerCase();});
+ var cols = {};
+ ['data','mes','categoria','descricao','valor','is_movimentacao'].forEach(function(c){
+ cols[c] = cabecalho.indexOf(c);
+ });
+ if(cols.data<0||cols.categoria<0||cols.descricao<0||cols.valor<0){
+ toast("CSV não tem colunas obrigatórias (data, categoria, descricao, valor)", false);
+ return;
+ }
+
+ var dados = [];
+ for(var i=1;i<linhas.length;i++){
+ var campos = impParseLinha(linhas[i]);
+ if(campos.length<2) continue;
+
+ var reg = {
+ data: (campos[cols.data]||'').trim(),
+ mes: cols.mes>=0 ? (campos[cols.mes]||'').trim().toUpperCase() : '',
+ categoria: (campos[cols.categoria]||'').trim(),
+ descricao: (campos[cols.descricao]||'').trim(),
+ valor: parseFloat((campos[cols.valor]||'0').replace(',','.')),
+ is_movimentacao: cols.is_movimentacao>=0 ? /true|1|sim/i.test(campos[cols.is_movimentacao]||'') : false
+ };
+
+ // Derivar mês se não veio
+ if(!reg.mes && reg.data){
+ var d = new Date(reg.data);
+ if(!isNaN(d)){
+ var meses=['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
+ reg.mes = meses[d.getMonth()];
+ }
+ }
+
+ dados.push(reg);
+ }
+
+ if(!dados.length){ toast("Nenhum lançamento encontrado no CSV", false); return; }
+
+ IMP_DATA = dados;
+ impValidar();
+ toast("CSV carregado: "+dados.length+" linhas");
+}
+
+function impParseLinha(linha){
+ // Parser que respeita aspas
+ var campos = [];
+ var atual = '';
+ var dentroAspas = false;
+ for(var i=0;i<linha.length;i++){
+ var c = linha[i];
+ if(c==='"'){
+ if(dentroAspas && linha[i+1]==='"'){ atual+='"'; i++; }
+ else dentroAspas = !dentroAspas;
+ } else if(c===',' && !dentroAspas){
+ campos.push(atual); atual='';
+ } else {
+ atual += c;
+ }
+ }
+ campos.push(atual);
+ return campos;
+}
+
+function impValidar(){
+ var catsValidas = CATS.map(function(c){return c.nome;});
+ var catsMovim = {};
+ CATS.forEach(function(c){ catsMovim[c.nome] = c.is_movimentacao; });
+
+ var validas=0, duplicatas=0, erros=0, valorTotal=0;
+ var porMes = {};
+
+ // Criar índice de lançamentos existentes (pra detectar duplicata)
+ var existentes = {};
+ EXT.forEach(function(e){
+ var k = (e.data||'') + '|' + (e.val||0).toFixed(2) + '|' + (e.desc||'').toLowerCase().trim();
+ existentes[k] = true;
+ });
+
+ IMP_DATA.forEach(function(r){
+ r._status = 'valida';
+ r._erro = null;
+
+ // 1. Data válida
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(r.data)){
+ r._status='erro'; r._erro='Data inválida (esperado YYYY-MM-DD)'; erros++; return;
+ }
+
+ // 2. Categoria existe
+ if(catsValidas.indexOf(r.categoria)<0){
+ r._status='erro'; r._erro='Categoria "'+r.categoria+'" não existe no sistema'; erros++; return;
+ }
+
+ // 3. Descrição preenchida
+ if(!r.descricao){
+ r._status='erro'; r._erro='Descrição vazia'; erros++; return;
+ }
+
+ // 4. Valor numérico > 0
+ if(isNaN(r.valor) || r.valor<=0){
+ r._status='erro'; r._erro='Valor inválido'; erros++; return;
+ }
+
+ // Garantir is_movimentacao consistente com categoria
+ r.is_movimentacao = catsMovim[r.categoria] || false;
+
+ // 5. Checar duplicata
+ var k = r.data + '|' + r.valor.toFixed(2) + '|' + r.descricao.toLowerCase().trim();
+ if(existentes[k]){
+ r._status='duplicata'; r._erro='Já existe lançamento idêntico no sistema'; duplicatas++;
+ return;
+ }
+
+ validas++;
+ valorTotal += r.valor;
+ porMes[r.mes] = porMes[r.mes] || {count:0, valor:0};
+ porMes[r.mes].count++;
+ porMes[r.mes].valor += r.valor;
+ });
+
+ IMP_STATUS = {validas:validas, duplicatas:duplicatas, erros:erros, valorTotal:valorTotal, porMes:porMes};
+ rCfImport();
+}
+
+function impReset(){
+ IMP_DATA = null; IMP_STATUS = null;
+ var f = ge("imp-file"); if(f) f.value = '';
+ rCfImport();
+}
+
+async function impConfirmar(){
+ if(!IMP_DATA || !IMP_STATUS) return;
+ if(IMP_STATUS.erros>0){ toast("Corrija os erros antes de importar", false); return; }
+ if(IMP_STATUS.validas===0){ toast("Nenhum lançamento válido para importar", false); return; }
+
+ var ok = confirm(
+ 'IMPORTAR '+IMP_STATUS.validas+' LANÇAMENTOS?\n\n'+
+ 'Total: '+fv(IMP_STATUS.valorTotal)+'\n'+
+ 'Duplicatas (SERÃO IGNORADAS): '+IMP_STATUS.duplicatas+'\n\n'+
+ 'Essa ação NÃO pode ser desfeita automaticamente.\n'+
+ 'Confirma?'
+ );
+ if(!ok) return;
+
+ var btn = ge("btn-imp-go");
+ if(btn){ btn.disabled = true; btn.textContent='Importando...'; }
+
+ try {
+ var paraImportar = IMP_DATA.filter(function(r){ return r._status==='valida'; });
+ var total = paraImportar.length;
+ var salvos = 0;
+ var loteSize = 50;
+
+ for(var i=0; i<total; i+=loteSize){
+ var lote = paraImportar.slice(i, i+loteSize).map(function(r){
+ return {
+ data: r.data,
+ mes: r.mes,
+ categoria: r.categoria,
+ descricao: r.descricao,
+ valor: r.valor,
+ comprovante: false,
+ is_movimentacao: r.is_movimentacao
+ };
+ });
+
+ var {data, error} = await sb.from("lancamentos").insert(lote).select();
+ if(error) throw error;
+
+ salvos += data.length;
+ if(btn) btn.textContent='Importando... '+salvos+'/'+total;
+ }
+
+ toast('✅ '+salvos+' lançamentos importados!');
+ IMP_DATA = null; IMP_STATUS = null;
+
+ // Recarrega dados do sistema
+ await carregarTudo();
+ rCfImport();
+ } catch(e){
+ if(btn){ btn.disabled=false; btn.textContent='Importar '+IMP_STATUS.validas+' lançamentos'; }
+ toast('Erro na importação: '+e.message, false);
+ console.error('Erro import:', e);
+ }
 }
 
 // ═══ EVENT LISTENERS ════════════════════════════════════════════
