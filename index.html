@@ -870,7 +870,8 @@ async function carregarTudo(){
  id:r.id, desc:r.descricao, fornId:r.fornecedor_id,
  fornNome:r.fornecedor_nome||"", cat:r.categoria||"",
  total:parseFloat(r.valor_total||0), data:r.data_pedido,
- obs:r.observacoes||"", status:r.status, criado:r.created_at
+ obs:r.observacoes||"", status:r.status, criado:r.created_at,
+ numForn:r.numero_fornecedor||null
  }; });
 
  popularSelects();
@@ -1440,6 +1441,21 @@ async function boSalvar(){
 
  setBtn("btn-bo-sv",true);
  try {
+ // Calcula próximo número de pedido deste fornecedor (max + 1)
+ var proxNum = 1;
+ if(fav){
+ var pedidosDesseF = PEDIDOS.filter(function(p){
+ return (p.fornNome||"").toLowerCase() === fav.toLowerCase();
+ });
+ if(pedidosDesseF.length > 0){
+ var maxNum = 0;
+ pedidosDesseF.forEach(function(p){
+ if(p.numForn && p.numForn > maxNum) maxNum = p.numForn;
+ });
+ proxNum = maxNum + 1;
+ }
+ }
+
  // 1. Cria o PEDIDO primeiro
  var pedidoPayload = {
  descricao: d,
@@ -1448,7 +1464,8 @@ async function boSalvar(){
  categoria: categoria,
  valor_total: valTotal,
  data_pedido: BO_PARCELAS[0].data, // data da primeira parcela
- status: "ativo"
+ status: "ativo",
+ numero_fornecedor: fav ? proxNum : null
  };
  var {data:rdPed, error:errPed} = await sb.from("pedidos").insert(pedidoPayload).select().single();
  if(errPed) throw errPed;
@@ -1459,7 +1476,8 @@ async function boSalvar(){
  id:rdPed.id, desc:rdPed.descricao, fornId:rdPed.fornecedor_id,
  fornNome:rdPed.fornecedor_nome||"", cat:rdPed.categoria||"",
  total:parseFloat(rdPed.valor_total||0), data:rdPed.data_pedido,
- obs:rdPed.observacoes||"", status:rdPed.status, criado:rdPed.created_at
+ obs:rdPed.observacoes||"", status:rdPed.status, criado:rdPed.created_at,
+ numForn:rdPed.numero_fornecedor||null
  });
 
  // 2. Cria as parcelas em boletos linkadas ao pedido
@@ -1624,10 +1642,16 @@ function rBo(){
  var urgBorder=mu?"rgba(201,33,39,.3)":ug?"rgba(160,82,45,.2)":"var(--BR)";
  var isPix = (b.tipo||"boleto") === "pix";
  var badgeParc = (b.parc_at && b.parc_tot) ? '<span style="font-size:10px;color:#6b4e8a;background:rgba(107,78,138,.12);padding:1px 7px;border-radius:5px;border:1px solid rgba(107,78,138,.3);font-weight:700;margin-left:5px;">'+b.parc_at+'/'+b.parc_tot+'</span>' : '';
+ // Badge do pedido (ex: "LING #3")
+ var badgePed = '';
+ if(b.pedidoId && b.fav){
+ var nPed = foNumeroPedido(b.pedidoId, b.fav);
+ if(nPed) badgePed = '<span style="font-size:10px;color:#fff;background:#6b4e8a;padding:1px 7px;border-radius:5px;font-weight:700;margin-left:5px;">'+b.fav+' #'+nPed+'</span>';
+ }
  return '<div style="background:'+urgBg+';border:1px solid '+urgBorder+';border-radius:14px;padding:14px;">'+
  '<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:10px;">'+
  '<div style="flex:1;min-width:0;">'+
- '<div style="font-size:13px;font-weight:700;margin-bottom:5px;">'+(isPix?'⚡ ':'')+b.desc+badgeParc+'</div>'+
+ '<div style="font-size:13px;font-weight:700;margin-bottom:5px;">'+(isPix?'⚡ ':'')+b.desc+badgeParc+badgePed+'</div>'+
  '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">'+
  '<span style="font-size:11px;color:var(--MU);">Vence '+fd(b.ven)+'</span>'+
  bdg(b.cat,true)+
@@ -1673,10 +1697,16 @@ function rBo(){
  pg.map(function(b){
  var isPix = (b.tipo||"boleto") === "pix";
  var badgeParcP = (b.parc_at && b.parc_tot) ? '<span style="font-size:10px;color:#6b4e8a;background:rgba(107,78,138,.12);padding:1px 7px;border-radius:5px;border:1px solid rgba(107,78,138,.3);font-weight:700;margin-left:5px;">'+b.parc_at+'/'+b.parc_tot+'</span>' : '';
+ // Badge do pedido (ex: "LING #3")
+ var badgePedP = '';
+ if(b.pedidoId && b.fav){
+ var nPedP = foNumeroPedido(b.pedidoId, b.fav);
+ if(nPedP) badgePedP = '<span style="font-size:10px;color:#fff;background:#6b4e8a;padding:1px 7px;border-radius:5px;font-weight:700;margin-left:5px;">'+b.fav+' #'+nPedP+'</span>';
+ }
  return '<div class="card" style="padding:14px;border-color:rgba(90,138,58,.2);">'+
  '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">'+
  '<div style="flex:1;min-width:0;">'+
- '<div style="font-size:13px;font-weight:700;margin-bottom:5px;">'+(isPix?'⚡ ':'')+b.desc+badgeParcP+'</div>'+
+ '<div style="font-size:13px;font-weight:700;margin-bottom:5px;">'+(isPix?'⚡ ':'')+b.desc+badgeParcP+badgePedP+'</div>'+
  '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">'+
  '<span style="font-size:10px;background:rgba(90,138,58,.1);color:#5a8a3a;border:1px solid rgba(90,138,58,.3);padding:1px 7px;border-radius:5px;font-weight:700;">Pago</span>'+
  bdg(b.cat,true)+
@@ -2490,6 +2520,26 @@ async function foDel(id){
 // ═══════════════════════════════════════════════════════════════
 var FO_DETALHE_ID = null; // id do fornecedor sendo visualizado em detalhe
 
+// Retorna o número sequencial do pedido dentro de um fornecedor
+// Usa o numero_fornecedor gravado no banco se disponível.
+// Fallback: calcula pela ordem de criação (pra pedidos antigos que não têm número gravado).
+function foNumeroPedido(pedidoId, fornNome){
+ if(!pedidoId || !fornNome) return null;
+ var pedInfo = PEDIDOS.filter(function(p){return p.id===pedidoId;})[0];
+ // Prioriza o número gravado no banco
+ if(pedInfo && pedInfo.numForn) return pedInfo.numForn;
+ // Fallback: calcula pela ordem de criação
+ var desteF = PEDIDOS.filter(function(p){
+ return (p.fornNome||"").toLowerCase() === (fornNome||"").toLowerCase();
+ }).sort(function(a,b){
+ return new Date(a.criado) - new Date(b.criado);
+ });
+ for(var i=0; i<desteF.length; i++){
+ if(desteF[i].id === pedidoId) return i+1;
+ }
+ return null;
+}
+
 function foCalcularStats(nome){
  // Calcula estatísticas de um fornecedor pelo nome (busca em boletos + lancamentos)
  var nomeUp = (nome||"").toUpperCase().trim();
@@ -2584,6 +2634,15 @@ function rFoRanking(){
  '<div style="font-size:11px;color:var(--MU);margin-top:3px;">Análise de gastos por fornecedor</div>'+
  '</div>'+
  '</div>';
+
+ // Botão de migração de números (só aparece se tem pedidos antigos sem número)
+ var pedidosSemNumero = PEDIDOS.filter(function(p){ return !p.numForn && p.fornNome; });
+ if(pedidosSemNumero.length > 0){
+ h += '<div style="background:rgba(184,134,11,.08);border:1px solid rgba(184,134,11,.25);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">'+
+ '<div style="font-size:12px;color:#b8860b;">⚠️ <b>'+pedidosSemNumero.length+' pedido(s)</b> antigo(s) ainda não foram numerados</div>'+
+ '<button class="btn sm" onclick="foMigrarNumeros()" style="background:#b8860b;color:#fff;">Numerar agora</button>'+
+ '</div>';
+ }
 
  // KPIs em destaque
  h += '<div class="kpi-hero" style="background:linear-gradient(135deg,rgba(59,105,120,.08),rgba(59,105,120,.02));border:1px solid rgba(59,105,120,.22);border-radius:18px;padding:20px 24px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;align-items:center;margin-bottom:20px;">'+
@@ -2684,6 +2743,54 @@ function foVoltar(){
  rFo();
 }
 
+// Migração: preenche numero_fornecedor nos pedidos antigos que estão NULL no banco
+async function foMigrarNumeros(){
+ var semNumero = PEDIDOS.filter(function(p){ return !p.numForn && p.fornNome; });
+ if(semNumero.length === 0){
+ toast("Todos os pedidos já estão numerados!");
+ return;
+ }
+ if(!confirm("Vou numerar "+semNumero.length+" pedido(s) antigo(s) que ainda não têm número.\n\nContinuar?")) return;
+
+ // Agrupa por fornecedor
+ var porFornecedor = {};
+ semNumero.forEach(function(p){
+ var f = (p.fornNome||"").toLowerCase();
+ if(!porFornecedor[f]) porFornecedor[f] = [];
+ porFornecedor[f].push(p);
+ });
+
+ try {
+ var total = 0;
+ for(var fornKey in porFornecedor){
+ var pedidos = porFornecedor[fornKey].sort(function(a,b){
+ return new Date(a.criado) - new Date(b.criado);
+ });
+ // Calcula a partir do max existente (se alguns já têm número)
+ var jaNumerados = PEDIDOS.filter(function(p){
+ return (p.fornNome||"").toLowerCase() === fornKey && p.numForn;
+ });
+ var startNum = 1;
+ if(jaNumerados.length > 0){
+ startNum = Math.max.apply(null, jaNumerados.map(function(p){return p.numForn;})) + 1;
+ }
+ for(var i=0; i<pedidos.length; i++){
+ var num = startNum + i;
+ var {error} = await sb.from("pedidos").update({numero_fornecedor: num}).eq("id", pedidos[i].id);
+ if(error) throw error;
+ // Atualiza cache local
+ PEDIDOS = PEDIDOS.map(function(p){ return p.id === pedidos[i].id ? Object.assign({}, p, {numForn:num}) : p; });
+ total++;
+ }
+ }
+ toast("✅ "+total+" pedido(s) numerado(s) com sucesso!");
+ rFo();
+ } catch(e){
+ toast("Erro na migração: "+e.message, false);
+ console.error("Erro foMigrarNumeros:", e);
+ }
+}
+
 function rFoDetalhe(){
  var f = FORN.filter(function(x){return x.id===FO_DETALHE_ID;})[0];
  if(!f){ FO_DETALHE_ID = null; return rFo(); }
@@ -2767,11 +2874,13 @@ function rFoDetalhe(){
  var pagasPed = parcelas.filter(function(x){return x.st==="pago";}).length;
  var pendPed = parcelas.length - pagasPed;
  var pagoVal = parcelas.filter(function(x){return x.st==="pago";}).reduce(function(sum,x){return sum+x.val;},0);
+ var numPed = foNumeroPedido(parseInt(pid), f.nome);
+ var badgeNum = numPed ? ' <span style="font-size:11px;color:#fff;background:#6b4e8a;padding:2px 8px;border-radius:4px;font-weight:700;margin-left:6px;">'+f.nome+' #'+numPed+'</span>' : '';
 
  h += '<div class="card" style="padding:14px;border:2px solid rgba(107,78,138,.3);background:rgba(107,78,138,.03);">'+
  '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;">'+
  '<div style="flex:1;min-width:0;">'+
- '<div style="font-size:14px;font-weight:800;color:#6b4e8a;margin-bottom:3px;">📦 '+(pedInfo?pedInfo.desc:parcelas[0].desc)+'</div>'+
+ '<div style="font-size:14px;font-weight:800;color:#6b4e8a;margin-bottom:3px;">📦 '+(pedInfo?pedInfo.desc:parcelas[0].desc)+badgeNum+'</div>'+
  '<div style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--MU);">'+
  '<span>'+parcelas.length+' parcelas</span>'+
  '<span>'+pagasPed+' pagas / '+pendPed+' pendentes</span>'+
