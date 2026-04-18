@@ -450,6 +450,9 @@ body.light .cd.hg span{color:#3d6225!important;}
  </div>
  </div>
 
+ <!-- Alerta de PIX/Boletos vencendo hoje -->
+ <div id="db-alerta-hoje" style="display:none;"></div>
+
  <!-- 1. SOBRA REAL — KPI principal em destaque -->
  <div class="kpi-hero" style="background:linear-gradient(135deg,rgba(90,138,58,.08),rgba(90,138,58,.02));border:1px solid rgba(90,138,58,.22);border-radius:18px;padding:24px 28px;display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:24px;align-items:center;">
  <div>
@@ -582,7 +585,12 @@ body.light .cd.hg span{color:#3d6225!important;}
  <div style="font-size:24px;font-weight:800;color:var(--R);" id="bo-t">-</div>
  <div class="ss" id="bo-i"></div>
  </div>
- <button class="btn sm" onclick="boNovo()">+ Boleto</button>
+ <button class="btn sm" onclick="boNovo()">+ Novo</button>
+ </div>
+ <!-- Sub-abas Boletos/PIX -->
+ <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;">
+ <button class="btn" id="bt-bol" onclick="boTipo('boleto')">📄 Boletos</button>
+ <button class="btn g" id="bt-pix" onclick="boTipo('pix')">⚡ PIX</button>
  </div>
  <!-- Filtros de urgência -->
  <div style="display:flex;gap:6px;flex-wrap:wrap;" id="bo-filtros">
@@ -594,14 +602,18 @@ body.light .cd.hg span{color:#3d6225!important;}
  </div>
  <div id="bo-list" style="display:flex;flex-direction:column;gap:8px;"></div>
  <div class="card" id="bo-form" style="display:none;">
- <div style="padding:13px;border-bottom:1px solid var(--BR);font-size:14px;font-weight:700;">Novo Boleto</div>
+ <div id="bo-form-title" style="padding:13px;border-bottom:1px solid var(--BR);font-size:14px;font-weight:700;">Novo Boleto</div>
  <div style="padding:14px;display:flex;flex-direction:column;gap:11px;">
  <div><label>Descrição</label><input type="text" id="bo-de" placeholder="Ex: Aluguel galpão"></div>
  <div><label>Valor (R$)</label><input type="number" id="bo-vl"></div>
  <div><label>Vencimento</label><input type="date" id="bo-vc"></div>
  <div><label>Categoria</label><select id="bo-ct"></select></div>
- <div><label>Código de barras</label><input type="text" id="bo-cd" placeholder="Cole o código" style="font-family:monospace;font-size:11px;"></div>
- <div><label>Link do boleto (PDF)</label><input type="url" id="bo-lk" placeholder="https://... (opcional)"></div>
+ <!-- Campos só BOLETO -->
+ <div class="bo-campo-boleto"><label>Código de barras</label><input type="text" id="bo-cd" placeholder="Cole o código" style="font-family:monospace;font-size:11px;"></div>
+ <div class="bo-campo-boleto"><label>Link do boleto (PDF)</label><input type="url" id="bo-lk" placeholder="https://... (opcional)"></div>
+ <!-- Campos só PIX -->
+ <div class="bo-campo-pix" style="display:none;"><label>Favorecido</label><input type="text" id="bo-fav" placeholder="Ex: João da Silva ou Fornecedor X"></div>
+ <div class="bo-campo-pix" style="display:none;"><label>Chave PIX</label><input type="text" id="bo-pix" placeholder="CPF, CNPJ, e-mail, telefone ou aleatória"></div>
  <div style="display:flex;gap:8px;"><button class="btn" onclick="boSalvar()" style="flex:1;" id="btn-bo-sv">Salvar</button><button class="btn g" onclick="boFechar()">Cancelar</button></div>
  </div>
  </div>
@@ -663,6 +675,7 @@ var sb = null; // cliente Supabase
 var U = null; // usuário logado
 var MSGS = [];
 var luA="re", boA="pe", cfA="mp", exTab="la";
+var BO_TIPO = "boleto"; // filtro de sub-aba: 'boleto' ou 'pix'
 var evMeses = ["JANEIRO","FEVEREIRO"]; // só meses com dados — corrigido em carregarTudo
 var PER="mes", MES="JANEIRO", CUI="JANEIRO", CUF="MARÇO", LM="JANEIRO";
 var CAL_M = new Date().getMonth();
@@ -768,7 +781,8 @@ async function carregarTudo(){
  id:r.id, desc:r.descricao, val:parseFloat(r.valor),
  ven:r.vencimento, st:r.status==="pago"?"pago":"p",
  cat:r.categoria, rec:r.recorrente, cod:r.codigo_barras||"", link:link,
- arq:r.arquivo_url?{url:r.arquivo_url,nome:r.arquivo_nome}:null
+ arq:r.arquivo_url?{url:r.arquivo_url,nome:r.arquivo_nome}:null,
+ tipo:r.tipo||"boleto", chave:r.chave_pix||"", fav:r.favorecido||""
  };
  });
 
@@ -868,6 +882,39 @@ function rDB(){
  var semComp=EXT.filter(function(e){ return !e.comp; });
  var urg=BOL.filter(function(b){ return b.st==="p"&&Math.ceil((new Date(b.ven)-new Date(hoje))/86400000)<=7; });
  var venceHoje=BOL.filter(function(b){ return b.st==="p"&&b.ven===hoje; });
+
+ // ── Alerta de PIX/Boletos vencendo hoje ──────────────────────
+ var alertaEl = ge("db-alerta-hoje");
+ if(alertaEl){
+ if(venceHoje.length > 0){
+ var totalHoje = venceHoje.reduce(function(s,b){return s+b.val;},0);
+ var pixHoje = venceHoje.filter(function(b){return (b.tipo||"boleto")==="pix";});
+ var bolHoje = venceHoje.filter(function(b){return (b.tipo||"boleto")!=="pix";});
+ var linhasItems = venceHoje.map(function(b){
+ var isPix = (b.tipo||"boleto")==="pix";
+ return '<div style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(255,255,255,.4);border-radius:8px;margin-top:6px;font-size:12px;">'+
+ '<span>'+(isPix?'⚡':'📄')+' '+b.desc+(isPix&&b.fav?' → '+b.fav:'')+'</span>'+
+ '<span style="font-weight:700;">'+fv(b.val)+'</span>'+
+ '</div>';
+ }).join('');
+ alertaEl.innerHTML = '<div style="background:linear-gradient(135deg,rgba(201,33,39,.12),rgba(201,33,39,.04));border:2px solid rgba(201,33,39,.4);border-radius:14px;padding:16px 20px;margin:14px 0;animation:pulsoUrg 2s ease-in-out infinite;">'+
+ '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'+
+ '<div style="font-size:14px;font-weight:800;color:var(--R);">⚠️ PAGAMENTOS VENCENDO HOJE</div>'+
+ '<div style="font-size:18px;font-weight:800;color:var(--R);">'+fv(totalHoje)+'</div>'+
+ '</div>'+
+ '<div style="font-size:11px;color:var(--MU);margin-bottom:4px;">'+
+ bolHoje.length+' boleto(s) · '+pixHoje.length+' PIX · total '+venceHoje.length+' pagamento(s)'+
+ '</div>'+
+ linhasItems+
+ '<div style="margin-top:10px;text-align:right;"><button onclick="goTab(\'bo\')" style="background:var(--R);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;">Pagar agora →</button></div>'+
+ '</div>'+
+ '<style>@keyframes pulsoUrg{0%,100%{box-shadow:0 0 0 0 rgba(201,33,39,.3);}50%{box-shadow:0 0 0 8px rgba(201,33,39,0);}}</style>';
+ alertaEl.style.display = "block";
+ } else {
+ alertaEl.style.display = "none";
+ alertaEl.innerHTML = "";
+ }
+ }
 
  // ── 1. Sobra real em destaque (principal KPI) ────────────────
  ge("db-s").textContent=fv(sob);
@@ -1149,21 +1196,71 @@ async function confirmarFx(){
 
 // ═══ BOLETOS ════════════════════════════════════════════════════
 function boSwitch(a){ boA=a; CAL_D=null; document.querySelectorAll(".btab").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-bo")===a);}); rBo(); }
-function boNovo(){ ["bo-de","bo-vl","bo-vc","bo-cd","bo-lk"].forEach(function(id){ge(id).value="";}); ge("bo-ct").value=""; ge("bo-form").style.display="block"; ge("bo-form").scrollIntoView({behavior:"smooth"}); }
+
+function boTipo(t){
+ BO_TIPO = t;
+ ge("bt-bol").className = "btn" + (t==="boleto" ? "" : " g");
+ ge("bt-pix").className = "btn" + (t==="pix" ? "" : " g");
+ rBo();
+}
+
+function boAjustarCamposForm(){
+ // Mostra/esconde campos conforme tipo selecionado
+ var mostrarBol = BO_TIPO === "boleto";
+ document.querySelectorAll(".bo-campo-boleto").forEach(function(el){
+ el.style.display = mostrarBol ? "block" : "none";
+ });
+ document.querySelectorAll(".bo-campo-pix").forEach(function(el){
+ el.style.display = mostrarBol ? "none" : "block";
+ });
+ var titulo = ge("bo-form-title");
+ if(titulo) titulo.textContent = mostrarBol ? "Novo Boleto" : "Novo PIX";
+}
+
+function boNovo(){
+ ["bo-de","bo-vl","bo-vc","bo-cd","bo-lk","bo-fav","bo-pix"].forEach(function(id){var e=ge(id);if(e)e.value="";});
+ ge("bo-ct").value="";
+ boAjustarCamposForm();
+ ge("bo-form").style.display="block";
+ ge("bo-form").scrollIntoView({behavior:"smooth"});
+}
 function boFechar(){ ge("bo-form").style.display="none"; }
 
 async function boSalvar(){
  var d=(ge("bo-de").value||"").trim(),v=parseFloat(ge("bo-vl").value),vc=ge("bo-vc").value;
  if(!d||!v||!vc){toast("Preencha descrição, valor e vencimento!",false);return;}
+ var payload={
+ descricao:d, valor:v, vencimento:vc, status:"pendente",
+ categoria:ge("bo-ct").value, recorrente:false,
+ tipo: BO_TIPO
+ };
+ if(BO_TIPO === "pix"){
+ var fav=(ge("bo-fav").value||"").trim();
+ var pix=(ge("bo-pix").value||"").trim();
+ if(!fav||!pix){toast("Preencha favorecido e chave PIX!",false);return;}
+ payload.favorecido = fav;
+ payload.chave_pix = pix;
+ payload.codigo_barras = "";
+ payload.link_pdf = null;
+ } else {
  var lk=(ge("bo-lk").value||"").trim();
- var payload={descricao:d,valor:v,vencimento:vc,status:"pendente",categoria:ge("bo-ct").value,recorrente:false,codigo_barras:ge("bo-cd").value||"",link_pdf:lk||null};
+ payload.codigo_barras = ge("bo-cd").value||"";
+ payload.link_pdf = lk||null;
+ payload.favorecido = null;
+ payload.chave_pix = null;
+ }
  setBtn("btn-bo-sv",true);
  try {
  var {data,error}=await sb.from("boletos").insert(payload).select().single();
  if(error)throw error;
- BOL.push({id:data.id,desc:d,val:v,ven:vc,st:"p",cat:data.categoria,rec:false,cod:data.codigo_barras||"",link:lk,arq:null});
+ BOL.push({
+ id:data.id, desc:d, val:v, ven:vc, st:"p",
+ cat:data.categoria, rec:false,
+ cod:data.codigo_barras||"", link:data.link_pdf||"", arq:null,
+ tipo:data.tipo||"boleto", chave:data.chave_pix||"", fav:data.favorecido||""
+ });
  ge("bo-form").style.display="none"; CAL_D=null; rBo();
- toast("Boleto salvo no banco!");
+ toast((BO_TIPO==="pix"?"PIX":"Boleto")+" salvo no banco!");
  } catch(e){ toast("Erro: "+e.message,false); }
  setBtn("btn-bo-sv",false);
 }
@@ -1203,6 +1300,8 @@ async function delBol(id){
 
 function copCod(id){ var b=BOL.filter(function(x){return x.id===id;})[0]; if(!b||!b.cod)return; navigator.clipboard.writeText(b.cod).then(function(){toast("Código copiado! Cole no app do banco.");}).catch(function(){prompt("Copie:",b.cod);}); }
 
+function copChavePix(id){ var b=BOL.filter(function(x){return x.id===id;})[0]; if(!b||!b.chave)return; navigator.clipboard.writeText(b.chave).then(function(){toast("Chave PIX copiada! Cole no app do banco.");}).catch(function(){prompt("Copie:",b.chave); }); }
+
 var boFiltroAtual="todos";
 function boFiltro(f){
  boFiltroAtual=f;
@@ -1219,15 +1318,18 @@ function boFiltro(f){
 
 function rBo(){
  var hoje=new Date().toISOString().slice(0,10);
- var pend=BOL.filter(function(b){ return b.st==="p"; }).sort(function(a,b){return new Date(a.ven)-new Date(b.ven);});
+ // Filtra só do tipo atual (boleto ou pix)
+ var BOL_TIPO = BOL.filter(function(b){ return (b.tipo||"boleto") === BO_TIPO; });
+ var pend=BOL_TIPO.filter(function(b){ return b.st==="p"; }).sort(function(a,b){return new Date(a.ven)-new Date(b.ven);});
  var venceHojeCount=pend.filter(function(b){return b.ven===hoje;}).length;
  var venceSemana=pend.filter(function(b){var d=Math.ceil((new Date(b.ven)-new Date(hoje))/86400000);return d<=7;}).length;
  ge("bo-t").textContent=fv(pend.reduce(function(s,b){return s+b.val;},0));
  ge("bo-i").textContent=pend.length+" pendentes"+(venceHojeCount>0?" · "+venceHojeCount+" vencem hoje":"");
 
- // Badge sidebar
+ // Badge sidebar (considera TODOS os tipos, não só o filtrado)
+ var todosPendentes = BOL.filter(function(b){ return b.st==="p"; });
  var sbBo=ge("sb-badge-bo");
- if(sbBo){sbBo.textContent=pend.length;sbBo.style.display=pend.length>0?"block":"none";}
+ if(sbBo){sbBo.textContent=todosPendentes.length;sbBo.style.display=todosPendentes.length>0?"block":"none";}
 
  // Atualizar chips de filtro
  var filtroEl=ge("bo-filtros");
@@ -1243,15 +1345,16 @@ function rBo(){
  else if(boFiltroAtual==="semana") fl=pend.filter(function(b){var d=Math.ceil((new Date(b.ven)-new Date(hoje))/86400000);return d<=7;});
  else if(boFiltroAtual==="mes") fl=pend.filter(function(b){var d=Math.ceil((new Date(b.ven)-new Date(hoje))/86400000);return d<=31;});
 
- if(!fl.length){ge("bo-list").innerHTML='<div class="card cp" style="text-align:center;color:var(--MU);padding:36px;">'+( boFiltroAtual==="hoje"?"Nenhum boleto vence hoje!":"Nenhum boleto neste filtro.")+'</div>';return;}
+ if(!fl.length){ge("bo-list").innerHTML='<div class="card cp" style="text-align:center;color:var(--MU);padding:36px;">'+( boFiltroAtual==="hoje"?"Nenhum "+(BO_TIPO==="pix"?"PIX":"boleto")+" vence hoje!":"Nenhum "+(BO_TIPO==="pix"?"PIX":"boleto")+" neste filtro.")+'</div>';return;}
  ge("bo-list").innerHTML=fl.map(function(b){
  var d=Math.ceil((new Date(b.ven)-new Date(hoje))/86400000),ug=d<=3,mu=d<=0;
  var urgBg=mu?"rgba(201,33,39,.08)":ug?"rgba(160,82,45,.06)":"var(--C1)";
  var urgBorder=mu?"rgba(201,33,39,.3)":ug?"rgba(160,82,45,.2)":"var(--BR)";
+ var isPix = (b.tipo||"boleto") === "pix";
  return '<div style="background:'+urgBg+';border:1px solid '+urgBorder+';border-radius:14px;padding:14px;">'+
  '<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:10px;">'+
  '<div style="flex:1;min-width:0;">'+
- '<div style="font-size:13px;font-weight:700;margin-bottom:5px;">'+b.desc+'</div>'+
+ '<div style="font-size:13px;font-weight:700;margin-bottom:5px;">'+(isPix?'⚡ ':'')+b.desc+'</div>'+
  '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">'+
  '<span style="font-size:11px;color:var(--MU);">Vence '+fd(b.ven)+'</span>'+
  bdg(b.cat,true)+
@@ -1263,13 +1366,20 @@ function rBo(){
  '<div style="font-size:18px;font-weight:800;color:var(--R);">'+fv(b.val)+'</div>'+
  '</div>'+
  '</div>'+
- (b.cod?'<div style="background:rgba(107,78,138,.08);border:1px solid rgba(107,78,138,.25);border-radius:9px;padding:9px 12px;margin-bottom:10px;">'+
+ (isPix && b.fav?'<div style="background:rgba(42,82,99,.08);border:1px solid rgba(42,82,99,.25);border-radius:9px;padding:9px 12px;margin-bottom:10px;">'+
+ '<div style="font-size:10px;color:#2a5263;font-weight:700;margin-bottom:4px;">FAVORECIDO</div>'+
+ '<div style="font-size:13px;color:var(--TX);font-weight:600;margin-bottom:7px;">'+b.fav+'</div>'+
+ '<div style="font-size:10px;color:#2a5263;font-weight:700;margin-bottom:4px;">CHAVE PIX</div>'+
+ '<div style="font-size:12px;word-break:break-all;font-family:var(--FONT-M);line-height:1.5;margin-bottom:7px;color:var(--TX);font-weight:600;">'+(b.chave||'—')+'</div>'+
+ (b.chave?'<button class="btn pu sm" onclick="copChavePix('+b.id+')" style="width:100%;">Copiar chave PIX</button>':'')+
+ '</div>':'')+
+ (!isPix && b.cod?'<div style="background:rgba(107,78,138,.08);border:1px solid rgba(107,78,138,.25);border-radius:9px;padding:9px 12px;margin-bottom:10px;">'+
  '<div style="font-size:10px;color:#6b4e8a;font-weight:700;margin-bottom:4px;">CÓDIGO DE BARRAS</div>'+
  '<div style="font-size:12px;word-break:break-all;font-family:var(--FONT-M);line-height:1.5;margin-bottom:7px;color:var(--TX);font-weight:600;">'+b.cod+'</div>'+
  '<button class="btn pu sm" onclick="copCod('+b.id+')" style="width:100%;">Copiar código</button>'+
  '</div>':'')+
  '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+
- (b.link?'<button onclick="abrirViewer(\''+b.link+'\', \''+b.desc.replace(/'/g,"\\'")+'\', \'Boleto · vence '+fd(b.ven)+'\')" style="display:flex;align-items:center;gap:4px;padding:6px 10px;border-radius:8px;background:rgba(42,82,99,.1);border:1px solid rgba(42,82,99,.3);color:#2a5263;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Ver boleto</button>':'')+
+ (!isPix && b.link?'<button onclick="abrirViewer(\''+b.link+'\', \''+b.desc.replace(/'/g,"\\'")+'\', \'Boleto · vence '+fd(b.ven)+'\')" style="display:flex;align-items:center;gap:4px;padding:6px 10px;border-radius:8px;background:rgba(42,82,99,.1);border:1px solid rgba(42,82,99,.3);color:#2a5263;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Ver boleto</button>':'')+
  (U&&U.role!=="viewer"?'<button class="btn ok sm" onclick="pagarBolComLancamento('+b.id+')">Marcar como pago</button><button class="btn dl sm" onclick="delBol('+b.id+')">Excluir</button>':'')+
  '</div>'+
  '</div>';
@@ -1277,21 +1387,22 @@ function rBo(){
  }
  if(boA==="ca")rCal();
  if(boA==="pg"){
- var pg=BOL.filter(function(b){return b.st==="pago";}).sort(function(a,b){return new Date(b.ven)-new Date(a.ven);});
+ var pg=BOL_TIPO.filter(function(b){return b.st==="pago";}).sort(function(a,b){return new Date(b.ven)-new Date(a.ven);});
  if(!pg.length){
- ge("bo-list").innerHTML='<div class="card cp" style="text-align:center;color:var(--MU);padding:36px;">Nenhum boleto pago ainda.</div>';
+ ge("bo-list").innerHTML='<div class="card cp" style="text-align:center;color:var(--MU);padding:36px;">Nenhum '+(BO_TIPO==="pix"?"PIX":"boleto")+' pago ainda.</div>';
  return;
  }
  var totalPago=pg.reduce(function(s,b){return s+b.val;},0);
  ge("bo-list").innerHTML='<div class="card cp" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'+
  '<div><div class="sl">Total pago</div><div style="font-size:20px;font-weight:800;color:#5a8a3a;">'+fv(totalPago)+'</div></div>'+
- '<div style="font-size:12px;color:var(--MU);">'+pg.length+' boleto'+(pg.length>1?"s":"")+'</div>'+
+ '<div style="font-size:12px;color:var(--MU);">'+pg.length+' '+(BO_TIPO==="pix"?"PIX":"boleto"+(pg.length>1?"s":""))+'</div>'+
  '</div>'+
  pg.map(function(b){
+ var isPix = (b.tipo||"boleto") === "pix";
  return '<div class="card" style="padding:14px;border-color:rgba(90,138,58,.2);">'+
  '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">'+
  '<div style="flex:1;min-width:0;">'+
- '<div style="font-size:13px;font-weight:700;margin-bottom:5px;">'+b.desc+'</div>'+
+ '<div style="font-size:13px;font-weight:700;margin-bottom:5px;">'+(isPix?'⚡ ':'')+b.desc+'</div>'+
  '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">'+
  '<span style="font-size:10px;background:rgba(90,138,58,.1);color:#5a8a3a;border:1px solid rgba(90,138,58,.3);padding:1px 7px;border-radius:5px;font-weight:700;">Pago</span>'+
  bdg(b.cat,true)+
@@ -1302,12 +1413,17 @@ function rBo(){
  '<div style="font-size:18px;font-weight:800;color:#5a8a3a;">'+fv(b.val)+'</div>'+
  '</div>'+
  '</div>'+
- (b.cod?'<div style="background:rgba(107,78,138,.08);border:1px solid rgba(107,78,138,.25);border-radius:9px;padding:9px 12px;margin-bottom:10px;">'+
+ (isPix && b.fav?'<div style="background:rgba(42,82,99,.08);border:1px solid rgba(42,82,99,.25);border-radius:9px;padding:9px 12px;margin-bottom:10px;">'+
+ '<div style="font-size:10px;color:#2a5263;font-weight:700;margin-bottom:4px;">FAVORECIDO</div>'+
+ '<div style="font-size:13px;color:var(--TX);font-weight:600;">'+b.fav+'</div>'+
+ (b.chave?'<div style="font-size:10px;color:#2a5263;font-weight:700;margin-top:6px;margin-bottom:4px;">CHAVE PIX</div><div style="font-size:12px;word-break:break-all;font-family:var(--FONT-M);color:var(--TX);font-weight:600;">'+b.chave+'</div>':'')+
+ '</div>':'')+
+ (!isPix && b.cod?'<div style="background:rgba(107,78,138,.08);border:1px solid rgba(107,78,138,.25);border-radius:9px;padding:9px 12px;margin-bottom:10px;">'+
  '<div style="font-size:10px;color:#6b4e8a;font-weight:700;margin-bottom:4px;">CÓDIGO DE BARRAS</div>'+
  '<div style="font-size:12px;word-break:break-all;font-family:var(--FONT-M);line-height:1.5;color:var(--TX);font-weight:600;">'+b.cod+'</div>'+
  '<button class="btn pu sm" onclick="copCod('+b.id+')" style="width:100%;margin-top:7px;">Copiar código</button>'+
  '</div>':'')+
- (b.link?'<button onclick="abrirViewer(\''+b.link+'\', \''+b.desc.replace(/'/g,"\\'")+'\', \'Boleto pago · '+fd(b.ven)+'\')" style="display:block;width:100%;text-align:center;margin-bottom:10px;padding:8px;border-radius:9px;background:rgba(42,82,99,.1);border:1px solid rgba(42,82,99,.3);color:#2a5263;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">Ver boleto / PDF</button>':'')+
+ (!isPix && b.link?'<button onclick="abrirViewer(\''+b.link+'\', \''+b.desc.replace(/'/g,"\\'")+'\', \'Boleto pago · '+fd(b.ven)+'\')" style="display:block;width:100%;text-align:center;margin-bottom:10px;padding:8px;border-radius:9px;background:rgba(42,82,99,.1);border:1px solid rgba(42,82,99,.3);color:#2a5263;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">Ver boleto / PDF</button>':'')+
  (U&&U.role!=="viewer"?'<button onclick="desfazerPagamento('+b.id+')" style="width:100%;background:none;border:1px solid var(--BR2);border-radius:8px;padding:6px;color:var(--MU);font-size:11px;cursor:pointer;font-family:inherit;">↩ Desfazer pagamento</button>':'')+
  '</div>';
  }).join("");
