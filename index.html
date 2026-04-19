@@ -1527,11 +1527,18 @@ async function boSalvar(){
  categoria:categoria, recorrente:false,
  tipo: BO_TIPO
  };
+ var fav2 = "";
+ var fornId2 = null;
  if(BO_TIPO === "pix"){
- var fav2=(ge("bo-fav").value||"").trim();
+ fav2=(ge("bo-fav").value||"").trim();
  var pix2=(ge("bo-pix").value||"").trim();
  if(fav2) payload.favorecido = fav2;
  if(pix2) payload.chave_pix = pix2;
+ // Tenta achar fornecedor cadastrado
+ if(fav2){
+ var fM = FORN.filter(function(f){ return (f.nome||"").toLowerCase()===fav2.toLowerCase(); })[0];
+ if(fM) fornId2 = fM.id;
+ }
  } else {
  var cod=(ge("bo-cd").value||"").trim();
  var lk=(ge("bo-lk").value||"").trim();
@@ -1540,6 +1547,47 @@ async function boSalvar(){
  }
  setBtn("btn-bo-sv",true);
  try {
+ var pedidoIdUnico = null;
+ // Se é PIX com fornecedor preenchido, cria pedido também
+ console.log("[DEBUG boSalvar] BO_TIPO=", BO_TIPO, "fav2=", fav2, "FORN_count=", FORN.length);
+ if(BO_TIPO === "pix" && fav2){
+ console.log("[DEBUG] Vai criar pedido unico pra fornecedor:", fav2);
+ // Calcula próximo número deste fornecedor
+ var pedidosDesseFU = PEDIDOS.filter(function(p){
+ return (p.fornNome||"").toLowerCase() === fav2.toLowerCase();
+ });
+ var proxNumU = 1;
+ if(pedidosDesseFU.length > 0){
+ var maxNumU = 0;
+ pedidosDesseFU.forEach(function(p){
+ if(p.numForn && p.numForn > maxNumU) maxNumU = p.numForn;
+ });
+ proxNumU = maxNumU + 1;
+ }
+ var pedidoPayloadU = {
+ descricao: d,
+ fornecedor_id: fornId2,
+ fornecedor_nome: fav2,
+ categoria: categoria,
+ valor_total: v,
+ data_pedido: vc,
+ status: "ativo",
+ numero_fornecedor: proxNumU
+ };
+ var {data:rdPedU, error:errPedU} = await sb.from("pedidos").insert(pedidoPayloadU).select().single();
+ console.log("[DEBUG] Insert pedido:", {data:rdPedU, error:errPedU});
+ if(errPedU) throw errPedU;
+ pedidoIdUnico = rdPedU.id;
+ PEDIDOS.unshift({
+ id:rdPedU.id, desc:rdPedU.descricao, fornId:rdPedU.fornecedor_id,
+ fornNome:rdPedU.fornecedor_nome||"", cat:rdPedU.categoria||"",
+ total:parseFloat(rdPedU.valor_total||0), data:rdPedU.data_pedido,
+ obs:rdPedU.observacoes||"", status:rdPedU.status, criado:rdPedU.created_at,
+ numForn:rdPedU.numero_fornecedor||null
+ });
+ payload.pedido_id = pedidoIdUnico;
+ }
+
  var {data,error}=await sb.from("boletos").insert(payload).select().single();
  if(error)throw error;
  BOL.push({
@@ -1547,10 +1595,15 @@ async function boSalvar(){
  cat:data.categoria, rec:false,
  cod:data.codigo_barras||"", link:data.arquivo_url||"", arq:null,
  tipo:data.tipo||"boleto", chave:data.chave_pix||"", fav:data.favorecido||"",
- parc_at:null, parc_tot:null
+ parc_at:null, parc_tot:null,
+ pedidoId:data.pedido_id||null
  });
  ge("bo-form").style.display="none"; CAL_D=null; rBo();
+ if(pedidoIdUnico){
+ toast("✅ PIX salvo como "+fav2+" #"+PEDIDOS[0].numForn+"!");
+ } else {
  toast((BO_TIPO==="pix"?"PIX":"Boleto")+" salvo no banco!");
+ }
  } catch(e){ toast("Erro: "+e.message,false); console.error("Erro boSalvar:", e); }
  setBtn("btn-bo-sv",false);
 }
