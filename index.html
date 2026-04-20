@@ -1107,7 +1107,7 @@ function rExt(){
  '</div>'+
  '<div style="text-align:right;flex-shrink:0;">'+
  '<div style="font-size:13px;font-weight:800;color:'+tipoCor+';">'+fv(e.val)+'</div>'+
- (U&&U.role!=="viewer"?'<div style="display:flex;gap:2px;margin-top:3px;justify-content:flex-end;"><button onclick="exEdit('+e.id+')" style="background:none;border:none;color:var(--MU);cursor:pointer;font-size:12px;">ed</button><button onclick="exDel('+e.id+')" style="background:none;border:none;color:rgba(160,64,64,.4);cursor:pointer;font-size:12px;">x</button></div>':'')+
+ (U&&U.role!=="viewer"?'<div style="display:flex;gap:6px;margin-top:5px;justify-content:flex-end;"><button onclick="exEdit('+e.id+')" style="background:rgba(59,105,120,.12);border:1px solid rgba(59,105,120,.35);color:#3b6978;cursor:pointer;font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;font-family:inherit;">Editar</button><button onclick="exDel('+e.id+')" style="background:rgba(160,64,64,.08);border:1px solid rgba(160,64,64,.3);color:#a04040;cursor:pointer;font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;font-family:inherit;">Excluir</button></div>':'')+
  '</div></div>';
  }).join("");
 }
@@ -1882,6 +1882,29 @@ async function setR(cid,campo,val,m){
  } catch(e){ console.warn("Receita save error:",e.message); }
 }
 
+// Formata "600000" -> "600.000" (inteiro com separador de milhar, sem centavos)
+function fmtNum(n){ if(!n&&n!==0)return""; var v=Math.round(parseFloat(n)||0); return v.toLocaleString("pt-BR"); }
+// Converte "600.000" ou "600000" -> 600000 (number)
+function parseNum(s){ if(!s)return 0; return parseFloat(String(s).replace(/\./g,"").replace(",","."))||0; }
+// Formata o input enquanto digita (mantém cursor razoável)
+function formatarInputDin(inp){ var v=inp.value.replace(/\D/g,""); inp.value=v?parseInt(v,10).toLocaleString("pt-BR"):""; }
+
+// Salva os 3 valores (faturamento, lucro plat, ads) de uma conta e re-renderiza os KPIs
+async function salvarConta(cid,m,btnId){
+ var inpF=ge("rc-"+cid+"-f"),inpL=ge("rc-"+cid+"-l"),inpA=ge("rc-"+cid+"-a");
+ if(!inpF||!inpL||!inpA)return;
+ var f=parseNum(inpF.value),l=parseNum(inpL.value),a=parseNum(inpA.value);
+ if(!REC[m])REC[m]={};
+ REC[m][cid]={f:f,l:l,a:a};
+ setBtn(btnId,true);
+ try {
+ await sb.from("receitas").upsert({mes:m,conta_id:cid,faturamento:f,lucro:l,ads:a},{onConflict:"mes,conta_id"});
+ toast("Salvo!");
+ rLu(); rDB();
+ } catch(e){ toast("Erro ao salvar: "+e.message,false); }
+ setBtn(btnId,false);
+}
+
 function rLu(){
  ge("lu-p").innerHTML=PERS.map(function(p){return'<button class="chip'+(PER===p.id?" on":"")+'" onclick="setPer(\''+p.id+'\')">'+p.l+'</button>';}).join("");
  var mc=ge("lu-m");
@@ -1996,10 +2019,12 @@ function rLu(){
  '<label style="font-size:9px;color:'+kv[2]+';text-transform:uppercase;font-weight:700;">'+kv[1]+'</label>'+
  '<div style="display:flex;align-items:center;background:var(--BG);border:1px solid '+kv[2]+'40;border-radius:8px;">'+
  '<span style="font-size:10px;color:'+kv[2]+';padding:0 6px;">R$</span>'+
- '<input type="number" value="'+(d2[kv[0]]||'')+'" placeholder="0" oninput="setR(\''+c.id+'\',\''+kv[0]+'\',this.value,\''+LM+'\')" style="flex:1;background:none;border:none;color:var(--TX);font-size:12px;font-weight:700;padding:7px 5px 7px 0;outline:none;width:100%;font-family:inherit;">'+
+ '<input type="text" inputmode="numeric" id="rc-'+c.id+'-'+kv[0]+'" value="'+fmtNum(d2[kv[0]]||0)+'" placeholder="0" oninput="formatarInputDin(this)" style="flex:1;background:none;border:none;color:var(--TX);font-size:12px;font-weight:700;padding:7px 5px 7px 0;outline:none;width:100%;font-family:inherit;">'+
  '</div></div>';
  });
- h2+='</div></div>';
+ h2+='</div>';
+ h2+='<div style="display:flex;justify-content:flex-end;margin-top:8px;"><button class="btn" id="btn-sv-'+c.id+'" onclick="salvarConta(\''+c.id+'\',\''+LM+'\',\'btn-sv-'+c.id+'\')" style="font-size:11px;padding:6px 18px;">Salvar</button></div>';
+ h2+='</div>';
  });
  h2+='</div>';
  });
@@ -2089,13 +2114,17 @@ function rCfMp(){
  '</div>'+
  '<div style="display:flex;gap:5px;">'+
  '<button class="btn sm" onclick="cfAddConta(\''+mp.id+'\')">+ Conta</button>'+
+ '<button class="btn sm" onclick="cfEditMP(\''+mp.id+'\')" style="background:rgba(59,105,120,.15);border-color:rgba(59,105,120,.4);color:#3b6978;">Editar</button>'+
  '<button class="btn dl sm" onclick="cfDelMP(\''+mp.id+'\')">x</button>'+
  '</div>'+
  '</div>'+
  mp.contas.map(function(c){
  return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 13px;border-top:1px solid var(--BR);">'+
  '<span style="font-size:12px;">'+c.nome+'</span>'+
+ '<div style="display:flex;gap:6px;align-items:center;">'+
+ '<button onclick="cfEditConta(\''+mp.id+'\',\''+c.id+'\')" style="background:rgba(59,105,120,.12);border:1px solid rgba(59,105,120,.35);color:#3b6978;cursor:pointer;font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;font-family:inherit;">Editar</button>'+
  '<button onclick="cfDelConta(\''+mp.id+'\',\''+c.id+'\')" style="background:none;border:none;color:rgba(160,64,64,.4);cursor:pointer;font-size:13px;">x</button>'+
+ '</div>'+
  '</div>';
  }).join("")+
  '</div>';
@@ -2198,6 +2227,43 @@ async function cfDelConta(mpId,cId){
  return m.id===mpId?Object.assign({},m,{contas:m.contas.filter(function(c){return c.id!==cId;})}):m;
  });
  toast("Conta excluída");
+ rCfMp();
+ } catch(e){ toast("Erro: "+e.message,false); }
+}
+
+async function cfEditMP(id){
+ var mp=MPS.filter(function(m){return m.id===id;})[0];
+ if(!mp)return;
+ var n=prompt('Editar nome do marketplace:',mp.nome);
+ if(n===null)return;
+ var nome=(n||"").trim();
+ if(!nome){ toast("Nome não pode ficar vazio",false); return; }
+ if(nome===mp.nome)return;
+ try {
+ var {error}=await sb.from("marketplaces").update({nome:nome}).eq("id",id);
+ if(error)throw error;
+ MPS=MPS.map(function(m){return m.id===id?Object.assign({},m,{nome:nome}):m;});
+ toast("Marketplace renomeado para '"+nome+"'");
+ rCfMp();
+ } catch(e){ toast("Erro: "+e.message,false); }
+}
+
+async function cfEditConta(mpId,cId){
+ var mp=MPS.filter(function(m){return m.id===mpId;})[0];
+ var ct=mp?mp.contas.filter(function(c){return c.id===cId;})[0]:null;
+ if(!ct)return;
+ var n=prompt('Editar nome da conta:',ct.nome);
+ if(n===null)return;
+ var nome=(n||"").trim();
+ if(!nome){ toast("Nome não pode ficar vazio",false); return; }
+ if(nome===ct.nome)return;
+ try {
+ var {error}=await sb.from("contas").update({nome:nome}).eq("id",cId);
+ if(error)throw error;
+ MPS=MPS.map(function(m){
+ return m.id===mpId?Object.assign({},m,{contas:m.contas.map(function(c){return c.id===cId?Object.assign({},c,{nome:nome}):c;})}):m;
+ });
+ toast("Conta renomeada para '"+nome+"'");
  rCfMp();
  } catch(e){ toast("Erro: "+e.message,false); }
 }
