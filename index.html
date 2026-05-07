@@ -913,6 +913,7 @@ function login(){
  MSGS=[{r:"ai",t:"Olá! Sou a IA Analista da New Vision.\n\nCustos reais subtraem do lucro\nmv TECIDO, FORNECEDORES, TRANSPORTADORAS = movimentações de controle (não subtraem)\n Dados salvos no banco de dados\n\nComo posso ajudar?"}];
  atualizarFxInfo(); rDB();
  try{localStorage.setItem("nv_sess",U.email);localStorage.setItem("nv_sess_exp",(Date.now()+604800000).toString());}catch(e){}
+ setTimeout(restaurarAba,200);
 }
 function logout(){
  U=null;
@@ -920,6 +921,7 @@ function logout(){
  ge("pg-l").style.display="flex"; ge("pg-a").style.display="none";
  ge("inp-e").value=""; ge("inp-p").value=""; ge("inp-err").style.display="none";
 }
+function restaurarAba(){try{var _t=localStorage.getItem("nv_tab");var _bo=localStorage.getItem("nv_bo_tipo");if(_bo&&(_bo==="boleto"||_bo==="pix"))BO_TIPO=_bo;if(_t&&["db","ex","lu","bo","ia","cf","fo"].indexOf(_t)!==-1)goTab(_t);}catch(e){console.error("restaurarAba:",e);}}
 function goTab(t){
  // Mobile tabs
  document.querySelectorAll(".tab").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-t")===t);});
@@ -928,6 +930,7 @@ function goTab(t){
  // Screens
  document.querySelectorAll(".scr").forEach(function(s){s.classList.remove("on");});
  ge("s-"+t).classList.add("on");
+ try{localStorage.setItem("nv_tab",t);}catch(e){}
  var fn={db:rDB,ex:rEx,lu:rLu,bo:rBo,ia:rIA,cf:rCf,fo:rFo};
  if(fn[t])fn[t]();
  var mc=document.querySelector(".main-content");
@@ -1261,7 +1264,7 @@ async function confirmarFx(){
 function boSwitch(a){ boA=a; CAL_D=null; document.querySelectorAll(".btab").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-bo")===a);}); rBo(); }
 
 function boTipo(t){
- BO_TIPO = t; BO_BUSCA = ""; BO_FORN = "todos"; var i = ge("bo-busca"); if(i) i.value = "";
+ BO_TIPO = t; BO_BUSCA = ""; BO_FORN = "todos"; try{localStorage.setItem("nv_bo_tipo",t);}catch(e){} var i = ge("bo-busca"); if(i) i.value = "";
  ge("bt-bol").className = "btn" + (t==="boleto" ? "" : " g");
  ge("bt-pix").className = "btn" + (t==="pix" ? "" : " g");
  rBo();
