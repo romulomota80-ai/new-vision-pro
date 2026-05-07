@@ -1123,7 +1123,8 @@ function exNovo(){ EX_ID=null; ge("ex-tit").textContent="Novo Lançamento"; ["ex
 function exEdit(id){ var e=EXT.filter(function(x){ return x.id===id; })[0]; if(!e)return; EX_ID=id; ge("ex-tit").textContent="Editar"; ge("ex-d").value=e.data; ge("ex-c").value=e.cat; ge("ex-de").value=e.desc; ge("ex-vl").value=e.val; ge("ex-mh").style.display=isMov(e.cat)?"block":"none"; ge("ex-form").style.display="block"; ge("ex-form").scrollIntoView({behavior:"smooth"}); }
 function exFechar(){ ge("ex-form").style.display="none"; }
 
-async function exSalvar(){
+function exSalvar(){confirmarAcao('Salvar este lancamento?',function(){_exSalvarReal();});}
+async function _exSalvarReal(){
  var d=ge("ex-d").value, c=ge("ex-c").value, de=(ge("ex-de").value||"").trim(), v=parseFloat(ge("ex-vl").value);
  if(!d||!c||!de||!v){ toast("Preencha todos os campos!",false); return; }
  var m=MESES[new Date(d+"T12:00:00").getMonth()];
@@ -1147,7 +1148,8 @@ async function exSalvar(){
  setBtn("btn-ex-sv",false);
 }
 
-async function exDel(id){
+function exDel(id){confirmarAcao('Excluir este lancamento? Esta acao nao pode ser desfeita.',function(){_exDelReal(id);});}
+async function _exDelReal(id){
  var e=EXT.filter(function(x){return x.id===id;})[0];
  if(!e)return;
  if(!confirm('Excluir este lançamento?\n\n"'+e.desc+'"\nValor: '+fv(e.val)+' · '+fd(e.data)+'\n\nEsta ação não pode ser desfeita.'))return;
@@ -1239,7 +1241,8 @@ function fecharFx(){ ge("ov-fx").classList.remove("on"); }
 function renderFxModal(){ ge("fx-lista").innerHTML=FIXOS.filter(function(f){return f.ativo;}).map(function(f){ return '<div style="display:flex;align-items:center;gap:10px;background:var(--C2);border:1px solid var(--BR);border-radius:10px;padding:11px 13px;"><input type="checkbox" checked id="fxck-'+f.id+'" onchange="calcFxTot()" style="width:18px;height:18px;flex-shrink:0;cursor:pointer;"><div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;">'+f.desc+'</div><div style="display:flex;gap:5px;margin-top:3px;">'+bdg(f.cat,true)+'<span style="font-size:10px;color:var(--MU);">dia '+f.dia+'</span></div></div><input type="number" id="fxvl-'+f.id+'" value="'+f.val+'" oninput="calcFxTot()" style="width:90px;text-align:right;font-size:13px;font-weight:700;color:var(--R);background:transparent;border:none;border-bottom:1px solid var(--BR2);border-radius:0;padding:0 2px;"></div>'; }).join(""); calcFxTot(); }
 function calcFxTot(){ var t=0; FIXOS.filter(function(f){return f.ativo;}).forEach(function(f){ var ck=ge("fxck-"+f.id),vl=ge("fxvl-"+f.id); if(ck&&ck.checked&&vl)t+=parseFloat(vl.value)||0; }); ge("fx-tot").textContent=fv(t); }
 
-async function confirmarFx(){
+function confirmarFx(){confirmarAcao('Lancar todos os gastos fixos do mes?',function(){_confirmarFxReal();});}
+async function _confirmarFxReal(){
  var m=ge("fx-mes").value, n=0, payload=[];
  var mi=MESES.indexOf(m);
  FIXOS.filter(function(f){return f.ativo;}).forEach(function(f){
@@ -1418,7 +1421,8 @@ document.addEventListener("click", function(e){
  }
 });
 
-async function boSalvar(){
+function boSalvar(){var msg=BO_TIPO==='pix'?'Salvar este PIX?':'Salvar este boleto?';confirmarAcao(msg,function(){_boSalvarReal();});}
+async function _boSalvarReal(){
  var d=(ge("bo-de").value||"").trim();
  if(!d){toast("Preencha a descrição!",false);return;}
  var categoria = ge("bo-ct").value;
@@ -1615,7 +1619,8 @@ async function boSalvar(){
  setBtn("btn-bo-sv",false);
 }
 
-async function desfazerPagamento(id){
+function desfazerPagamento(id){confirmarAcao('Desfazer pagamento?',function(){_desfazerPagamentoReal(id);});}
+async function _desfazerPagamentoReal(id){
  var b=BOL.filter(function(x){return x.id===id;})[0];
  if(!b)return;
  if(!confirm('↩ Desfazer pagamento de "'+b.desc+'"?\n\nO boleto voltará para Pendentes.'))return;
@@ -1627,7 +1632,8 @@ async function desfazerPagamento(id){
  } catch(e){ toast("Erro: "+e.message,false); }
 }
 
-async function pagarBol(id){
+function pagarBol(id){confirmarAcao('Marcar como pago?',function(){_pagarBolReal(id);});}
+async function _pagarBolReal(id){
  try {
  var {error}=await sb.from("boletos").update({status:"pago"}).eq("id",id);
  if(error)throw error;
@@ -1636,7 +1642,8 @@ async function pagarBol(id){
  } catch(e){ toast("Erro: "+e.message,false); }
 }
 
-async function delBol(id){
+function delBol(id){confirmarAcao('Excluir este boleto/PIX? Esta acao nao pode ser desfeita.',function(){_delBolReal(id);});}
+async function _delBolReal(id){
  var b=BOL.filter(function(x){return x.id===id;})[0];
  if(!b)return;
  if(!confirm('Excluir este boleto?\n\n"'+b.desc+'"\nValor: '+fv(b.val)+' · Vence '+fd(b.ven)+'\n\nEsta ação não pode ser desfeita.'))return;
@@ -1831,7 +1838,8 @@ function rBo(){
  }
 }
 
-async function pagarBolComLancamento(id){
+function pagarBolComLancamento(id){confirmarAcao('Marcar como pago e lancar despesa?',function(){_pagarBolComLancamentoReal(id);});}
+async function _pagarBolComLancamentoReal(id){
  var b=BOL.filter(function(x){return x.id===id;})[0];
  if(!b)return;
  var confirmar=confirm('Marcar "'+b.desc+'" como pago?\n\nUm lançamento de R$ '+b.val.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})+' será gerado automaticamente no Extrato.');
@@ -2447,7 +2455,8 @@ function fecharCatForm(){
  catTipoSel="operacional"; catCorSel=CAT_CORES[0];
 }
 
-async function catSalvar(){
+function catSalvar(){confirmarAcao('Criar esta categoria?',function(){_catSalvarReal();});}
+async function _catSalvarReal(){
  var nome=(ge("cat-nome").value||"").trim().toUpperCase();
  if(!nome){toast("Digite o nome da categoria!",false);return;}
  if(CATS.indexOf(nome)>=0){toast("Esta categoria já existe!",false);return;}
@@ -2497,7 +2506,8 @@ function fxNovo(){ FX_EID=null; ge("fx-tit").textContent="Novo Gasto Fixo"; ["fx
 function fxEdit(id){ var f=FIXOS.filter(function(x){return x.id===id;})[0]; if(!f)return; FX_EID=id; ge("fx-tit").textContent="Editar"; ge("fx-de").value=f.desc; ge("fx-cat").value=f.cat; ge("fx-vl").value=f.val; ge("fx-dia").value=f.dia; ge("fx-form").style.display="block"; ge("fx-form").scrollIntoView({behavior:"smooth"}); }
 function fxFechar(){ ge("fx-form").style.display="none"; }
 
-async function fxSalvar(){
+function fxSalvar(){confirmarAcao('Salvar este gasto fixo?',function(){_fxSalvarReal();});}
+async function _fxSalvarReal(){
  var de=(ge("fx-de").value||"").trim(),cat=ge("fx-cat").value,vl=parseFloat(ge("fx-vl").value),dia=parseInt(ge("fx-dia").value);
  if(!de||!cat||!vl||!dia){toast("Preencha todos os campos!",false);return;}
  var payload={descricao:de,categoria:cat,valor:vl,dia:dia,ativo:true};
@@ -2627,7 +2637,8 @@ function foNovo(){ FO_EID = 'new'; rCfForn(); }
 function foEditar(id){ FO_EID = id; rCfForn(); }
 function foFechar(){ FO_EID = null; rCfForn(); }
 
-async function foSalvar(){
+function foSalvar(){confirmarAcao('Salvar este fornecedor?',function(){_foSalvarReal();});}
+async function _foSalvarReal(){
  var nome = (ge("fo-nome").value||"").trim();
  if(!nome){ toast("Nome é obrigatório!", false); return; }
  var payload = { nome: nome };
@@ -2665,7 +2676,8 @@ async function foSalvar(){
  setBtn("btn-fo-sv",false);
 }
 
-async function foDel(id){
+function foDel(id){confirmarAcao('Excluir este fornecedor? Esta acao nao pode ser desfeita.',function(){_foDelReal(id);});}
+async function _foDelReal(id){
  var f = FORN.filter(function(x){return x.id===id;})[0];
  if(!f) return;
  if(!confirm('Excluir fornecedor "'+f.nome+'"?\n\nOs PIX já cadastrados com este fornecedor NÃO serão afetados (o nome continua salvo neles).\n\nEsta ação não pode ser desfeita.')) return;
@@ -3063,7 +3075,7 @@ function rFoDetalhe(){
  '<span><span style="font-weight:700;color:#6b4e8a;">'+(p.parc_at||'?')+'/'+(p.parc_tot||'?')+'</span> · '+(isPago?'✅':(isVencida?'⚠️':'⏳'))+' '+fd(p.ven)+'</span>'+
  '<div style="display:flex;align-items:center;gap:6px;">'+
  (p.comp?'<button onclick="event.stopPropagation();abrirViewer(\''+p.comp+'\', \''+p.desc.replace(/\'/g,"\\'")+'\', \'Comprovante de pagamento\')" style="padding:3px 8px;border-radius:5px;background:rgba(100,100,100,.12);border:1px solid rgba(100,100,100,.3);color:#555;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">Ver comprovante</button>':'')+
- '<span style="font-weight:700;color:'+(isPago?'#5a8a3a':'var(--R)')+';">'+fv(p.val)+'</span>'+
+ (isPago?'<button onclick="event.stopPropagation();desfazerPagamento('+p.id+')" style="padding:3px 8px;border-radius:5px;background:rgba(201,33,39,.10);border:1px solid rgba(201,33,39,.4);color:#c92127;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;margin-right:6px;">Desfazer</button>':'')+'<span style="font-weight:700;color:'+(isPago?'#5a8a3a':'var(--R)')+';">'+fv(p.val)+'</span>'+
  '</div>'+
  '</div>';
  });
@@ -3478,7 +3490,8 @@ function impReset(){
  rCfImport();
 }
 
-async function impConfirmar(){
+function impConfirmar(){confirmarAcao('Confirmar importacao destes lancamentos?',function(){_impConfirmarReal();});}
+async function _impConfirmarReal(){
  if(!IMP_DATA || !IMP_STATUS) return;
  if(IMP_STATUS.erros>0){ toast("Corrija todos os erros antes de importar", false); return; }
  if(IMP_STATUS.validas===0){ toast("Nenhum lançamento válido para importar", false); return; }
@@ -3551,6 +3564,7 @@ ge("ex-la").style.display="flex"; ge("ex-la").style.flexDirection="column";
 ge("ex-ev").style.display="none";
 
 // Inicializar
+function confirmarAcao(msg, callback){if(window.confirm(msg)){callback();}}
 carregarTema();
 initSupabase();
 setTimeout(function(){try{var _se=localStorage.getItem("nv_sess");var _sx=parseInt(localStorage.getItem("nv_sess_exp")||"0");if(_se&&_sx>Date.now()&&!U){var _ie=ge("inp-e");var _ip=ge("inp-p");if(_ie&&_ip){_ie.value=_se;_ip.value="cajamar2026";login();}}}catch(e){console.error("Auto-login:",e);}},1500);
