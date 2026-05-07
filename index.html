@@ -822,7 +822,7 @@ async function carregarTudo(){
  id:r.id, desc:r.descricao, val:parseFloat(r.valor),
  ven:r.vencimento, st:r.status==="pago"?"pago":"p",
  cat:r.categoria, rec:r.recorrente, cod:r.codigo_barras||"", link:link,
- arq:r.arquivo_url?{url:r.arquivo_url,nome:r.arquivo_nome}:null,
+ arq:r.arquivo_url?{url:r.arquivo_url,nome:r.arquivo_nome}:null, comp:r.comprovante_url||null,
  tipo:r.tipo||"boleto", chave:r.chave_pix||"", fav:r.favorecido||"",
  parc_at:r.parcela_atual||null, parc_tot:r.parcela_total||null,
  pedidoId:r.pedido_id||null
@@ -1857,6 +1857,7 @@ function rCal(){
  (b.cod?'<div style="background:rgba(107,78,138,.08);border:1px solid rgba(107,78,138,.25);border-radius:9px;padding:9px 12px;margin-bottom:8px;"><div style="font-size:10px;color:#6b4e8a;font-weight:700;margin-bottom:4px;">CÓDIGO</div><div style="font-size:11px;word-break:break-all;font-family:monospace;margin-bottom:7px;">'+b.cod+'</div><button class="btn pu sm" onclick="copCod('+b.id+')" style="width:100%;">Copiar código</button></div>':'')+
  '<div style="display:flex;gap:5px;flex-wrap:wrap;">'+
  (b.link?'<button onclick="abrirViewer(\''+b.link+'\', \''+b.desc.replace(/'/g,"\\'")+'\', \'Boleto · vence '+fd(b.ven)+'\')" style="display:flex;align-items:center;gap:4px;padding:5px 9px;border-radius:7px;background:rgba(42,82,99,.1);border:1px solid rgba(42,82,99,.3);color:#2a5263;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Ver boleto</button>':'')+
+ (b.comp?'<button onclick="abrirViewer(\''+b.comp+'\', \''+b.desc.replace(/\'/g,"\\'")+'\', \'Comprovante de pagamento\')" style="display:flex;align-items:center;gap:4px;padding:5px 9px;border-radius:7px;background:rgba(100,100,100,.1);border:1px solid rgba(100,100,100,.3);color:#555;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Ver comprovante</button>':'')+
  (b.st==="p"&&U&&U.role!=="viewer"?'<button class="btn ok sm" onclick="pagarBolComLancamento('+b.id+')">Marcar pago</button>':'')+
  '</div></div>';
  }).join("")+'</div>';
