@@ -545,6 +545,7 @@ body.light .cd.hg span{color:#3d6225!important;}
  <div><label>Categoria</label><select id="ex-c"></select><div id="ex-mh" style="display:none;margin-top:5px;font-size:11px;color:var(--Y);background:rgba(184,134,11,.07);border:1px solid rgba(184,134,11,.25);border-radius:6px;padding:5px 10px;">mv Entrada de controle — não afeta o lucro.</div></div>
  <div><label>Descrição</label><input type="text" id="ex-de" placeholder="Ex: JADLOG FRETE MARÇO"></div>
  <div><label>Valor (R$)</label><input type="number" id="ex-vl" placeholder="0"></div>
+ <div style="border-top:1px solid var(--BR);padding-top:11px;margin-top:3px;"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;"><input type="checkbox" id="ex-rec" onchange="exToggleRec()" style="width:16px;height:16px;cursor:pointer;"><span>Lancamento recorrente (mensal)</span></label><div id="ex-rec-fim" style="display:none;margin-top:9px;"><label>Data fim</label><input type="date" id="ex-df"><div style="font-size:10px;color:var(--MU);margin-top:5px;">Sera criado um lancamento por mes ate a data fim</div></div></div>
  <div style="display:flex;gap:8px;"><button class="btn" onclick="exSalvar()" style="flex:1;" id="btn-ex-sv">Salvar</button><button class="btn g" onclick="exFechar()">Cancelar</button></div>
  </div>
  </div>
@@ -1123,10 +1124,34 @@ function exNovo(){ EX_ID=null; ge("ex-tit").textContent="Novo Lançamento"; ["ex
 function exEdit(id){ var e=EXT.filter(function(x){ return x.id===id; })[0]; if(!e)return; EX_ID=id; ge("ex-tit").textContent="Editar"; ge("ex-d").value=e.data; ge("ex-c").value=e.cat; ge("ex-de").value=e.desc; ge("ex-vl").value=e.val; ge("ex-mh").style.display=isMov(e.cat)?"block":"none"; ge("ex-form").style.display="block"; ge("ex-form").scrollIntoView({behavior:"smooth"}); }
 function exFechar(){ ge("ex-form").style.display="none"; }
 
-function exSalvar(){confirmarAcao('Salvar este lancamento?',function(){_exSalvarReal();});}
+function exToggleRec(){var cb=ge('ex-rec');var bx=ge('ex-rec-fim');if(cb&&bx)bx.style.display=cb.checked?'block':'none';}
+function exSalvar(){var rec=ge('ex-rec');if(rec&&rec.checked){var di=ge('ex-d').value;var df=ge('ex-df').value;if(!di||!df){toast('Preencha data inicio e fim!',false);return;}if(df<=di){toast('Data fim deve ser maior que inicio!',false);return;}var d1=new Date(di+'T12:00:00');var d2=new Date(df+'T12:00:00');var meses=(d2.getFullYear()-d1.getFullYear())*12+(d2.getMonth()-d1.getMonth())+1;confirmarAcao('Criar '+meses+' lancamentos recorrentes?',function(){_exSalvarReal();});}else{confirmarAcao('Salvar este lancamento?',function(){_exSalvarReal();});}}
 async function _exSalvarReal(){
  var d=ge("ex-d").value, c=ge("ex-c").value, de=(ge("ex-de").value||"").trim(), v=parseFloat(ge("ex-vl").value);
  if(!d||!c||!de||!v){ toast("Preencha todos os campos!",false); return; }
+ var rec=ge('ex-rec'); var df=ge('ex-df');
+ if(rec&&rec.checked&&df&&df.value&&!EX_ID){
+   var d1=new Date(d+'T12:00:00'); var d2=new Date(df.value+'T12:00:00');
+   var meses=(d2.getFullYear()-d1.getFullYear())*12+(d2.getMonth()-d1.getMonth())+1;
+   setBtn('btn-ex-sv',true);
+   try{
+     var payloads=[];
+     for(var i=0;i<meses;i++){
+       var dt=new Date(d1.getFullYear(),d1.getMonth()+i,d1.getDate(),12,0,0);
+       var dStr=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+       payloads.push({data:dStr,mes:MESES[dt.getMonth()],categoria:c,descricao:de,valor:v,comprovante:false});
+     }
+     var {data,error}=await sb.from('lancamentos').insert(payloads).select();
+     if(error)throw error;
+     data.forEach(function(row){EXT.unshift({id:row.id,data:row.data,mes:row.mes,cat:row.categoria,desc:row.descricao,val:row.valor,comp:false});});
+     toast(meses+' lancamentos recorrentes salvos!');
+     ge('ex-form').style.display='none';
+     if(rec)rec.checked=false; if(df)df.value=''; var bx=ge('ex-rec-fim'); if(bx)bx.style.display='none';
+     rExt(); rDB();
+   }catch(e){toast('Erro: '+e.message,false);}
+   setBtn('btn-ex-sv',false);
+   return;
+ }
  var m=MESES[new Date(d+"T12:00:00").getMonth()];
  var payload={data:d, mes:m, categoria:c, descricao:de, valor:v, comprovante:false};
  setBtn("btn-ex-sv",true);
