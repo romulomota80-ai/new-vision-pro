@@ -602,7 +602,7 @@ body.light .cd.hg span{color:#3d6225!important;}
  <button class="chip" data-bf="hoje" onclick="boFiltro('hoje')">Hoje</button>
  <button class="chip" data-bf="semana" onclick="boFiltro('semana')">Esta semana</button>
  <button class="chip" data-bf="mes" onclick="boFiltro('mes')">Este mês</button>
- <select id="bo-forn-filtro" onchange="boFiltroForn(this.value)" style="padding:6px 10px;border:1px solid var(--BR);border-radius:8px;background:var(--C2);color:var(--TX);font-size:12px;font-family:inherit;cursor:pointer;margin-left:auto;"><option value="todos">Todos os fornecedores</option></select>
+ <input id="bo-busca" type="text" placeholder="Pesquisar boletos (descricao, valor, data, codigo...)" oninput="boBuscaInput(this.value)" style="display:none;padding:9px 14px;border:3px solid var(--R);border-radius:10px;background:var(--C2);color:var(--TX);font-size:13px;font-family:inherit;box-shadow:0 2px 10px rgba(201,33,39,.18);margin-left:auto;min-width:280px;outline:none;"><select id="bo-forn-filtro" onchange="boFiltroForn(this.value)" style="display:none;padding:6px 10px;border:1px solid var(--BR);border-radius:8px;background:var(--C2);color:var(--TX);font-size:12px;font-family:inherit;cursor:pointer;margin-left:auto;"><option value="todos">Todos os fornecedores</option></select>
  </div>
  </div>
  <div id="bo-list" style="display:flex;flex-direction:column;gap:8px;"></div>
@@ -1259,7 +1259,7 @@ async function confirmarFx(){
 function boSwitch(a){ boA=a; CAL_D=null; document.querySelectorAll(".btab").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-bo")===a);}); rBo(); }
 
 function boTipo(t){
- BO_TIPO = t;
+ BO_TIPO = t; BO_BUSCA = ""; BO_FORN = "todos"; var i = ge("bo-busca"); if(i) i.value = "";
  ge("bt-bol").className = "btn" + (t==="boleto" ? "" : " g");
  ge("bt-pix").className = "btn" + (t==="pix" ? "" : " g");
  rBo();
@@ -1661,33 +1661,47 @@ function boFiltro(f){
  rBo();
 }
 
+var BO_BUSCA = "";
 function boFiltroForn(v){ BO_FORN = v; rBo(); }
+function boBuscaInput(v){ BO_BUSCA = (v||"").toLowerCase().trim(); rBo(); }
 function rBo(){
  var hoje=new Date().toISOString().slice(0,10);
  // Filtra só do tipo atual (boleto ou pix)
  var BOL_TIPO = BOL.filter(function(b){ return (b.tipo||"boleto") === BO_TIPO; });
- // Helper: extrai o "nome do fornecedor" do boleto (fav prioritario, ou primeiro pedaco da descricao antes de " - ")
  function _bofn(b){
    if(b.fav && b.fav.trim()) return b.fav.trim();
    if(b.desc){
      var d = b.desc.trim();
-     // remove sufixos tipo " - Parcela X/Y" ou " - HONORARIOS"
      var idx = d.indexOf(" - ");
      if(idx > 0) d = d.substring(0, idx).trim();
      return d;
    }
    return "";
  }
- var fornsUnicos = {};
- BOL_TIPO.forEach(function(b){ var n = _bofn(b); if(n) fornsUnicos[n] = true; });
- var fornsOrdenados = Object.keys(fornsUnicos).sort();
+ var inp = ge("bo-busca");
  var sel = ge("bo-forn-filtro");
- if(sel){
-   var valorAtual = BO_FORN;
-   sel.innerHTML = '<option value="todos">Todos os fornecedores</option>' + fornsOrdenados.map(function(f){ return '<option value="'+f+'"'+(valorAtual===f?' selected':'')+'>'+f+'</option>'; }).join("");
-   if(valorAtual !== "todos" && fornsOrdenados.indexOf(valorAtual) === -1){ BO_FORN = "todos"; sel.value = "todos"; }
+ if(BO_TIPO === "pix"){
+   if(inp) inp.style.display = "none";
+   if(sel){
+     sel.style.display = "";
+     var fornsUnicos = {};
+     BOL_TIPO.forEach(function(b){ if(b.cat === "FORNECEDORES"){ var n = _bofn(b); if(n) fornsUnicos[n] = true; } });
+     var fornsOrdenados = Object.keys(fornsUnicos).sort();
+     var valorAtual = BO_FORN;
+     sel.innerHTML = '<option value="todos">Todos os fornecedores</option>' + fornsOrdenados.map(function(f){ return '<option value="'+f+'"'+(valorAtual===f?' selected':'')+'>'+f+'</option>'; }).join("");
+     if(valorAtual !== "todos" && fornsOrdenados.indexOf(valorAtual) === -1){ BO_FORN = "todos"; sel.value = "todos"; }
+   }
+   if(BO_FORN !== "todos"){ BOL_TIPO = BOL_TIPO.filter(function(b){ return b.cat === "FORNECEDORES" && _bofn(b) === BO_FORN; }); }
+ } else {
+   if(sel) sel.style.display = "none";
+   if(inp){ inp.style.display = ""; if(inp.value !== BO_BUSCA) inp.value = BO_BUSCA; }
+   if(BO_BUSCA){
+     BOL_TIPO = BOL_TIPO.filter(function(b){
+       var hay = ((b.desc||"") + " " + (b.cat||"") + " " + (b.cod||"") + " " + (b.ven||"") + " " + (b.val||"") + " " + (b.fav||"")).toLowerCase();
+       return hay.indexOf(BO_BUSCA) !== -1;
+     });
+   }
  }
- if(BO_FORN !== "todos"){ BOL_TIPO = BOL_TIPO.filter(function(b){ return _bofn(b) === BO_FORN; }); }
  var pend=BOL_TIPO.filter(function(b){ return b.st==="p"; }).sort(function(a,b){return new Date(a.ven)-new Date(b.ven);});
  var venceHojeCount=pend.filter(function(b){return b.ven===hoje;}).length;
  var venceSemana=pend.filter(function(b){var d=Math.ceil((new Date(b.ven)-new Date(hoje))/86400000);return d<=7;}).length;
