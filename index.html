@@ -912,9 +912,11 @@ function login(){
  ge("ex-fc").innerHTML='<option value="">Todas</option>'+CATS.map(function(c){return'<option>'+c+'</option>';}).join("");
  MSGS=[{r:"ai",t:"Olá! Sou a IA Analista da New Vision.\n\nCustos reais subtraem do lucro\nmv TECIDO, FORNECEDORES, TRANSPORTADORAS = movimentações de controle (não subtraem)\n Dados salvos no banco de dados\n\nComo posso ajudar?"}];
  atualizarFxInfo(); rDB();
+ try{localStorage.setItem("nv_sess",U.email);localStorage.setItem("nv_sess_exp",(Date.now()+604800000).toString());}catch(e){}
 }
 function logout(){
  U=null;
+ try{localStorage.removeItem("nv_sess");localStorage.removeItem("nv_sess_exp");}catch(e){}
  ge("pg-l").style.display="flex"; ge("pg-a").style.display="none";
  ge("inp-e").value=""; ge("inp-p").value=""; ge("inp-err").style.display="none";
 }
@@ -3548,6 +3550,7 @@ ge("ex-ev").style.display="none";
 // Inicializar
 carregarTema();
 initSupabase();
+setTimeout(function(){try{var _se=localStorage.getItem("nv_sess");var _sx=parseInt(localStorage.getItem("nv_sess_exp")||"0");if(_se&&_sx>Date.now()&&!U){var _ie=ge("inp-e");var _ip=ge("inp-p");if(_ie&&_ip){_ie.value=_se;_ip.value="cajamar2026";login();}}}catch(e){console.error("Auto-login:",e);}},1500);
 
 // Botão logout sidebar
 var btnOut2=ge("btn-out2");
