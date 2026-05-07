@@ -912,11 +912,9 @@ function login(){
  ge("ex-fc").innerHTML='<option value="">Todas</option>'+CATS.map(function(c){return'<option>'+c+'</option>';}).join("");
  MSGS=[{r:"ai",t:"Olá! Sou a IA Analista da New Vision.\n\nCustos reais subtraem do lucro\nmv TECIDO, FORNECEDORES, TRANSPORTADORAS = movimentações de controle (não subtraem)\n Dados salvos no banco de dados\n\nComo posso ajudar?"}];
  atualizarFxInfo(); rDB();
- try{localStorage.setItem("nv_user",JSON.stringify(U));localStorage.setItem("nv_user_exp",(Date.now()+604800000).toString());}catch(e){}
 }
 function logout(){
  U=null;
- try{localStorage.removeItem("nv_user");localStorage.removeItem("nv_user_exp");}catch(e){}
  ge("pg-l").style.display="flex"; ge("pg-a").style.display="none";
  ge("inp-e").value=""; ge("inp-p").value=""; ge("inp-err").style.display="none";
 }
@@ -3549,7 +3547,6 @@ ge("ex-ev").style.display="none";
 
 // Inicializar
 carregarTema();
-try{var _ns=localStorage.getItem("nv_user");var _ne=parseInt(localStorage.getItem("nv_user_exp")||"0");if(_ns&&_ne>Date.now()){var _nu=JSON.parse(_ns);U=_nu;ge("pg-l").style.display="none";ge("pg-a").style.display="block";if(ge("hd-n"))ge("hd-n").textContent=_nu.nome;if(ge("hd-r"))ge("hd-r").textContent=_nu.role;if(ge("hd-a"))ge("hd-a").textContent=_nu.av;if(ge("sb-av"))ge("sb-av").textContent=_nu.av;if(ge("sb-nome"))ge("sb-nome").textContent=_nu.nome;if(ge("sb-role"))ge("sb-role").textContent=_nu.role;if(ge("db-ol"))ge("db-ol").textContent="Ola, "+_nu.nome.split(" ")[0]+" ";if(ge("db-dt"))ge("db-dt").textContent=new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long",year:"numeric"});var _o="<option value="">Selecione...</option>"+CATS.map(function(cc){return"<option>"+cc+"</option>";}).join("");["ex-c","bo-ct"].forEach(function(id){var _e=ge(id);if(_e)_e.innerHTML=_o;});if(ge("ex-fc"))ge("ex-fc").innerHTML="<option value="">Todas</option>"+CATS.map(function(cc){return"<option>"+cc+"</option>";}).join("");}}catch(e){console.error("Rstr:",e);}
 initSupabase();
 
 // Botão logout sidebar
