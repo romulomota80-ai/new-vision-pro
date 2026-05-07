@@ -602,6 +602,7 @@ body.light .cd.hg span{color:#3d6225!important;}
  <button class="chip" data-bf="hoje" onclick="boFiltro('hoje')">Hoje</button>
  <button class="chip" data-bf="semana" onclick="boFiltro('semana')">Esta semana</button>
  <button class="chip" data-bf="mes" onclick="boFiltro('mes')">Este mês</button>
+ <select id="bo-forn-filtro" onchange="boFiltroForn(this.value)" style="padding:6px 10px;border:1px solid var(--BR);border-radius:8px;background:var(--C2);color:var(--TX);font-size:12px;font-family:inherit;cursor:pointer;margin-left:auto;"><option value="todos">Todos os fornecedores</option></select>
  </div>
  </div>
  <div id="bo-list" style="display:flex;flex-direction:column;gap:8px;"></div>
@@ -711,6 +712,7 @@ var U = null; // usuário logado
 var MSGS = [];
 var luA="re", boA="pe", cfA="mp", exTab="la";
 var BO_TIPO = "boleto"; // filtro de sub-aba: 'boleto' ou 'pix'
+var BO_FORN = "todos";
 var BO_MODO = "unico"; // modo do form PIX: 'unico' ou 'parcelado'
 var BO_PARCELAS = []; // array de {data, valor} para modo parcelado
 var evMeses = ["JANEIRO","FEVEREIRO"]; // só meses com dados — corrigido em carregarTudo
@@ -1659,10 +1661,21 @@ function boFiltro(f){
  rBo();
 }
 
+function boFiltroForn(v){ BO_FORN = v; rBo(); }
 function rBo(){
  var hoje=new Date().toISOString().slice(0,10);
  // Filtra só do tipo atual (boleto ou pix)
  var BOL_TIPO = BOL.filter(function(b){ return (b.tipo||"boleto") === BO_TIPO; });
+ var fornsUnicos = {};
+ BOL_TIPO.forEach(function(b){ if(b.fav && b.fav.trim()) fornsUnicos[b.fav] = true; });
+ var fornsOrdenados = Object.keys(fornsUnicos).sort();
+ var sel = ge("bo-forn-filtro");
+ if(sel){
+   var valorAtual = BO_FORN;
+   sel.innerHTML = '<option value="todos">Todos os fornecedores</option>' + fornsOrdenados.map(function(f){ return '<option value="'+f+'"'+(valorAtual===f?' selected':'')+'>'+f+'</option>'; }).join("");
+   if(valorAtual !== "todos" && fornsOrdenados.indexOf(valorAtual) === -1){ BO_FORN = "todos"; sel.value = "todos"; }
+ }
+ if(BO_FORN !== "todos"){ BOL_TIPO = BOL_TIPO.filter(function(b){ return b.fav === BO_FORN; }); }
  var pend=BOL_TIPO.filter(function(b){ return b.st==="p"; }).sort(function(a,b){return new Date(a.ven)-new Date(b.ven);});
  var venceHojeCount=pend.filter(function(b){return b.ven===hoje;}).length;
  var venceSemana=pend.filter(function(b){var d=Math.ceil((new Date(b.ven)-new Date(hoje))/86400000);return d<=7;}).length;
