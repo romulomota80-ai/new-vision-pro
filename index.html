@@ -3063,7 +3063,7 @@ function rFoDetalhe(){
  '<span><span style="font-weight:700;color:#6b4e8a;">'+(p.parc_at||'?')+'/'+(p.parc_tot||'?')+'</span> · '+(isPago?'✅':(isVencida?'⚠️':'⏳'))+' '+fd(p.ven)+'</span>'+
  '<div style="display:flex;align-items:center;gap:6px;">'+
  (p.comp?'<button onclick="event.stopPropagation();abrirViewer(\''+p.comp+'\', \''+p.desc.replace(/\'/g,"\\'")+'\', \'Comprovante de pagamento\')" style="padding:3px 8px;border-radius:5px;background:rgba(100,100,100,.12);border:1px solid rgba(100,100,100,.3);color:#555;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">Ver comprovante</button>':'')+
- '<span style="font-weight:700;color:'+(isPago?'#5a8a3a':'var(--R)')+';">'+fv(p.val)+'</span>'+
+ '(isPago&&U&&U.role!=="viewer"?'<button onclick="event.stopPropagation();if(confirm(\'Desfazer pagamento desta parcela?\'))desfazerPagamento('+p.id+')" style="padding:3px 8px;border-radius:5px;background:rgba(201,33,39,.10);border:1px solid rgba(201,33,39,.4);color:var(--R);font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;margin-right:6px;">Desfazer</button>':'')+'<span style="font-weight:700;color:'+(isPago?'#5a8a3a':'var(--R)')+';">'+fv(p.val)+'</span>'+
  '</div>'+
  '</div>';
  });
