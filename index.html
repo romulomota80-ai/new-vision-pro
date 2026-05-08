@@ -1722,13 +1722,13 @@ function rBo(){
    if(sel){
      sel.style.display = "";
      var fornsUnicos = {};
-     BOL_TIPO.forEach(function(b){ if(b.cat === "FORNECEDORES"){ var n = _bofn(b); if(n) fornsUnicos[n] = true; } });
+     FORN.forEach(function(f){ if(f.ativo!==false&&f.nome) fornsUnicos[f.nome] = true; });
      var fornsOrdenados = Object.keys(fornsUnicos).sort();
      var valorAtual = BO_FORN;
      sel.innerHTML = '<option value="todos">Todos os fornecedores</option>' + fornsOrdenados.map(function(f){ return '<option value="'+f+'"'+(valorAtual===f?' selected':'')+'>'+f+'</option>'; }).join("");
      if(valorAtual !== "todos" && fornsOrdenados.indexOf(valorAtual) === -1){ BO_FORN = "todos"; sel.value = "todos"; }
    }
-   if(BO_FORN !== "todos"){ BOL_TIPO = BOL_TIPO.filter(function(b){ return b.cat === "FORNECEDORES" && _bofn(b) === BO_FORN; }); }
+   if(BO_FORN !== "todos"){ BOL_TIPO = BOL_TIPO.filter(function(b){ var nm=(b.fav||"").trim(); if(!nm&&b.desc){var d=b.desc.trim();var idx=d.indexOf(" - ");nm=idx>0?d.substring(0,idx).trim():d;} return nm===BO_FORN; }); }
  } else {
    if(sel) sel.style.display = "none";
    if(inp){ inp.style.display = ""; if(inp.value !== BO_BUSCA) inp.value = BO_BUSCA; }
