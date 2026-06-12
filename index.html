@@ -3122,11 +3122,11 @@ function verExtratoConta(contaId, nomeConta){
     else if(m.tipo==="mov") badge='<span style="font-size:9px;font-weight:700;color:#b8860b;background:rgba(184,134,11,.14);padding:2px 6px;border-radius:5px;">🔄 MOVIMENTAÇÃO</span>';
     else badge='<span style="font-size:9px;font-weight:700;color:#2a8a4a;background:rgba(22,163,74,.12);padding:2px 6px;border-radius:5px;">✅ CUSTO</span>';
     var hora=ebHoraBRT(t.data);
-    // Comprovante do lançamento conciliado: prioriza o vínculo do backend
-    // (t.lancamento_id); se não houver, usa o palpite do ebMatch (m.lanc).
+    // Comprovante só do vínculo AUTORITATIVO do backend (t.lancamento_id, conciliado
+    // com critério rigoroso). NÃO usar o palpite do ebMatch aqui — pra transação
+    // ambígua é melhor não mostrar comprovante do que mostrar o errado.
     var lancComp=null;
     if(t.lancamento_id!=null){ lancComp=EXT.filter(function(e){return String(e.id)===String(t.lancamento_id);})[0]; }
-    if(!lancComp&&m){ lancComp=m.lanc; }
     var btnComp=(lancComp&&lancComp.img)?'<button onclick="abrirViewer(\''+String(lancComp.img).replace(/\'/g,"\\\\\\'")+'\',\'Comprovante\',\''+String(t.descricao||"").replace(/\'/g,"\\\\\\'")+'\')" style="font-size:9px;font-weight:700;color:#2563eb;background:rgba(37,99,235,.1);border:1px solid rgba(37,99,235,.25);padding:2px 7px;border-radius:5px;cursor:pointer;margin-left:6px;font-family:inherit;">📎 Ver comprovante</button>':'';
     h+='<div style="padding:10px 16px;border-top:1px solid var(--BR);display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">';
     h+='<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;color:var(--TX);">'+(t.descricao||"")+'</div>';
