@@ -13,3 +13,7 @@
 # Arquivos de ambiente (NUNCA commitar chaves)
 .env
 .env.local
+
+# dados bancarios (nao versionar)
+gen_extrato_sql.py
+seed_extrato.sql

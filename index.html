@@ -517,6 +517,7 @@ body.light .cd.hg span{color:#3d6225!important;}
  <div id="s-ex" class="scr">
  <div class="ex-sbar" id="ex-sbar">
  <button class="ex-stab on" data-ex="la">Lançamentos</button>
+ <button class="ex-stab" data-ex="bc">Contas</button>
  <button class="ex-stab" data-ex="ev">Comparativo por categorias</button>
  </div>
  <div id="ex-la" style="display:flex;flex-direction:column;gap:12px;">
@@ -559,6 +560,7 @@ body.light .cd.hg span{color:#3d6225!important;}
  <div style="display:flex;align-items:center;justify-content:space-between;"><div style="font-size:11px;color:var(--MU);" id="ev-res"></div><div style="display:flex;gap:10px;"><div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--MU);"><div style="width:8px;height:8px;border-radius:2px;background:var(--R);"></div>Custo operacional</div><div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--MU);"><div style="width:8px;height:8px;border-radius:2px;background:var(--Y);"></div>Entrada de controle</div></div></div>
  <div class="ev-grid" id="ev-cards"></div>
  </div>
+ <div id="ex-bc" style="display:none;flex-direction:column;gap:10px;"></div>
  </div>
 
  <!-- LUCRO -->
@@ -731,6 +733,9 @@ var CATS = []; // categorias
 var CC = {}; // { nome: cor }
 var FORN = []; // fornecedores
 var PEDIDOS = []; // pedidos (agrupamento de PIX parcelados)
+var CONTASBANC = []; // contas bancarias (OpenFinance)
+var EXTB = []; // extrato bancario (transacoes do banco)
+var bcSel = null; // conta bancaria selecionada no Extrato > Contas
 
 var MESES = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO",
  "JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"];
@@ -799,7 +804,7 @@ async function initSupabase(){
 
 // ═══ CARREGAR TODOS OS DADOS ════════════════════════════════════
 async function carregarTudo(){
- var [rLanc, rBol, rMps, rContas, rRec, rFixos, rCats, rForn, rPed] = await Promise.all([
+ var [rLanc, rBol, rMps, rContas, rRec, rFixos, rCats, rForn, rPed, rCB, rEB] = await Promise.all([
  sb.from("lancamentos").select("*").order("data",{ascending:false}),
  sb.from("boletos").select("*").order("vencimento"),
  sb.from("marketplaces").select("*"),
@@ -808,7 +813,9 @@ async function carregarTudo(){
  sb.from("gastos_fixos").select("*").order("id"),
  sb.from("categorias").select("*").order("nome"),
  sb.from("fornecedores").select("*").eq("ativo",true).order("nome"),
- sb.from("pedidos").select("*").eq("status","ativo").order("created_at",{ascending:false})
+ sb.from("pedidos").select("*").eq("status","ativo").order("created_at",{ascending:false}),
+ sb.from("contas_bancarias").select("*").order("banco"),
+ sb.from("extrato_bancario").select("*").order("data",{ascending:false})
  ]);
 
  // Lançamentos
@@ -876,6 +883,10 @@ async function carregarTudo(){
  obs:r.observacoes||"", status:r.status, criado:r.created_at,
  numForn:r.numero_fornecedor||null
  }; });
+
+ // Contas bancarias + extrato (OpenFinance). Tabelas opcionais: se nao existirem, vem vazio.
+ CONTASBANC = (rCB&&rCB.data||[]);
+ EXTB = (rEB&&rEB.data||[]);
 
  popularSelects();
  atualizarFxInfo();
@@ -1076,8 +1087,79 @@ function rDB(){
 }
 
 // ═══ EXTRATO ════════════════════════════════════════════════════
-function rEx(){ if(exTab==="la")rExt(); else rExtEv(); }
-function exSubTab(t){ exTab=t; document.querySelectorAll(".ex-stab").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-ex")===t);}); ge("ex-la").style.display=t==="la"?"flex":"none"; ge("ex-la").style.flexDirection=t==="la"?"column":""; ge("ex-ev").style.display=t==="ev"?"flex":"none"; ge("ex-ev").style.flexDirection=t==="ev"?"column":""; if(t==="la")rExt(); else rExtEv(); }
+function rEx(){ if(exTab==="la")rExt(); else if(exTab==="bc")rExtBanco(); else rExtEv(); }
+function exSubTab(t){ exTab=t; document.querySelectorAll(".ex-stab").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-ex")===t);});
+ ge("ex-la").style.display=t==="la"?"flex":"none"; ge("ex-la").style.flexDirection=t==="la"?"column":"";
+ ge("ex-ev").style.display=t==="ev"?"flex":"none"; ge("ex-ev").style.flexDirection=t==="ev"?"column":"";
+ ge("ex-bc").style.display=t==="bc"?"flex":"none"; ge("ex-bc").style.flexDirection=t==="bc"?"column":"";
+ if(t==="la")rExt(); else if(t==="bc")rExtBanco(); else rExtEv(); }
+
+// ═══ EXTRATO BANCÁRIO (OpenFinance) ═════════════════════════════
+function bcNorm(s){ return (s||"").toString().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim(); }
+// Casa uma transacao do banco com um lancamento (custo/movimentacao) por valor+data+nome.
+function bcMatch(tx){
+ var amt=Math.abs(parseFloat(tx.valor)); if(!amt)return null;
+ var td=(tx.data||"").slice(0,10);
+ var tn=bcNorm((tx.descricao||"")+" "+(tx.contraparte||""));
+ var best=null, bestS=0;
+ for(var i=0;i<EXT.length;i++){
+  var l=EXT[i]; var lv=Math.abs(parseFloat(l.val));
+  if(Math.abs(lv-amt)>Math.max(0.02, amt*0.01)) continue; // valor e obrigatorio
+  var s=50;
+  var dd=Math.abs((new Date(td)-new Date((l.data||"").slice(0,10)))/86400000);
+  if(dd<0.5)s+=30; else if(dd<=1)s+=22; else if(dd<=3)s+=12; else s+=2;
+  var ln=bcNorm(l.desc);
+  if(ln){ var toks=ln.split(" ").filter(function(w){return w.length>=3;}); var hit=0;
+   toks.forEach(function(w){ if(tn.indexOf(w)>=0)hit++; }); if(toks.length)s+=Math.round(20*hit/toks.length); }
+  if(s>bestS){bestS=s;best=l;}
+ }
+ if(best&&bestS>=62) return {lanc:best,score:bestS,tipo:isMov(best.cat)?"mov":"custo"};
+ return null;
+}
+function bcDataBR(d){ var p=(d||"").split("-"); return p.length<3?d:(p[2]+"/"+p[1]+"/"+p[0]); }
+function bcAbrir(id){ bcSel=id; rExtBanco(); window.scrollTo(0,0); }
+function bcVoltar(){ bcSel=null; rExtBanco(); }
+function rExtBanco(){
+ var el=ge("ex-bc"); if(!el)return;
+ if(!CONTASBANC.length){ el.innerHTML='<div class="card cp" style="text-align:center;color:var(--MU);padding:30px;">Nenhuma conta bancária sincronizada ainda.</div>'; return; }
+ if(!bcSel){
+  var h='<div style="font-size:11px;color:var(--MU);margin:2px 2px 0;">Toque numa conta para abrir o extrato</div>';
+  CONTASBANC.forEach(function(c){
+   var n=EXTB.filter(function(t){return t.conta_id===c.id;}).length;
+   h+='<div class="card cp" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;" onclick="bcAbrir(\''+c.id+'\')">'
+    +'<div style="min-width:0;"><div style="font-size:13px;font-weight:700;">'+(c.banco||"")+' · '+(c.numero||"")+'</div>'
+    +'<div style="font-size:11px;color:var(--MU);margin-top:2px;">'+(c.titular||c.cnpj||"")+' · '+n+' lançamentos</div></div>'
+    +'<div style="text-align:right;flex-shrink:0;"><div style="font-size:13px;font-weight:800;color:var(--G);">'+fv(parseFloat(c.saldo||0))+'</div><div style="font-size:10px;color:var(--MU);">saldo</div></div></div>';
+  });
+  el.innerHTML=h; return;
+ }
+ var c=CONTASBANC.filter(function(x){return x.id===bcSel;})[0]; if(!c){bcSel=null;return rExtBanco();}
+ var txs=EXTB.filter(function(t){return t.conta_id===bcSel;}).sort(function(a,b){return (b.data||"").localeCompare(a.data||"");});
+ var semv=0; txs.forEach(function(t){ if(!bcMatch(t))semv++; });
+ var h='<div style="display:flex;align-items:center;gap:10px;margin-bottom:2px;">'
+  +'<button class="btn g sm" onclick="bcVoltar()" style="flex-shrink:0;">‹ Contas</button>'
+  +'<div style="min-width:0;"><div style="font-size:13px;font-weight:800;">'+(c.banco||"")+' · '+(c.numero||"")+'</div>'
+  +'<div style="font-size:11px;color:var(--MU);">Saldo '+fv(parseFloat(c.saldo||0))+'</div></div></div>'
+  +'<div class="ibox" style="font-size:11px;">'+txs.length+' transações · <b style="color:var(--O);">'+semv+' sem vínculo</b></div>';
+ var dias={}; txs.forEach(function(t){ var d=(t.data||"").slice(0,10); (dias[d]=dias[d]||[]).push(t); });
+ Object.keys(dias).sort().reverse().forEach(function(d){
+  h+='<div style="font-size:11px;font-weight:700;color:var(--MU);margin:8px 2px 0;">'+bcDataBR(d)+'</div><div class="card">';
+  dias[d].forEach(function(t){
+   var v=parseFloat(t.valor), cred=v>=0, m=bcMatch(t), badge;
+   if(!m) badge='<span style="font-size:9px;font-weight:700;color:var(--O);background:rgba(217,119,6,.12);padding:2px 6px;border-radius:5px;">⚠ SEM VÍNCULO</span>';
+   else if(m.tipo==="mov") badge='<span style="font-size:9px;font-weight:700;color:var(--Y);background:rgba(184,134,11,.14);padding:2px 6px;border-radius:5px;">🔄 MOVIMENTAÇÃO</span>';
+   else badge='<span style="font-size:9px;font-weight:700;color:var(--G);background:rgba(22,163,74,.12);padding:2px 6px;border-radius:5px;">✅ CUSTO</span>';
+   var hora=(t.data||"").slice(11,16);
+   h+='<div style="padding:10px 13px;border-bottom:1px solid var(--BR);display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">'
+    +'<div style="min-width:0;"><div style="font-size:12px;font-weight:600;">'+(t.descricao||"")+'</div>'
+    +'<div style="font-size:10px;color:var(--MU);margin-top:2px;">'+hora+(t.contraparte?(" · "+t.contraparte):"")+'</div>'
+    +'<div style="margin-top:5px;">'+badge+(m?('<span style="font-size:9px;color:var(--MU);margin-left:6px;">↳ '+(m.lanc.desc||"")+'</span>'):"")+'</div></div>'
+    +'<div style="font-size:13px;font-weight:800;white-space:nowrap;flex-shrink:0;color:'+(cred?"var(--G)":"var(--R)")+';">'+(cred?"+":"−")+fv(Math.abs(v))+'</div></div>';
+  });
+  h+='</div>';
+ });
+ el.innerHTML=h;
+}
 
 function rExt(){
  var fm=ge("ex-fm").value, fc=ge("ex-fc").value, fp=ge("ex-fp").value, fb=(ge("ex-fb").value||"").toLowerCase();
