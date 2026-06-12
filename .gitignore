@@ -17,3 +17,4 @@
 # dados bancarios (nao versionar)
 gen_extrato_sql.py
 seed_extrato.sql
+setup_extrato_completo.sql
