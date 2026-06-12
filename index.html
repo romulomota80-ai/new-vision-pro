@@ -3214,6 +3214,7 @@ function rContas(){
    h+='<div style="background:'+cb.cor+';color:'+cb.txt+';padding:11px 14px;display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:13px;font-weight:800;">'+c.banco+'</div><div style="font-size:10px;opacity:.85;">'+c.tipo+'</div></div><div style="font-size:11px;opacity:.85;">'+(c.ativa?"":"inativa")+'</div></div>';
    h+='<div style="padding:14px;">';
    h+='<div style="font-size:11px;color:var(--MU);margin-bottom:3px;">'+c.nome+'</div>';
+   if(c.titular) h+='<div style="font-size:11px;font-weight:700;color:var(--TX);margin:-1px 0 4px;">👤 '+c.titular+'</div>';
    h+='<div style="font-size:22px;font-weight:800;color:'+(c.saldo>=0?"#5a8a3a":"#a04040")+';font-family:var(--FONT-M);">'+fv(c.saldo)+'</div>';
    if(c.agencia||c.numero){
     h+='<div style="font-size:10px;color:var(--MU);margin-top:6px;">';
