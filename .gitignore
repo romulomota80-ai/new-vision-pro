@@ -22,3 +22,4 @@ fix_contas_bancarias.sql
 index_live.html
 seed_extrato_v2.sql
 diagnostico_contas.sql
+restaurar_contas_originais.sql
