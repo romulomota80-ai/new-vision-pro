@@ -2414,6 +2414,12 @@ async function rBancos(){
     h+='</div>';
     h+='<div style="padding:11px 14px;">';
     h+='<div style="font-size:18px;font-weight:800;color:#5a8a3a;font-family:var(--FONT-M);">'+fv(c.saldo)+'</div>';
+    // Titular: do banco (PF) > da conta do app vinculada > CNPJ como fallback
+    var vincConta=(c.vinculada&&c.conta_app)?(CONTAS_BANC.filter(function(x){return x.id===c.conta_app.id;})[0]||null):null;
+    var titB=c.titular||(vincConta&&vincConta.titular)||null;
+    var docB=c.cnpj||c.taxNumber||c.tax_number||(vincConta&&vincConta.cnpj)||null;
+    if(titB) h+='<div style="font-size:11px;font-weight:700;color:var(--TX);margin-top:4px;">👤 '+titB+'</div>';
+    else if(docB) h+='<div style="font-size:10px;color:var(--MU);margin-top:4px;">CNPJ '+docB+'</div>';
     if(c.vinculada){
      h+='<div style="font-size:11px;color:var(--MU);margin-top:6px;">✓ vinculada a <b>'+c.conta_app.nome+'</b></div>';
     } else {
