@@ -293,7 +293,7 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
 <div class="toast" id="toast"></div>
 
 <!-- OVERLAY VIEWER DE COMPROVANTE/BOLETO (imagem ou PDF) -->
-<div class="overlay" id="ov-view" onclick="if(event.target===this)fecharViewer()">
+<div class="overlay" id="ov-view" style="z-index:10000;" onclick="if(event.target===this)fecharViewer()">
  <div style="background:var(--C1);border:1px solid var(--BR);border-radius:16px;width:92vw;max-width:1000px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;">
   <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--BR);gap:12px;">
    <div style="flex:1;min-width:0;">
