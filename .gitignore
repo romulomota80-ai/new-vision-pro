@@ -18,3 +18,5 @@
 gen_extrato_sql.py
 seed_extrato.sql
 setup_extrato_completo.sql
+fix_contas_bancarias.sql
+index_live.html
