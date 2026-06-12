@@ -1001,7 +1001,8 @@ async function carregarTudo(){
    saldo:parseFloat(c.saldo_atual)||0,
    cnpj:c.cnpj||"", agencia:c.agencia||"", numero:c.numero_conta||"",
    ativa:c.ativa!==false, obs:c.observacao||"",
-   titular:c.titular||"", palavras_chave:c.palavras_chave||""
+   titular:c.titular||"", palavras_chave:c.palavras_chave||"",
+   ofId:c.openfinance_account_id||null
   };});
  }
  if(rSaques && rSaques.data){
@@ -3098,7 +3099,11 @@ function ebMatch(tx){
 function ebDataBR(d){ var p=(d||"").split("-"); return p.length<3?d:(p[2]+"/"+p[1]+"/"+p[0]); }
 function fecharExtratoConta(){ var ov=ge("ov-extrato"); if(ov) ov.remove(); }
 function verExtratoConta(contaId, nomeConta){
- var txs=EXTRATO_BANC.filter(function(t){return String(t.conta_id)===String(contaId);})
+ var conta=CONTAS_BANC.filter(function(x){return String(x.id)===String(contaId);})[0];
+ var ofId=conta&&conta.ofId?String(conta.ofId):null;
+ var txs=EXTRATO_BANC.filter(function(t){
+   return (ofId&&String(t.account_id)===ofId) || String(t.conta_id)===String(contaId);
+ })
    .sort(function(a,b){return (b.data||"").localeCompare(a.data||"");});
  var semv=0; txs.forEach(function(t){ if(!ebMatch(t))semv++; });
  var h='<div onclick="if(event.target===this)fecharExtratoConta()" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;">';
