@@ -831,6 +831,7 @@ var MPS = []; // marketplaces + contas
 var REC = {}; // receitas { MES: { conta_id: {f,l,a} } }
 var FIXOS = []; // gastos_fixos
 var CONTAS_BANC = []; // contas_bancarias - Fluxo de Caixa
+var EXTRATO_BANC = []; // extrato_bancario - transacoes do banco (OpenFinance)
 var SAQUES = []; // saques registrados (Fluxo de Caixa)
 var RECEBIVEIS = []; // recebiveis_programados (Fluxo de Caixa)
 var PRODUTOS = [], VARIACOES = [], PROD_EID = null, VAR_EID = null, PROD_FILTRO = "", PROD_EXPANDIDO = null;
@@ -936,7 +937,7 @@ async function initSupabase(){
 
 // ═══ CARREGAR TODOS OS DADOS ════════════════════════════════════
 async function carregarTudo(){
- var [rLanc, rBol, rMps, rContas, rRec, rFixos, rCats, rForn, rPed, rContasBanc, rSaques, rRecebiveis, rProdutos, rVariacoes, rPedLivre, rPedPag] = await Promise.all([
+ var [rLanc, rBol, rMps, rContas, rRec, rFixos, rCats, rForn, rPed, rContasBanc, rSaques, rRecebiveis, rProdutos, rVariacoes, rPedLivre, rPedPag, rExtrato] = await Promise.all([
  sb.from("lancamentos").select("*").order("data",{ascending:false}),
  sb.from("boletos").select("*").order("vencimento"),
  sb.from("marketplaces").select("*"),
@@ -952,8 +953,10 @@ async function carregarTudo(){
  sb.from("produtos").select("*").order("nome"),
  sb.from("produto_variacoes").select("*").order("sku"),
  sb.from("pedidos").select("*").eq("tipo","livre").order("created_at",{ascending:false}),
- sb.from("pedido_pagamentos").select("*")
+ sb.from("pedido_pagamentos").select("*"),
+ sb.from("extrato_bancario").select("*").order("data",{ascending:false})
  ]);
+ EXTRATO_BANC = (rExtrato && rExtrato.data) || [];
 
  // Lançamentos
  EXT = (rLanc.data||[]).map(function(r){ return {
@@ -3064,6 +3067,63 @@ function fecharHistorico(){
   if(ov) ov.remove();
 }
 
+// ═══ EXTRATO BANCÁRIO POR CONTA (OpenFinance + vínculo) ═════════
+function ebNorm(s){ return (s||"").toString().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim(); }
+// Casa uma transacao do banco com um lancamento (custo/movimentacao) por valor+data+nome.
+function ebMatch(tx){
+ var amt=Math.abs(parseFloat(tx.valor)); if(!amt)return null;
+ var td=(tx.data||"").slice(0,10);
+ var tn=ebNorm((tx.descricao||"")+" "+(tx.contraparte||""));
+ var best=null,bestS=0;
+ for(var i=0;i<EXT.length;i++){
+  var l=EXT[i]; var lv=Math.abs(parseFloat(l.val));
+  if(Math.abs(lv-amt)>Math.max(0.02,amt*0.01)) continue; // valor obrigatorio
+  var s=50;
+  var dd=Math.abs((new Date(td)-new Date((l.data||"").slice(0,10)))/86400000);
+  if(dd<0.5)s+=30; else if(dd<=1)s+=22; else if(dd<=3)s+=12; else s+=2;
+  var ln=ebNorm(l.desc);
+  if(ln){ var toks=ln.split(" ").filter(function(w){return w.length>=3;}); var hit=0;
+   toks.forEach(function(w){ if(tn.indexOf(w)>=0)hit++; }); if(toks.length)s+=Math.round(20*hit/toks.length); }
+  if(s>bestS){bestS=s;best=l;}
+ }
+ if(best&&bestS>=62) return {lanc:best,score:bestS,tipo:isMov(best.cat)?"mov":"custo"};
+ return null;
+}
+function ebDataBR(d){ var p=(d||"").split("-"); return p.length<3?d:(p[2]+"/"+p[1]+"/"+p[0]); }
+function fecharExtratoConta(){ var ov=ge("ov-extrato"); if(ov) ov.remove(); }
+function verExtratoConta(contaId, nomeConta){
+ var txs=EXTRATO_BANC.filter(function(t){return String(t.conta_id)===String(contaId);})
+   .sort(function(a,b){return (b.data||"").localeCompare(a.data||"");});
+ var semv=0; txs.forEach(function(t){ if(!ebMatch(t))semv++; });
+ var h='<div onclick="if(event.target===this)fecharExtratoConta()" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;">';
+ h+='<div style="background:var(--BG);border-radius:14px;max-width:720px;width:100%;max-height:90vh;overflow-y:auto;border:1px solid var(--BR);">';
+ h+='<div style="padding:16px 18px;border-bottom:1px solid var(--BR);display:flex;justify-content:space-between;align-items:center;background:var(--BG);position:sticky;top:0;z-index:1;">';
+ h+='<div><div style="font-size:15px;font-weight:800;color:var(--TX);">📄 Extrato — '+(nomeConta||"")+'</div><div style="font-size:11px;color:var(--MU);margin-top:2px;">'+txs.length+' transações · <b style="color:var(--O);">'+semv+' sem vínculo</b></div></div>';
+ h+='<button onclick="fecharExtratoConta()" style="background:none;border:none;cursor:pointer;font-size:22px;color:var(--MU);">×</button></div>';
+ if(!txs.length){
+  h+='<div style="padding:40px 20px;text-align:center;color:var(--MU);"><div style="font-size:30px;margin-bottom:8px;">🏦</div>Nenhuma transação sincronizada para esta conta ainda.</div>';
+ } else {
+  var dias={}; txs.forEach(function(t){ var d=(t.data||"").slice(0,10); (dias[d]=dias[d]||[]).push(t); });
+  Object.keys(dias).sort().reverse().forEach(function(d){
+   h+='<div style="font-size:11px;font-weight:700;color:var(--MU);padding:10px 16px 2px;">'+ebDataBR(d)+'</div>';
+   dias[d].forEach(function(t){
+    var v=parseFloat(t.valor),cred=v>=0,m=ebMatch(t),badge;
+    if(!m) badge='<span style="font-size:9px;font-weight:700;color:var(--O);background:rgba(217,119,6,.12);padding:2px 6px;border-radius:5px;">⚠ SEM VÍNCULO</span>';
+    else if(m.tipo==="mov") badge='<span style="font-size:9px;font-weight:700;color:#b8860b;background:rgba(184,134,11,.14);padding:2px 6px;border-radius:5px;">🔄 MOVIMENTAÇÃO</span>';
+    else badge='<span style="font-size:9px;font-weight:700;color:#2a8a4a;background:rgba(22,163,74,.12);padding:2px 6px;border-radius:5px;">✅ CUSTO</span>';
+    var hora=(t.data||"").slice(11,16);
+    h+='<div style="padding:10px 16px;border-top:1px solid var(--BR);display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">';
+    h+='<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;color:var(--TX);">'+(t.descricao||"")+'</div>';
+    h+='<div style="font-size:10px;color:var(--MU);margin-top:2px;">'+hora+(t.contraparte?(" · "+t.contraparte):"")+'</div>';
+    h+='<div style="margin-top:5px;">'+badge+(m?('<span style="font-size:9px;color:var(--MU);margin-left:6px;">↳ '+(m.lanc.desc||"")+'</span>'):"")+'</div></div>';
+    h+='<div style="font-size:13px;font-weight:800;white-space:nowrap;flex-shrink:0;font-family:var(--FONT-M);color:'+(cred?"#5a8a3a":"#a04040")+';">'+(cred?"+":"−")+fv(Math.abs(v))+'</div></div>';
+   });
+  });
+ }
+ h+='</div></div>';
+ var ov=document.createElement("div"); ov.id="ov-extrato"; ov.innerHTML=h; document.body.appendChild(ov);
+}
+
 async function adicionarNota(histId, nomeConta){
   var nota = prompt("Anotação:");
   if(!nota || !nota.trim()) return;
@@ -3163,6 +3223,7 @@ function rContas(){
    }
    h+='<div style="display:flex;gap:6px;margin-top:10px;">';
    h+='<button onclick="verHistoricoConta('+c.id+',\''+c.nome.replace(/\'/g,"\\\\\\'")+'\')" style="background:rgba(184,134,11,.1);border:1px solid rgba(184,134,11,.3);color:#b8860b;cursor:pointer;font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;font-family:inherit;">📋 Histórico</button>';
+   h+='<button onclick="verExtratoConta('+c.id+',\''+c.nome.replace(/\'/g,"\\\\\\'")+'\')" style="background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);color:#2a8a4a;cursor:pointer;font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;font-family:inherit;">📄 Extrato</button>';
    h+='<button onclick="contaEdit('+c.id+')" style="background:rgba(74,78,154,.1);border:1px solid rgba(74,78,154,.3);color:#4a4e9a;cursor:pointer;font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;font-family:inherit;">Editar</button>';
    h+='<button onclick="contaDel('+c.id+')" style="background:rgba(160,64,64,.08);border:1px solid rgba(160,64,64,.3);color:#a04040;cursor:pointer;font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;font-family:inherit;">Excluir</button>';
    h+='</div></div></div>';
