@@ -20,3 +20,5 @@ seed_extrato.sql
 setup_extrato_completo.sql
 fix_contas_bancarias.sql
 index_live.html
+seed_extrato_v2.sql
+diagnostico_contas.sql
