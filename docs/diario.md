@@ -4,6 +4,19 @@ Log das mudanças e decisões. O mais recente em cima.
 
 ## 2026-06-12/13
 
+### Shopee — app criado e submetido pra produção (2026-06-13)
+- App **"New Vision Financeiro"** criado no Shopee Open Platform. Categoria
+  "Sistema interno do vendedor"; **acesso a dados sensíveis liberado**; API **V2**.
+- Domínio de redirecionamento (teste e produção): `https://newvisionpro.com.br`.
+- **Callback de produção (no backend):** `https://newvisionpro.com.br/api/shopee/callback`
+  — **Opção A**, mesmo padrão do Mercado Livre (já comprovado em produção).
+- **IP allowlist:** IP do backend Hetzner (resolve de `api.newvisionpro.com.br` → `5.75.186.38`).
+- **Credenciais de TESTE** disponíveis (Partner ID de teste `1235756` + chave de teste)
+  → usar pra construir o scaffolding no **sandbox** enquanto a produção é aprovada.
+- **Produção:** pedido "em análise" — resultado por e-mail em até 24h. As credenciais
+  **LIVE** (partner_id + key de produção) só saem **após a aprovação**.
+- 🔒 **Partner Key NUNCA no repo/chat** — vai só no `.env` do servidor.
+
 ### Sincronização do GitHub com o site real
 - Descoberto que o repositório estava parado em **8 de maio**, enquanto o site em
   produção evoluiu muito (Fluxo de Caixa, Vendas, Produtos, Estoque, Conciliação…).
