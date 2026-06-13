@@ -293,7 +293,7 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
 <div class="toast" id="toast"></div>
 
 <!-- OVERLAY VIEWER DE COMPROVANTE/BOLETO (imagem ou PDF) -->
-<div class="overlay" id="ov-view" onclick="if(event.target===this)fecharViewer()">
+<div class="overlay" id="ov-view" style="z-index:10000;" onclick="if(event.target===this)fecharViewer()">
  <div style="background:var(--C1);border:1px solid var(--BR);border-radius:16px;width:92vw;max-width:1000px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;">
   <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--BR);gap:12px;">
    <div style="flex:1;min-width:0;">
@@ -3078,7 +3078,7 @@ function ebNorm(s){ return (s||"").toString().toLowerCase().normalize("NFD").rep
 // Casa uma transacao do banco com um lancamento (custo/movimentacao) por valor+data+nome.
 function ebMatch(tx){
  var amt=Math.abs(parseFloat(tx.valor)); if(!amt)return null;
- var td=(tx.data||"").slice(0,10);
+ var td=ebDiaBRT(tx.data);
  var tn=ebNorm((tx.descricao||"")+" "+(tx.contraparte||""));
  var best=null,bestS=0;
  for(var i=0;i<EXT.length;i++){
@@ -3096,6 +3096,10 @@ function ebMatch(tx){
  return null;
 }
 function ebDataBR(d){ var p=(d||"").split("-"); return p.length<3?d:(p[2]+"/"+p[1]+"/"+p[0]); }
+// O Open Finance manda a data em UTC (...Z) e o server roda em UTC. Pra exibir/
+// agrupar no fuso do Brasil (America/Sao_Paulo) NUNCA usar slice() na string crua.
+function ebDiaBRT(d){ if(!d)return""; try{ return new Date(d).toLocaleDateString("en-CA",{timeZone:"America/Sao_Paulo"}); }catch(e){ return String(d).slice(0,10); } }
+function ebHoraBRT(d){ if(!d)return""; try{ return new Date(d).toLocaleTimeString("pt-BR",{timeZone:"America/Sao_Paulo",hour:"2-digit",minute:"2-digit"}); }catch(e){ return String(d).slice(11,16); } }
 function fecharExtratoConta(){ var ov=ge("ov-extrato"); if(ov) ov.remove(); }
 function verExtratoConta(contaId, nomeConta){
  var txs=EXTRATO_BANC.filter(function(t){return String(t.conta_id)===String(contaId);})
@@ -3109,7 +3113,7 @@ function verExtratoConta(contaId, nomeConta){
  if(!txs.length){
   h+='<div style="padding:40px 20px;text-align:center;color:var(--MU);"><div style="font-size:30px;margin-bottom:8px;">🏦</div>Nenhuma transação sincronizada para esta conta ainda.</div>';
  } else {
-  var dias={}; txs.forEach(function(t){ var d=(t.data||"").slice(0,10); (dias[d]=dias[d]||[]).push(t); });
+  var dias={}; txs.forEach(function(t){ var d=ebDiaBRT(t.data); (dias[d]=dias[d]||[]).push(t); });
   Object.keys(dias).sort().reverse().forEach(function(d){
    h+='<div style="font-size:11px;font-weight:700;color:var(--MU);padding:10px 16px 2px;">'+ebDataBR(d)+'</div>';
    dias[d].forEach(function(t){
@@ -3117,11 +3121,17 @@ function verExtratoConta(contaId, nomeConta){
     if(!m) badge='<span style="font-size:9px;font-weight:700;color:var(--O);background:rgba(217,119,6,.12);padding:2px 6px;border-radius:5px;">⚠ SEM VÍNCULO</span>';
     else if(m.tipo==="mov") badge='<span style="font-size:9px;font-weight:700;color:#b8860b;background:rgba(184,134,11,.14);padding:2px 6px;border-radius:5px;">🔄 MOVIMENTAÇÃO</span>';
     else badge='<span style="font-size:9px;font-weight:700;color:#2a8a4a;background:rgba(22,163,74,.12);padding:2px 6px;border-radius:5px;">✅ CUSTO</span>';
-    var hora=(t.data||"").slice(11,16);
+    var hora=ebHoraBRT(t.data);
+    // Comprovante só do vínculo AUTORITATIVO do backend (t.lancamento_id, conciliado
+    // com critério rigoroso). NÃO usar o palpite do ebMatch aqui — pra transação
+    // ambígua é melhor não mostrar comprovante do que mostrar o errado.
+    var lancComp=null;
+    if(t.lancamento_id!=null){ lancComp=EXT.filter(function(e){return String(e.id)===String(t.lancamento_id);})[0]; }
+    var btnComp=(lancComp&&lancComp.img)?'<button onclick="abrirViewer(\''+String(lancComp.img).replace(/\'/g,"\\\\\\'")+'\',\'Comprovante\',\''+String(t.descricao||"").replace(/\'/g,"\\\\\\'")+'\')" style="font-size:9px;font-weight:700;color:#2563eb;background:rgba(37,99,235,.1);border:1px solid rgba(37,99,235,.25);padding:2px 7px;border-radius:5px;cursor:pointer;margin-left:6px;font-family:inherit;">📎 Ver comprovante</button>':'';
     h+='<div style="padding:10px 16px;border-top:1px solid var(--BR);display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">';
     h+='<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;color:var(--TX);">'+(t.descricao||"")+'</div>';
     h+='<div style="font-size:10px;color:var(--MU);margin-top:2px;">'+hora+(t.contraparte?(" · "+t.contraparte):"")+'</div>';
-    h+='<div style="margin-top:5px;">'+badge+(m?('<span style="font-size:9px;color:var(--MU);margin-left:6px;">↳ '+(m.lanc.desc||"")+'</span>'):"")+'</div></div>';
+    h+='<div style="margin-top:5px;">'+badge+(m?('<span style="font-size:9px;color:var(--MU);margin-left:6px;">↳ '+(m.lanc.desc||"")+'</span>'):"")+btnComp+'</div></div>';
     h+='<div style="font-size:13px;font-weight:800;white-space:nowrap;flex-shrink:0;font-family:var(--FONT-M);color:'+(cred?"#5a8a3a":"#a04040")+';">'+(cred?"+":"−")+fv(Math.abs(v))+'</div></div>';
    });
   });
