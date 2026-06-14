@@ -2,6 +2,42 @@
 
 Log das mudanças e decisões. O mais recente em cima.
 
+## 2026-06-14
+
+### Shopee — go-live + auditoria de repasses (Claude Code terminal)
+
+**Captura (Fase 1) — CONCLUÍDA.**
+- App **aprovado/Online** → viramos pra **produção (live)**: Partner ID `2036729`,
+  host `partner.shopeemobile.com`, `SHOPEE_ENV=live` (segredo só no `.env`).
+- Assinatura HMAC validada no live (auth_partner → HTTP 302 login). **Loja Verssene
+  conectada** (`shop_id 1269418534`, conta `verssene_shopee`); token com refresh automático.
+
+**Auditoria de comissão — REGRA DEFINIDA E VALIDADA.**
+- Fonte da verdade: `get_escrow_detail` (por pedido) traz a comissão real + a quebra por regra.
+- "Esperado" = **tabela oficial CNPJ**: `comissão = %faixa × valor_item + taxa_fixa × qtd`
+  (faixa pelo preço **unitário**). Gravada em `shopee_taxas_esperadas` (editável).
+- **Validada contra ~200 pedidos reais: bateu 99,5%.** 3 descobertas que evitam falso-positivo:
+  1. o "%" da tabela = `commission_fee + service_fee` **somados** (não a comissão isolada);
+  2. a **taxa fixa é por unidade** (×quantidade), não por pedido;
+  3. **subsídio PIX** (`pix_discount`) é do lado do comprador (bancado pela Shopee) — **não**
+     reduz a comissão do vendedor; base da comissão é **só o item** (sem frete).
+
+**Schema criado (DDL aditivo, sem drop):** `shopee_repasses` (1 linha/pedido, ~30 campos do
+escrow + `comissao_esperada`/`divergencia_comissao`), `shopee_carteira` (wallet/saldo),
+`shopee_taxas_esperadas` (config de taxas).
+
+**Decisões.**
+- Auditar **só vendas reais (COMPLETED)** — ~19,1 mil em 60 dias (~320/dia). Cancelados (4 mil)
+  não têm repasse/comissão → fora; estornos pós-repasse vêm da carteira
+  (`ADJUSTMENT_FOR_RR_AFTER_ESCROW_VERIFIED`).
+- `data_pedido` sai do prefixo `YYMMDD` do `order_sn` (== create_time, confirmado) — sem chamada extra.
+
+**Pendências.**
+- 🔄 **Fechamento (Fase 3):** sync dos 19,1k repasses **rodando** — publicar aqui o total
+  repassado (escrow) + nº e valor das cobranças de comissão a maior quando concluir.
+- Carteira: re-rodar os 60 dias completos (parcial gravado: ~4,1k transações).
+- Frontend: aba Shopee (repasses + auditoria) — backend já expõe `GET /api/shopee/repasses/auditoria`.
+
 ## 2026-06-12/13
 
 ### Shopee — app criado e submetido pra produção (2026-06-13)
