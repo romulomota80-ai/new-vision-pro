@@ -4,6 +4,27 @@ Log das mudanças e decisões. O mais recente em cima.
 
 ## 2026-06-14
 
+### Shopee — aba no app (frontend) PRONTA
+
+- Nova aba **🛒 Shopee** no menu lateral (padrão das outras: `.scr` + sub-abas
+  `.lbar/.ltab`, registrada no `goTab`), com seletor de loja no topo.
+- **5 sub-abas**, lendo dos endpoints REAIS `/api/shopee/*` (sem schema novo):
+  - **Resumo** — KPIs do fechamento (período, nº pedidos, total repassado, **cobrado a
+    maior**, divergências, % OK). Mostra "⏳ sincronizando…" com parciais se o sync roda.
+  - **Repasses** — lista por pedido (order_sn, data, valor, comissão, taxa serviço,
+    frete, líquido) + filtro de período.
+  - **Auditoria** (prioridade) — divergências ordenadas por **delta desc**, ESPERADO ×
+    REAL × DELTA (vermelho), badge de severidade, filtros (período, toggle "só com
+    divergência") e **Exportar CSV**.
+  - **Carteira** — movimentos do wallet (`shopee_carteira`); **Taxas** — tabela oficial
+    CNPJ (leitura; edição em breve).
+- Backend ganhou os GET de leitura (`/repasses/resumo|/repasses|/repasses/auditoria|
+  /carteira|/taxas`) — **somente leitura**, sem mexer no schema nem no job de sync.
+- JS validado (`node --check` em todos os `<script>`). Deploy: push na `main` → Netlify.
+- **Pendências:** validar no navegador (guia anônima); sync de 60d ainda finalizando
+  (parcial: ~8,5k pedidos, R$460k repassado, **0 cobranças a maior até agora**); edição
+  da aba Taxas e re-sync completo da Carteira ficam pra próxima.
+
 ### Shopee — go-live + auditoria de repasses (Claude Code terminal)
 
 **Captura (Fase 1) — CONCLUÍDA.**
