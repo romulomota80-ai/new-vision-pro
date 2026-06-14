@@ -792,6 +792,7 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
   <button class="ltab" data-sh="rp" onclick="shAba('rp')">💰 Repasses</button>
   <button class="ltab" data-sh="au" onclick="shAba('au')">🔎 Auditoria</button>
   <button class="ltab" data-sh="ca" onclick="shAba('ca')">👛 Carteira</button>
+  <button class="ltab" data-sh="sq" onclick="shAba('sq')">🏦 Saques</button>
   <button class="ltab" data-sh="tx" onclick="shAba('tx')">📋 Taxas</button>
  </div>
 
@@ -799,6 +800,7 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
  <div id="sh-rp" style="display:none;flex-direction:column;gap:12px;"></div>
  <div id="sh-au" style="display:none;flex-direction:column;gap:12px;"></div>
  <div id="sh-ca" style="display:none;flex-direction:column;gap:12px;"></div>
+ <div id="sh-sq" style="display:none;flex-direction:column;gap:12px;"></div>
  <div id="sh-tx" style="display:none;flex-direction:column;gap:12px;"></div>
  </div><!-- /s-sh -->
 </div><!-- /main-content -->
@@ -8492,7 +8494,7 @@ async function rShopee(){
 }
 function shAba(t){
  SH_SUBABA = t;
- ['re','rp','au','ca','tx'].forEach(function(x){
+ ['re','rp','au','ca','sq','tx'].forEach(function(x){
   var bt = document.querySelector('[data-sh="'+x+'"]'); if(bt) bt.classList.toggle('on', x===t);
   var pn = ge('sh-'+x); if(pn) pn.style.display = (x===t) ? 'flex' : 'none';
  });
@@ -8500,6 +8502,7 @@ function shAba(t){
  if(t==='rp') rShRepasses();
  if(t==='au') rShAuditoria();
  if(t==='ca') rShCarteira();
+ if(t==='sq') rShSaques();
  if(t==='tx') rShTaxas();
 }
 function shTrocaLoja(){ var s=ge('sh-loja'); if(s) SH_CONTA = s.value; shAba(SH_SUBABA); }
@@ -8672,7 +8675,46 @@ async function rShCarteira(){
  }catch(e){ shErr('sh-ca', e.message); }
 }
 
-// ── 5) TAXAS (config oficial, leitura) ──────────────────────────
+// ── SAQUES (reconciliados com o extrato bancário) ───────────────
+async function rShSaques(){
+ var el = ge('sh-sq'); if(!el) return; shLoad('sh-sq');
+ try{
+  var j = await shAPI('/api/shopee/saques');
+  if(j.erro){ shErr('sh-sq', j.erro); return; }
+  var itens = j.itens || [];
+  var h = '<div style="display:flex;gap:10px;flex-wrap:wrap;">';
+  h += shKpi('Saques', (j.qtd||0).toLocaleString("pt-BR"), '');
+  h += shKpi('Total sacado', fv(j.total_sacado), 'var(--G)');
+  h += shKpi('Confirmado na conta', fv(j.total_confirmado), 'var(--G)');
+  h += shKpi('Não localizado', String(j.nao_localizados||0), (j.nao_localizados>0?'var(--R)':'var(--MU)'));
+  h += '</div>';
+  if((j.nao_localizados||0)===0 && itens.length){
+   h += '<div class="card" style="padding:14px 16px;font-size:12px;color:var(--MU);">✅ Todos os saques caíram na conta — valor confere com o crédito PIX "SHPP" (Shopee) no extrato bancário.</div>';
+  } else if(j.nao_localizados>0){
+   h += '<div class="card" style="padding:14px 16px;font-size:12px;"><b style="color:var(--R);">'+j.nao_localizados+'</b> saque(s) <b>NÃO localizado(s)</b> no extrato bancário — verificar se caiu mesmo.</div>';
+  }
+  h += '<div class="card" style="padding:0;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap;">';
+  h += '<thead><tr style="text-align:left;color:var(--MU);border-bottom:1px solid var(--BR);">'
+   +shTh('Solicitado')+shTh('Valor',1)+shTh('Status Shopee')+shTh('Caiu na conta?')+shTh('Conta')+'</tr></thead><tbody>';
+  if(!itens.length){ h += '<tr><td colspan="5" style="padding:24px;text-align:center;color:var(--MU);">Nenhum saque no período.</td></tr>'; }
+  itens.forEach(function(s){
+   var caiu = s.caiu_na_conta
+    ? '<span style="color:var(--G);font-weight:700;">✅ Sim</span><span style="color:var(--MU);"> · '+shFdISO(s.data_banco)+'</span>'
+    : '<span style="color:var(--R);font-weight:700;">⚠️ Não localizado</span>';
+   var stShopee = (s.status==='COMPLETED') ? '<span style="color:var(--G);">Concluído</span>' : shEsc(s.status||'');
+   h += '<tr style="border-bottom:1px solid var(--BR);">'
+    +shTd(shFdISO(s.data_solicitado))
+    +shTd('<b>'+fv(s.valor)+'</b>',1)
+    +shTd(stShopee)
+    +shTd(caiu)
+    +shTd(shEsc(s.conta_nome||(s.caiu_na_conta?'—':'')))+'</tr>';
+  });
+  h += '</tbody></table></div>';
+  el.innerHTML = h;
+ }catch(e){ shErr('sh-sq', e.message); }
+}
+
+// ── TAXAS (config oficial, leitura) ─────────────────────────────
 async function rShTaxas(){
  var el = ge('sh-tx'); if(!el) return; shLoad('sh-tx');
  try{

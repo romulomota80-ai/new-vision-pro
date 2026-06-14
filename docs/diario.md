@@ -4,6 +4,19 @@ Log das mudanças e decisões. O mais recente em cima.
 
 ## 2026-06-14
 
+### Shopee — sub-aba Saques (reconciliação com o extrato bancário)
+
+- Nova sub-aba **🏦 Saques** na aba Shopee: mostra o que foi sacado **e se realmente
+  caiu na conta**.
+- Backend `GET /api/shopee/saques` (pg, só leitura): pareia `WITHDRAWAL_CREATED`
+  (solicitação + valor) com `WITHDRAWAL_COMPLETED` por `withdrawal_id`, e **cruza com o
+  `extrato_bancario`** — match por **valor idêntico + crédito PIX "SHPP"/Shopee** na
+  janela da data. Traz `caiu_na_conta`, data e nome da conta.
+- KPIs: nº de saques, total sacado, **confirmado na conta**, **não localizados**.
+- **Resultado real (60d):** 9 saques, **R$268.185,77 sacado, 100% confirmado** na conta
+  **ITAÚ CNPJ LAYANE** (todos batem com PIX "SHPP" no extrato), **0 não localizados**.
+- JS validado (`node --check`). Push na `main` → Netlify.
+
 ### Shopee — fechamento 60d concluído + KPI de devoluções
 
 - **Sync completo:** 19.126 pedidos COMPLETED auditados. **Total repassado
