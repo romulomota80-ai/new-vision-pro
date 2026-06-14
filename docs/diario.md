@@ -4,6 +4,25 @@ Log das mudanças e decisões. O mais recente em cima.
 
 ## 2026-06-14
 
+### Shopee — Carteira: tipos de transação traduzidos pra PT
+
+Os tipos vinham com o código cru da Shopee. Adicionado `SH_TIPO_LABEL` (mapa
+frontend, só exibição — não altera o dado) + fallback que limpa qualquer código
+não mapeado (`_`→espaço, Primeira maiúscula), pra **nunca** aparecer código cru.
+Aplicado na **Carteira** (com ícone por categoria) e na **Auditoria**.
+
+Tipos mapeados (lista REAL do `GROUP BY shopee_carteira`):
+- `ESCROW_VERIFIED_ADD` → Repasse de venda
+- `ESCROW_VERIFIED_MINUS` → Estorno de repasse
+- `ADJUSTMENT_FOR_RR_AFTER_ESCROW_VERIFIED` → Reembolso (devolução)
+- `WITHDRAWAL_COMPLETED` → Saque concluído
+- `WITHDRAWAL_CREATED` → Saque solicitado
+- `RETURN_COMPENSATION_SERVICE_ADD` → Compensação por devolução
+- `ADJUSTMENT_CENTER_ADD` → Crédito por item perdido/danificado
+- `SPM_DEDUCT` → Recarga de ADS (anúncios)
+- `''` (vazio) → Compensação por objeto perdido
+- (internos auditoria) `comissao_maior` → Comissão a maior · `ok` → OK
+
 ### Shopee — aba no app (frontend) PRONTA
 
 - Nova aba **🛒 Shopee** no menu lateral (padrão das outras: `.scr` + sub-abas

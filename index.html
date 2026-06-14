@@ -8425,6 +8425,37 @@ var SH_RP_DE = '', SH_RP_ATE = '';
 var SH_AU_DE = '', SH_AU_ATE = '', SH_AU_SODIV = true;
 var SH_AUD = [];
 
+// Rótulos amigáveis dos tipos de transação da carteira (códigos crus da Shopee).
+// Lista derivada do GROUP BY real de shopee_carteira (não inventar).
+var SH_TIPO_LABEL = {
+ 'ESCROW_VERIFIED_ADD': 'Repasse de venda',
+ 'ESCROW_VERIFIED_MINUS': 'Estorno de repasse',
+ 'ADJUSTMENT_FOR_RR_AFTER_ESCROW_VERIFIED': 'Reembolso (devolução)',
+ 'WITHDRAWAL_COMPLETED': 'Saque concluído',
+ 'WITHDRAWAL_CREATED': 'Saque solicitado',
+ 'RETURN_COMPENSATION_SERVICE_ADD': 'Compensação por devolução',
+ 'ADJUSTMENT_CENTER_ADD': 'Crédito por item perdido/danificado',
+ 'SPM_DEDUCT': 'Recarga de ADS (anúncios)',
+ '': 'Compensação por objeto perdido',
+ // tipos internos da Auditoria
+ 'comissao_maior': 'Comissão a maior',
+ 'ok': 'OK'
+};
+var SH_TIPO_ICON = {
+ 'ESCROW_VERIFIED_ADD':'💰','ESCROW_VERIFIED_MINUS':'↩️',
+ 'ADJUSTMENT_FOR_RR_AFTER_ESCROW_VERIFIED':'↩️','WITHDRAWAL_COMPLETED':'🏦',
+ 'WITHDRAWAL_CREATED':'🏦','RETURN_COMPENSATION_SERVICE_ADD':'➕',
+ 'ADJUSTMENT_CENTER_ADD':'➕','SPM_DEDUCT':'📣','':'➕'
+};
+// Nunca exibe código cru: usa o mapa; senão limpa ("_"→espaço, Primeira maiúscula).
+function shTipoLabel(t){
+ if(t==null) t='';
+ if(Object.prototype.hasOwnProperty.call(SH_TIPO_LABEL, t)) return SH_TIPO_LABEL[t];
+ var s = String(t).replace(/_/g,' ').trim().toLowerCase();
+ return s ? (s.charAt(0).toUpperCase()+s.slice(1)) : 'Outros';
+}
+function shTipoIcon(t){ return SH_TIPO_ICON[t==null?'':t] || ''; }
+
 function shAPI(path){
  var sep = path.indexOf('?') >= 0 ? '&' : '?';
  var url = (typeof BACKEND_URL!=="undefined"&&BACKEND_URL?BACKEND_URL:'') + path + (SH_CONTA ? (sep+'conta='+encodeURIComponent(SH_CONTA)) : '');
@@ -8587,7 +8618,7 @@ async function rShAuditoria(){
    var badge = r.severidade==='alta'?'var(--R)':(r.severidade==='media'?'var(--O)':(r.severidade==='baixa'?'var(--Y)':'var(--MU)'));
    h += '<tr style="border-bottom:1px solid var(--BR);">'
     +shTd(r.order_sn)+shTd(shFdISO(r.data_pedido))
-    +shTd(div?'comissão a maior':'ok')
+    +shTd(shTipoLabel(r.tipo))
     +shTd(fv(r.esperado),1)+shTd(fv(r.real),1)
     +shTd('<b style="color:'+(div?'var(--R)':'var(--MU)')+';">'+(div?('+'+fv(r.delta)):fv(0))+'</b>',1)
     +shTd(div?('<span style="font-size:10px;font-weight:700;color:'+badge+';text-transform:uppercase;">'+r.severidade+'</span>'):'—')+'</tr>';
@@ -8605,7 +8636,7 @@ function shAplicaAU(){
 function shExportaCSV(){
  if(!SH_AUD || !SH_AUD.length){ toast('Nada para exportar', false); return; }
  var rows = [['order_sn','data','tipo','esperado','real','delta']];
- SH_AUD.forEach(function(r){ rows.push([r.order_sn, shFdISO(r.data_pedido), (r.delta>0.10?'comissao_maior':'ok'), r.esperado, r.real, r.delta]); });
+ SH_AUD.forEach(function(r){ rows.push([r.order_sn, shFdISO(r.data_pedido), shTipoLabel(r.delta>0.10?'comissao_maior':'ok'), r.esperado, r.real, r.delta]); });
  var csv = rows.map(function(r){ return r.map(function(c){ return '"'+String(c==null?'':c).replace(/"/g,'""')+'"'; }).join(','); }).join('\n');
  var blob = new Blob(["﻿"+csv], {type:'text/csv;charset=utf-8;'});
  var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'auditoria_shopee.csv';
@@ -8629,7 +8660,7 @@ async function rShCarteira(){
    var neg = Number(t.valor||0) < 0;
    h += '<tr style="border-bottom:1px solid var(--BR);">'
     +shTd(shFdISO(t.data))
-    +shTd('<span title="'+shEsc(t.descricao||'')+'">'+shEsc(t.tipo||'')+'</span>')
+    +shTd((shTipoIcon(t.tipo)?shTipoIcon(t.tipo)+' ':'')+'<span title="'+shEsc(t.descricao||t.tipo||'')+'">'+shEsc(shTipoLabel(t.tipo))+'</span>')
     +shTd(t.order_sn||'—')
     +shTd('<b style="color:'+(neg?'var(--R)':'var(--G)')+';">'+fv(t.valor)+'</b>',1)
     +shTd(fv(t.saldo_apos),1)+'</tr>';
