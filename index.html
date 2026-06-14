@@ -377,6 +377,7 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
  <button class="tab" data-t="lu">Lucro</button>
  <button class="tab" data-t="bo">Boletos/PIX</button>
  <button class="tab" data-t="ia">IA</button>
+ <button class="tab" data-t="sh">Shopee</button>
  <button class="tab" data-t="cf">Config</button>
  </div>
 
@@ -432,6 +433,10 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
  <button class="sb-item" data-t="ef" onclick="goTab('ef')">
  <div class="sb-icon"><svg class="ico" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></div>
  <span>Estoque Full</span>
+ </button>
+ <button class="sb-item" data-t="sh" onclick="goTab('sh')">
+ <div class="sb-icon"><svg class="ico" viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg></div>
+ <span>Shopee</span>
  </button>
  <div class="sb-section" style="margin-top:6px;">Ferramentas</div>
  <button class="sb-item" data-t="fo" onclick="goTab('fo')">
@@ -774,6 +779,28 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
  </div>
  <div id="cf-c"></div>
  </div><!-- /s-cf -->
+
+ <div id="s-sh" class="scr">
+ <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
+  <div style="font-family:var(--FONT-H);font-size:22px;font-weight:800;letter-spacing:-.5px;">🛒 Shopee</div>
+  <select id="sh-loja" onchange="shTrocaLoja()" style="margin-left:auto;background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:8px;padding:6px 10px;font-size:12px;font-family:inherit;display:none;"></select>
+ </div>
+ <div style="font-size:11px;color:var(--MU);margin-bottom:10px;">Repasses, auditoria de comissão e carteira — dados reais da Shopee Open Platform</div>
+
+ <div class="lbar" id="shbar" style="overflow-x:auto;flex-wrap:nowrap;">
+  <button class="ltab on" data-sh="re" onclick="shAba('re')">📊 Resumo</button>
+  <button class="ltab" data-sh="rp" onclick="shAba('rp')">💰 Repasses</button>
+  <button class="ltab" data-sh="au" onclick="shAba('au')">🔎 Auditoria</button>
+  <button class="ltab" data-sh="ca" onclick="shAba('ca')">👛 Carteira</button>
+  <button class="ltab" data-sh="tx" onclick="shAba('tx')">📋 Taxas</button>
+ </div>
+
+ <div id="sh-re" style="display:flex;flex-direction:column;gap:12px;"></div>
+ <div id="sh-rp" style="display:none;flex-direction:column;gap:12px;"></div>
+ <div id="sh-au" style="display:none;flex-direction:column;gap:12px;"></div>
+ <div id="sh-ca" style="display:none;flex-direction:column;gap:12px;"></div>
+ <div id="sh-tx" style="display:none;flex-direction:column;gap:12px;"></div>
+ </div><!-- /s-sh -->
 </div><!-- /main-content -->
 </div><!-- /layout-desktop -->
 </div><!-- /pg-a -->
@@ -2960,7 +2987,7 @@ function goTab(t){
  document.querySelectorAll(".scr").forEach(function(s){s.classList.remove("on");});
  ge("s-"+t).classList.add("on");
  try{localStorage.setItem("nv_tab",t);}catch(e){}
- var fn={db:rDB,ex:rEx,lu:rLu,bo:rBo,ia:rIA,cf:rCf,fo:rFo,co:rCo,fc:rContas,prod:rPROD,vd:rVd,ef:rEF};
+ var fn={db:rDB,ex:rEx,lu:rLu,bo:rBo,ia:rIA,cf:rCf,fo:rFo,co:rCo,fc:rContas,prod:rPROD,vd:rVd,ef:rEF,sh:rShopee};
  if(fn[t])fn[t]();
  var mc=document.querySelector(".main-content");
  if(mc)mc.scrollTop=0;
@@ -8386,5 +8413,255 @@ function vdVscRender(){
     document.addEventListener('DOMContentLoaded', function(){ setTimeout(restaurar, 500); });
   }
 })();
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// ABA SHOPEE — repasses, auditoria de comissão, carteira, taxas.
+// Lê dos endpoints REAIS do backend (/api/shopee/*). Sem schema novo.
+// ═══════════════════════════════════════════════════════════════
+var SH_CONTA = null, SH_SUBABA = 're', SH_SHOPS_LOADED = false;
+var SH_RP_DE = '', SH_RP_ATE = '';
+var SH_AU_DE = '', SH_AU_ATE = '', SH_AU_SODIV = true;
+var SH_AUD = [];
+
+function shAPI(path){
+ var sep = path.indexOf('?') >= 0 ? '&' : '?';
+ var url = (typeof BACKEND_URL!=="undefined"&&BACKEND_URL?BACKEND_URL:'') + path + (SH_CONTA ? (sep+'conta='+encodeURIComponent(SH_CONTA)) : '');
+ return fetch(url).then(function(r){ return r.json(); });
+}
+function shFdISO(s){ if(!s) return '—'; try{ return new Date(s).toLocaleDateString("pt-BR"); }catch(e){ return s; } }
+function shEsc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function shKpi(label, value, cor, sub){
+ return '<div class="card" style="padding:14px 16px;flex:1;min-width:150px;">'
+  +'<div style="font-size:10px;color:var(--MU);text-transform:uppercase;letter-spacing:.5px;">'+label+'</div>'
+  +'<div style="font-size:20px;font-weight:800;margin-top:4px;'+(cor?('color:'+cor+';'):'')+'">'+value+'</div>'
+  +(sub?'<div style="font-size:11px;color:var(--MU);margin-top:2px;">'+sub+'</div>':'')
+  +'</div>';
+}
+function shLoad(id){ var el=ge(id); if(el) el.innerHTML='<div class="card" style="padding:24px;text-align:center;color:var(--MU);font-size:13px;">Carregando…</div>'; }
+function shErr(id,m){ var el=ge(id); if(el) el.innerHTML='<div class="card" style="padding:24px;color:var(--R);font-size:13px;">Erro: '+shEsc(m)+'</div>'; }
+
+async function shCarregaLojas(){
+ try{
+  var j = await shAPI('/api/shopee/shops');
+  var sel = ge('sh-loja'); var lojas = (j && j.lojas) || [];
+  if(sel){
+   sel.innerHTML = lojas.map(function(l){ return '<option value="'+shEsc(l.conta_interna_id)+'">'+shEsc(l.shop_name||l.conta_interna_id)+'</option>'; }).join('');
+   sel.style.display = lojas.length > 1 ? '' : 'none';
+  }
+  if(!SH_CONTA && lojas.length) SH_CONTA = lojas[0].conta_interna_id;
+  SH_SHOPS_LOADED = true;
+ }catch(e){ /* segue mesmo sem seletor */ }
+}
+
+async function rShopee(){
+ if(!SH_SHOPS_LOADED) await shCarregaLojas();
+ shAba(SH_SUBABA);
+}
+function shAba(t){
+ SH_SUBABA = t;
+ ['re','rp','au','ca','tx'].forEach(function(x){
+  var bt = document.querySelector('[data-sh="'+x+'"]'); if(bt) bt.classList.toggle('on', x===t);
+  var pn = ge('sh-'+x); if(pn) pn.style.display = (x===t) ? 'flex' : 'none';
+ });
+ if(t==='re') rShResumo();
+ if(t==='rp') rShRepasses();
+ if(t==='au') rShAuditoria();
+ if(t==='ca') rShCarteira();
+ if(t==='tx') rShTaxas();
+}
+function shTrocaLoja(){ var s=ge('sh-loja'); if(s) SH_CONTA = s.value; shAba(SH_SUBABA); }
+
+// ── 1) RESUMO (fechamento) ──────────────────────────────────────
+async function rShResumo(){
+ var el = ge('sh-re'); if(!el) return; shLoad('sh-re');
+ try{
+  var j = await shAPI('/api/shopee/repasses/resumo');
+  if(j.erro){ shErr('sh-re', j.erro); return; }
+  var f = j.sync && j.sync.fase;
+  var sincronizando = f && f!=='concluido' && f!=='nunca rodou' && f!=='erro';
+  var per = (j.periodo && j.periodo.de) ? (shFdISO(j.periodo.de)+' a '+shFdISO(j.periodo.ate)) : '—';
+  var h = '';
+  if(sincronizando){
+   h += '<div class="card" style="padding:12px 16px;border-left:3px solid var(--Y);font-size:12px;">⏳ <b>Sincronizando…</b> '+((j.sync.feitos||0).toLocaleString("pt-BR"))+'/'+((j.sync.total||0).toLocaleString("pt-BR"))+' pedidos. Números parciais abaixo.</div>';
+  }
+  h += '<div style="display:flex;gap:10px;flex-wrap:wrap;">';
+  h += shKpi('Período auditado', per, '');
+  h += shKpi('Pedidos', (j.pedidos||0).toLocaleString("pt-BR"), '');
+  h += shKpi('Total repassado (líquido)', fv(j.total_liquido), 'var(--G)');
+  h += shKpi('Cobrado a maior', fv(j.total_cobrado_a_maior), (j.total_cobrado_a_maior>0?'var(--R)':'var(--MU)'));
+  h += shKpi('Divergências', (j.divergencias||0).toLocaleString("pt-BR"), (j.divergencias>0?'var(--R)':'var(--G)'));
+  h += shKpi('% pedidos OK', (j.pct_ok==null?'—':(j.pct_ok+'%')), 'var(--G)');
+  h += '</div>';
+  if((j.divergencias||0)===0){
+   h += '<div class="card" style="padding:16px;font-size:12px;color:var(--MU);">✅ Nenhuma cobrança de comissão a maior encontrada no período — a Shopee está cobrando conforme a tabela oficial CNPJ.</div>';
+  } else {
+   h += '<div class="card" style="padding:14px 16px;font-size:12px;"><b style="color:var(--R);">'+j.divergencias+'</b> pedido(s) com cobrança a maior, somando <b style="color:var(--R);">'+fv(j.total_cobrado_a_maior)+'</b>. Veja a aba <b>Auditoria</b>.</div>';
+  }
+  el.innerHTML = h;
+ }catch(e){ shErr('sh-re', e.message); }
+}
+
+// ── 2) REPASSES (lista por pedido) ──────────────────────────────
+function shFiltroBar(prefix, de, ate, onclick){
+ return '<div class="card" style="padding:10px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
+  +'<span style="font-size:11px;color:var(--MU);">Período:</span>'
+  +'<input type="date" id="'+prefix+'-de" value="'+(de||'')+'" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:6px;padding:5px 8px;font-size:12px;font-family:inherit;">'
+  +'<span style="font-size:11px;color:var(--MU);">até</span>'
+  +'<input type="date" id="'+prefix+'-ate" value="'+(ate||'')+'" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:6px;padding:5px 8px;font-size:12px;font-family:inherit;">'
+  +'<button class="btn sm" onclick="'+onclick+'" style="font-size:12px;">Filtrar</button>';
+}
+async function rShRepasses(){
+ var el = ge('sh-rp'); if(!el) return; shLoad('sh-rp');
+ try{
+  var qs = '/api/shopee/repasses?limit=300' + (SH_RP_DE?('&de='+SH_RP_DE):'') + (SH_RP_ATE?('&ate='+SH_RP_ATE):'');
+  var j = await shAPI(qs);
+  if(j.erro){ shErr('sh-rp', j.erro); return; }
+  var itens = j.itens || [];
+  var h = shFiltroBar('sh-rp', SH_RP_DE, SH_RP_ATE, 'shAplicaRP()')
+   +'<span style="font-size:11px;color:var(--MU);margin-left:auto;">'+itens.length+' de '+(j.total||0).toLocaleString("pt-BR")+'</span></div>';
+  h += '<div class="card" style="padding:0;overflow:auto;">';
+  h += '<table style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap;">';
+  h += '<thead><tr style="text-align:left;color:var(--MU);border-bottom:1px solid var(--BR);">'
+   +shTh('Pedido')+shTh('Data')+shTh('Valor',1)+shTh('Comissão',1)+shTh('Taxa serv.',1)+shTh('Frete',1)+shTh('Líquido',1)+'</tr></thead><tbody>';
+  if(!itens.length){ h += '<tr><td colspan="7" style="padding:24px;text-align:center;color:var(--MU);">Nenhum repasse no período.</td></tr>'; }
+  itens.forEach(function(r){
+   h += '<tr style="border-bottom:1px solid var(--BR);">'
+    +shTd(r.order_sn)+shTd(shFdISO(r.data_pedido))+shTd(fv(r.valor_pedido),1)
+    +shTd(fv(r.comissao),1)+shTd(fv(r.taxa_servico),1)+shTd(fv(r.frete_real),1)
+    +shTd('<b style="color:var(--G);">'+fv(r.valor_liquido)+'</b>',1)+'</tr>';
+  });
+  h += '</tbody></table></div>';
+  el.innerHTML = h;
+ }catch(e){ shErr('sh-rp', e.message); }
+}
+function shAplicaRP(){ SH_RP_DE = (ge('sh-rp-de')||{}).value||''; SH_RP_ATE = (ge('sh-rp-ate')||{}).value||''; rShRepasses(); }
+function shTh(t,r){ return '<th style="padding:8px 12px;font-weight:700;'+(r?'text-align:right;':'')+'">'+t+'</th>'; }
+function shTd(t,r){ return '<td style="padding:7px 12px;'+(r?'text-align:right;':'')+'">'+t+'</td>'; }
+
+// ── 3) AUDITORIA (prioridade) ───────────────────────────────────
+async function rShAuditoria(){
+ var el = ge('sh-au'); if(!el) return; shLoad('sh-au');
+ try{
+  var itens, totalDiv = 0;
+  if(SH_AU_SODIV){
+   var qs = '/api/shopee/repasses/auditoria?limit=2000' + (SH_AU_DE?('&de='+SH_AU_DE):'') + (SH_AU_ATE?('&ate='+SH_AU_ATE):'');
+   var j = await shAPI(qs);
+   if(j.erro){ shErr('sh-au', j.erro); return; }
+   itens = (j.itens||[]); totalDiv = j.soma_divergencia||0;
+  } else {
+   var qs2 = '/api/shopee/repasses?limit=500' + (SH_AU_DE?('&de='+SH_AU_DE):'') + (SH_AU_ATE?('&ate='+SH_AU_ATE):'');
+   var j2 = await shAPI(qs2);
+   if(j2.erro){ shErr('sh-au', j2.erro); return; }
+   itens = (j2.itens||[]).map(function(r){
+    var delta = Number(r.divergencia_comissao||0);
+    return { order_sn:r.order_sn, data_pedido:r.data_pedido, tipo:(delta>0.10?'comissao_maior':'ok'),
+     esperado:r.comissao_esperada, real:Math.round(((r.comissao||0)+(r.taxa_servico||0))*100)/100,
+     delta:delta, severidade:(delta>=5?'alta':(delta>=1?'media':(delta>0.10?'baixa':'ok'))) };
+   }).sort(function(a,b){ return b.delta-a.delta; });
+  }
+  SH_AUD = itens;
+  var h = '<div class="card" style="padding:10px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
+   +'<span style="font-size:11px;color:var(--MU);">Período:</span>'
+   +'<input type="date" id="sh-au-de" value="'+(SH_AU_DE||'')+'" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:6px;padding:5px 8px;font-size:12px;font-family:inherit;">'
+   +'<span style="font-size:11px;color:var(--MU);">até</span>'
+   +'<input type="date" id="sh-au-ate" value="'+(SH_AU_ATE||'')+'" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:6px;padding:5px 8px;font-size:12px;font-family:inherit;">'
+   +'<label style="font-size:11px;color:var(--MU);display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="sh-au-sodiv" '+(SH_AU_SODIV?'checked':'')+'> só com divergência</label>'
+   +'<button class="btn sm" onclick="shAplicaAU()" style="font-size:12px;">Filtrar</button>'
+   +'<button class="btn g sm" onclick="shExportaCSV()" style="font-size:12px;margin-left:auto;">⬇ Exportar CSV</button>'
+   +'</div>';
+  var nDiv = itens.filter(function(r){ return r.delta>0.10; }).length;
+  h += '<div class="card" style="padding:12px 16px;font-size:12px;">'
+   +'<b style="color:'+(nDiv>0?'var(--R)':'var(--G)')+';">'+nDiv+'</b> cobrança(s) a maior'
+   +(nDiv>0?(' · total <b style="color:var(--R);">'+fv(totalDiv||itens.reduce(function(s,r){return s+(r.delta>0.10?r.delta:0);},0))+'</b>'):'')+'</div>';
+  h += '<div class="card" style="padding:0;overflow:auto;">';
+  h += '<table style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap;">';
+  h += '<thead><tr style="text-align:left;color:var(--MU);border-bottom:1px solid var(--BR);">'
+   +shTh('Pedido')+shTh('Data')+shTh('Tipo')+shTh('Esperado',1)+shTh('Real',1)+shTh('Delta',1)+shTh('Sev.')+'</tr></thead><tbody>';
+  if(!itens.length){
+   h += '<tr><td colspan="7" style="padding:28px;text-align:center;color:var(--MU);">✅ Nenhuma divergência encontrada.</td></tr>';
+  }
+  itens.forEach(function(r){
+   var div = r.delta>0.10;
+   var badge = r.severidade==='alta'?'var(--R)':(r.severidade==='media'?'var(--O)':(r.severidade==='baixa'?'var(--Y)':'var(--MU)'));
+   h += '<tr style="border-bottom:1px solid var(--BR);">'
+    +shTd(r.order_sn)+shTd(shFdISO(r.data_pedido))
+    +shTd(div?'comissão a maior':'ok')
+    +shTd(fv(r.esperado),1)+shTd(fv(r.real),1)
+    +shTd('<b style="color:'+(div?'var(--R)':'var(--MU)')+';">'+(div?('+'+fv(r.delta)):fv(0))+'</b>',1)
+    +shTd(div?('<span style="font-size:10px;font-weight:700;color:'+badge+';text-transform:uppercase;">'+r.severidade+'</span>'):'—')+'</tr>';
+  });
+  h += '</tbody></table></div>';
+  el.innerHTML = h;
+ }catch(e){ shErr('sh-au', e.message); }
+}
+function shAplicaAU(){
+ SH_AU_DE = (ge('sh-au-de')||{}).value||'';
+ SH_AU_ATE = (ge('sh-au-ate')||{}).value||'';
+ var c = ge('sh-au-sodiv'); SH_AU_SODIV = c ? c.checked : true;
+ rShAuditoria();
+}
+function shExportaCSV(){
+ if(!SH_AUD || !SH_AUD.length){ toast('Nada para exportar', false); return; }
+ var rows = [['order_sn','data','tipo','esperado','real','delta']];
+ SH_AUD.forEach(function(r){ rows.push([r.order_sn, shFdISO(r.data_pedido), (r.delta>0.10?'comissao_maior':'ok'), r.esperado, r.real, r.delta]); });
+ var csv = rows.map(function(r){ return r.map(function(c){ return '"'+String(c==null?'':c).replace(/"/g,'""')+'"'; }).join(','); }).join('\n');
+ var blob = new Blob(["﻿"+csv], {type:'text/csv;charset=utf-8;'});
+ var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'auditoria_shopee.csv';
+ document.body.appendChild(a); a.click(); document.body.removeChild(a);
+ toast('CSV exportado', true);
+}
+
+// ── 4) CARTEIRA ─────────────────────────────────────────────────
+async function rShCarteira(){
+ var el = ge('sh-ca'); if(!el) return; shLoad('sh-ca');
+ try{
+  var j = await shAPI('/api/shopee/carteira?limit=300');
+  if(j.erro){ shErr('sh-ca', j.erro); return; }
+  var itens = j.itens || [];
+  var h = '<div class="card" style="padding:10px 14px;font-size:12px;color:var(--MU);">'+itens.length+' de '+(j.total||0).toLocaleString("pt-BR")+' movimentos (liberações, saques, ajustes/multas)</div>';
+  h += '<div class="card" style="padding:0;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap;">';
+  h += '<thead><tr style="text-align:left;color:var(--MU);border-bottom:1px solid var(--BR);">'
+   +shTh('Data')+shTh('Tipo')+shTh('Pedido')+shTh('Valor',1)+shTh('Saldo após',1)+'</tr></thead><tbody>';
+  if(!itens.length){ h += '<tr><td colspan="5" style="padding:24px;text-align:center;color:var(--MU);">Sem movimentos sincronizados.</td></tr>'; }
+  itens.forEach(function(t){
+   var neg = Number(t.valor||0) < 0;
+   h += '<tr style="border-bottom:1px solid var(--BR);">'
+    +shTd(shFdISO(t.data))
+    +shTd('<span title="'+shEsc(t.descricao||'')+'">'+shEsc(t.tipo||'')+'</span>')
+    +shTd(t.order_sn||'—')
+    +shTd('<b style="color:'+(neg?'var(--R)':'var(--G)')+';">'+fv(t.valor)+'</b>',1)
+    +shTd(fv(t.saldo_apos),1)+'</tr>';
+  });
+  h += '</tbody></table></div>';
+  el.innerHTML = h;
+ }catch(e){ shErr('sh-ca', e.message); }
+}
+
+// ── 5) TAXAS (config oficial, leitura) ──────────────────────────
+async function rShTaxas(){
+ var el = ge('sh-tx'); if(!el) return; shLoad('sh-tx');
+ try{
+  var j = await shAPI('/api/shopee/taxas');
+  if(j.erro){ shErr('sh-tx', j.erro); return; }
+  var itens = j.itens || [];
+  var h = '<div class="card" style="padding:12px 16px;font-size:12px;color:var(--MU);">Tabela oficial de comissão (Shopee CNPJ). Base da auditoria: <b>comissão = % × valor do item + taxa fixa × quantidade</b> (faixa pelo preço unitário). Edição em breve.</div>';
+  h += '<div class="card" style="padding:0;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap;">';
+  h += '<thead><tr style="text-align:left;color:var(--MU);border-bottom:1px solid var(--BR);">'
+   +shTh('Faixa do item')+shTh('Comissão %',1)+shTh('Taxa fixa',1)+shTh('Subsídio PIX',1)+shTh('Vigência')+'</tr></thead><tbody>';
+  itens.forEach(function(t){
+   var faixa = fv(t.faixa_min) + (t.faixa_max!=null ? (' a '+fv(t.faixa_max)) : ' ou mais');
+   h += '<tr style="border-bottom:1px solid var(--BR);">'
+    +shTd(faixa)
+    +shTd((Number(t.pct)*100).toFixed(0)+'%',1)
+    +shTd(fv(t.taxa_fixa),1)
+    +shTd((Number(t.pct_subsidio_pix)*100).toFixed(0)+'%',1)
+    +shTd(shFdISO(t.vigencia_inicio)+(t.vigencia_fim?(' – '+shFdISO(t.vigencia_fim)):' (vigente)'))+'</tr>';
+  });
+  h += '</tbody></table></div>';
+  el.innerHTML = h;
+ }catch(e){ shErr('sh-tx', e.message); }
+}
 </script>
 </body></html>
