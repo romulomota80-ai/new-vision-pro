@@ -8429,7 +8429,7 @@ var SH_AUD = [];
 // Lista derivada do GROUP BY real de shopee_carteira (não inventar).
 var SH_TIPO_LABEL = {
  'ESCROW_VERIFIED_ADD': 'Repasse de venda',
- 'ESCROW_VERIFIED_MINUS': 'Estorno de repasse',
+ 'ESCROW_VERIFIED_MINUS': 'Estorno de repasse (devolução)',
  'ADJUSTMENT_FOR_RR_AFTER_ESCROW_VERIFIED': 'Reembolso (devolução)',
  'WITHDRAWAL_COMPLETED': 'Saque concluído',
  'WITHDRAWAL_CREATED': 'Saque solicitado',
@@ -8524,6 +8524,8 @@ async function rShResumo(){
   h += shKpi('Cobrado a maior', fv(j.total_cobrado_a_maior), (j.total_cobrado_a_maior>0?'var(--R)':'var(--MU)'));
   h += shKpi('Divergências', (j.divergencias||0).toLocaleString("pt-BR"), (j.divergencias>0?'var(--R)':'var(--G)'));
   h += shKpi('% pedidos OK', (j.pct_ok==null?'—':(j.pct_ok+'%')), 'var(--G)');
+  var dev = (j.devolucoes && j.devolucoes.valor) || 0;
+  h += shKpi('Devoluções (período)', fv(dev), (dev<0?'var(--R)':'var(--MU)'), ((j.devolucoes&&j.devolucoes.qtd)||0)+' movimentos (estorno + reembolso)');
   h += '</div>';
   if((j.divergencias||0)===0){
    h += '<div class="card" style="padding:16px;font-size:12px;color:var(--MU);">✅ Nenhuma cobrança de comissão a maior encontrada no período — a Shopee está cobrando conforme a tabela oficial CNPJ.</div>';

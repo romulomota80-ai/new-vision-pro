@@ -4,6 +4,18 @@ Log das mudanças e decisões. O mais recente em cima.
 
 ## 2026-06-14
 
+### Shopee — fechamento 60d concluído + KPI de devoluções
+
+- **Sync completo:** 19.126 pedidos COMPLETED auditados. **Total repassado
+  R$670.173,09. ZERO cobranças de comissão a maior (100% OK)** — a Shopee cobrou
+  conforme a tabela oficial CNPJ no período.
+- **Devoluções:** novo KPI no Resumo somando o que a Shopee puxou de volta da carteira
+  (estorno de repasse `ESCROW_VERIFIED_MINUS` + reembolso `ADJUSTMENT_FOR_RR…`):
+  **−R$5.923,05 em 122 movimentos**. Agregado no `/repasses/resumo` (pg, só leitura).
+- Rótulo `ESCROW_VERIFIED_MINUS` ficou **"Estorno de repasse (devolução)"** (era
+  "Estorno de repasse") pra não confundir com o reembolso. *Estorno de repasse = venda
+  já repassada que é devolvida depois e a Shopee debita de volta o líquido do pedido.*
+
 ### Shopee — Carteira: tipos de transação traduzidos pra PT
 
 Os tipos vinham com o código cru da Shopee. Adicionado `SH_TIPO_LABEL` (mapa
