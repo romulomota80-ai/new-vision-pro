@@ -8308,21 +8308,35 @@ async function rVdVendasSemCusto(){
   cont.innerHTML = '<div style="padding:40px;text-align:center;color:#888;">⏳ Carregando vendas sem custo...</div>';
   
   try {
-    var qCount = sb.from('ml_orders').select('*', { count: 'exact', head: true }).or('cmv_total_snap.eq.0,cmv_total_snap.is.null');
-    if (VSC_CONTA) qCount = qCount.eq('conta_interna_id', VSC_CONTA);
-    var r1 = await qCount;
-    VSC_TOTAL = r1.count || 0;
-    
-    var ini = (VSC_PAGINA - 1) * VSC_POR_PAG;
-    var q = sb.from('ml_orders')
-      .select('id, conta_interna_id, sku, item_title, preco_total, qty, data_venda, mc_valor, mc_pct')
-      .or('cmv_total_snap.eq.0,cmv_total_snap.is.null')
-      .order('data_venda', { ascending: false })
-      .range(ini, ini + VSC_POR_PAG - 1);
-    if (VSC_CONTA) q = q.eq('conta_interna_id', VSC_CONTA);
-    var r2 = await q;
-    if (r2.error) throw r2.error;
-    VSC_DADOS = r2.data || [];
+    if (VSC_CONTA === 'verssene_shopee') {
+      VSC_DADOS = []; VSC_TOTAL = 0;
+    } else {
+      var qCount = sb.from('ml_orders').select('*', { count: 'exact', head: true }).or('cmv_total_snap.eq.0,cmv_total_snap.is.null');
+      if (VSC_CONTA) qCount = qCount.eq('conta_interna_id', VSC_CONTA);
+      var r1 = await qCount;
+      VSC_TOTAL = r1.count || 0;
+
+      var ini = (VSC_PAGINA - 1) * VSC_POR_PAG;
+      var q = sb.from('ml_orders')
+        .select('id, conta_interna_id, sku, item_title, preco_total, qty, data_venda, mc_valor, mc_pct')
+        .or('cmv_total_snap.eq.0,cmv_total_snap.is.null')
+        .order('data_venda', { ascending: false })
+        .range(ini, ini + VSC_POR_PAG - 1);
+      if (VSC_CONTA) q = q.eq('conta_interna_id', VSC_CONTA);
+      var r2 = await q;
+      if (r2.error) throw r2.error;
+      VSC_DADOS = (r2.data || []).map(function(v){ v.marketplace='ML'; return v; });
+    }
+    // Shopee sem custo (Todas ou Verssene), so na 1a pagina pra nao repetir
+    if ((VSC_CONTA === '' || VSC_CONTA === 'verssene_shopee') && VSC_PAGINA === 1) {
+      try {
+        var _sc = await fetch('/api/shopee/sem-custo?conta=verssene_shopee&limit=500').then(function(r){return r.json();});
+        if (_sc && _sc.itens && _sc.itens.length) {
+          VSC_DADOS = _sc.itens.concat(VSC_DADOS);
+          VSC_TOTAL += _sc.itens.length;
+        }
+      } catch(_eSc) { console.warn('Shopee sem-custo:', _eSc); }
+    }
   } catch(e) {
     cont.innerHTML = '<div style="padding:20px;color:#c92127;background:#fef2f2;border-radius:8px;">❌ Erro: '+(e.message||e)+'</div>';
     return;
@@ -8345,6 +8359,7 @@ function vdVscRender(){
   h += '<option value=""'+(VSC_CONTA===''?' selected':'')+'>Todas</option>';
   h += '<option value="moda_mix"'+(VSC_CONTA==='moda_mix'?' selected':'')+'>MODA_MIX</option>';
   h += '<option value="look_store"'+(VSC_CONTA==='look_store'?' selected':'')+'>LOOK_STORE</option>';
+  h += '<option value="verssene_shopee"'+(VSC_CONTA==='verssene_shopee'?' selected':'')+'>VERSSENE (Shopee)</option>';
   h += '</select>';
   h += '</div>';
   
@@ -8376,7 +8391,8 @@ function vdVscRender(){
       var mc = parseFloat(v.mc_valor)||0;
       h += '<tr style="border-bottom:1px solid #f3f4f6;">';
       h += '<td style="padding:8px 10px;color:#6b7280;white-space:nowrap;">'+d+'</td>';
-      h += '<td style="padding:8px 10px;color:#6b7280;">'+(v.conta_interna_id||'')+'</td>';
+      var _mkv = v.marketplace==='Shopee' ? '<span style="background:#FFE8D9;color:#C2410C;padding:1px 4px;border-radius:3px;font-size:9px;font-weight:700;margin-right:3px;">SHOPEE</span>' : (v.marketplace==='ML' ? '<span style="background:#FFF3CD;color:#856404;padding:1px 4px;border-radius:3px;font-size:9px;font-weight:700;margin-right:3px;">ML</span>' : '');
+      h += '<td style="padding:8px 10px;color:#6b7280;white-space:nowrap;">'+_mkv+(v.marketplace==='Shopee'?'verssene':(v.conta_interna_id||''))+'</td>';
       h += '<td style="padding:8px 10px;font-family:monospace;font-size:11px;">'+(v.sku||'<span style="color:#aaa;">sem SKU</span>')+'</td>';
       h += '<td style="padding:8px 10px;color:#374151;" title="'+title.replace(/"/g,'&quot;')+'">'+titleShort+'</td>';
       h += '<td style="padding:8px 10px;text-align:right;white-space:nowrap;">R$ '+(parseFloat(v.preco_total)||0).toFixed(2).replace('.',',')+'</td>';

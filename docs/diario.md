@@ -4,6 +4,18 @@ Log das mudanças e decisões. O mais recente em cima.
 
 ## 2026-06-15
 
+### Vendas sem custo — Shopee integrada (cadastro de CMV)
+
+- A sub-aba **"Vendas sem custo"** agora mostra também as vendas **Shopee** sem custo
+  (antes só ML), com badge 🟠 SHOPEE e opção **VERSSENE** no seletor de conta. O botão
+  **+ Cadastrar** funciona igual (salva em `ml_skus_cmv` por SKU).
+- Backend `GET /api/shopee/sem-custo`: vendas pagas cujo SKU não tem custo em
+  `ml_skus_cmv`. `GET /api/shopee/vendas` passou a calcular **CMV/margem AO VIVO**
+  (join `ml_skus_cmv` na leitura) — então **cadastrar o custo reflete na hora** na
+  margem e o SKU some da lista, sem esperar re-sync.
+- Lembrete: cobertura de custo Shopee ainda baixa (~11%) — agora dá pra ir preenchendo
+  pela própria aba.
+
 ### Vendas — Shopee AO VIVO (igual Mercado Livre)
 
 - Corrigido o rumo: a aba Vendas precisa das vendas **ao vivo**, não do escrow (que só
