@@ -4,6 +4,65 @@ Log das mudanças e decisões. O mais recente em cima.
 
 ## 2026-06-15
 
+### Devoluções Shopee — ETAPA 0 (amostra REAL da API, antes de cravar)
+
+Probe `node probe-returns.js` na loja VERSSENE (shop_id 1269418534), 60 dias,
+fatiado em janelas de 15 dias (a API limita o range a 15 dias, igual a de pedidos).
+Endpoints: `GET /api/v2/returns/get_return_list` (params `create_time_from/to`,
+`page_no`, `page_size≤40`) e `get_return_detail` (`return_sn`).
+
+**Volume e perfil (60d, só a 1ª página de cada janela — é PISO, há `more:true`):**
+- **160+ devoluções** em 60 dias. Volume alto (bate com o crescimento das vendas).
+- **Status:** ACCEPTED 93 · CANCELLED 69 · PROCESSING 2.
+- **Motivos (reason):** ITEM_NOT_FIT 71 ("não serviu") · NOT_RECEIPT 44 ("não recebi")
+  · WRONG_ITEM 23 · DAMAGED_OTHERS 11 · FUNCTIONAL_DMG 5 · ITEM_MISSING 5 ·
+  CHANGE_MIND 4 · SUSPICIOUS_PARCEL 1.
+
+**O que a API entrega DE VERDADE (campos):** a própria **lista** já vem rica (quase não
+precisa do detail): `return_sn`, `order_sn`, `status`, `reason`, `text_reason` (texto
+livre do cliente, 1x), `refund_amount`, `amount_before_discount`, `currency`,
+`create_time`, `update_time`, `due_date`, `needs_logistics`, `tracking_number`, `user`
+(username/email), `item[]` (item_id, name, **variation_sku** = nosso SKU, item_price,
+refund_amount, images), **`image[]` e `buyer_videos[]`** (provas do CLIENTE). O **detail**
+acrescenta: `negotiation` (status, latest_offer_amount, offer_due_date),
+`seller_proof` (seller_proof_status, **seller_evidence_deadline**),
+`seller_compensation`, `logistics_status`, `is_arrived_at_warehouse`, endereços,
+`validation_type`.
+
+**⚠️ ACHADO QUE MUDA O DESENHO — NÃO existe chat/thread de mensagens.** A comunicação
+**não é conversacional** (o único `"message"` no payload é o status da resposta da API).
+O fluxo é **estruturado por estado**:
+- **Cliente** abre a disputa com `reason` + `text_reason` + fotos + vídeos — uma vez só.
+- **Vendedor** atua por estado, não por chat:
+  - `seller_proof_status` = **PENDING** → enviar prova até `seller_evidence_deadline`.
+    Amostra: NOT_NEEDED 108 · "" 55 · **PENDING 1**.
+  - `negotiation` → ofertas de compensação (0 negociações ativas em 60d).
+  - `validation_type` = **seller_validation** em 100%.
+
+**Prazos REAIS (não é um só):** `due_date` (principal) · `seller_evidence_deadline`
+(quando proof=PENDING) · `return_seller_due_date` · `return_ship_due_date` (logística) ·
+`negotiation.offer_due_date`. Retorno físico: `needs_logistics`, `tracking_number`,
+`logistics_status`, `is_arrived_at_warehouse`.
+
+**Automático vs Manual (leitura do dado — a CONFIRMAR):**
+- *Automático:* listar/detalhar, status, motivo, valor, SKU, prazos, provas do cliente,
+  e marcar **"PRECISA RESPONDER"** = `seller_proof_status=PENDING` OU prazo vencendo
+  enquanto acionável. A maioria (NOT_NEEDED) **não exige ação** — entra só como histórico.
+- *Ponto de decisão:* **responder pela API** (upload_proof/dispute/offer) depende de
+  endpoints de escrita + escopo do app — **ainda não probado**. Proposta v1: o sistema
+  **rastreia + alerta + mostra provas/prazo** e dá **link pro Seller Center** pra
+  responder; loga o resultado (recuperado/prejuízo) manualmente. Fase posterior: probar
+  os endpoints de escrita e, se liberados, habilitar "Responder" no app.
+- *Provas do cliente já vêm como URL da Shopee* (não precisa rebaixar). O bucket por
+  devolução só faz sentido pras provas do VENDEDOR (se formos responder pela API).
+
+**Pendente antes da ETAPA 1 (confirmar com o Rômulo):**
+1. v1 = rastrear+alertar+link Seller Center (sem responder pela API), OU já probar os
+   endpoints de escrita pra responder dentro do app?
+2. "PRECISA RESPONDER" no v1 = `seller_proof_status=PENDING` + prazo vencendo
+   (sem "mensagem nova", porque não há mensagens). Validar.
+3. Só 1 loja conectada hoje; arquitetura por `shop_id` mesmo assim.
+
 ### Vendas sem custo — Shopee integrada (cadastro de CMV)
 
 - A sub-aba **"Vendas sem custo"** agora mostra também as vendas **Shopee** sem custo
