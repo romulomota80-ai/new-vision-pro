@@ -2,6 +2,24 @@
 
 Log das mudanças e decisões. O mais recente em cima.
 
+## 2026-06-15
+
+### Vendas — Shopee integrada na aba Vendas (multi-marketplace)
+
+- A aba **Vendas** (estilo Mercado Turbo) agora mostra **ML + Shopee juntos**, mesma lógica
+  por conta, com **badge do marketplace** (🟡 ML / 🟠 SHOPEE) na coluna Conta e a opção
+  **VERSSENE (Shopee)** no seletor de conta.
+- Backend `GET /api/shopee/vendas` (pg, só leitura): explode cada pedido COMPLETED em
+  **1 linha por item** (model_sku, qtd, preço) e normaliza no MESMO formato do `ml_orders`
+  (preco_total, comissao_ml, frete_seller, cmv_total_snap, mc_valor, mc_pct…). Margem =
+  líquido (escrow rateado por item) − custo (`ml_skus_cmv` por model_sku) − imposto.
+- Frontend: `rVdVisao` busca a Shopee no mesmo período e mescla em `VD_DADOS`; ML marcado
+  `marketplace='ML'`. Nenhuma mudança no comportamento do ML.
+- **Caveat (CMV):** só **36 de 315** SKUs Shopee têm custo no `ml_skus_cmv` (~11%) — as
+  outras vendas aparecem com **margem sem custo** (superestimada), igual a aba "Vendas sem
+  custo" do ML. Mapear os custos restantes é a próxima parada (ver pendência de CMV).
+- JS validado (`node --check`). Push na `main` → Netlify.
+
 ## 2026-06-14
 
 ### Shopee — sub-aba Saques (reconciliação com o extrato bancário)

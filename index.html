@@ -8013,6 +8013,15 @@ async function rVdVisao(){
       if(nOv > 0) console.log('[FRETE-OVERRIDE]', nOv, 'vendas ajustadas');
     } catch(eOv){ console.warn('Erro ao aplicar override de frete:', eOv); }
     
+    todos.forEach(function(v){ if(!v.marketplace) v.marketplace='ML'; });
+    // Mescla vendas Shopee (mesmo formato) quando a conta selecionada permite
+    if(VD_CONTA==='todas' || VD_CONTA==='verssene_shopee'){
+      try{
+        var _shUrl = '/api/shopee/vendas?de='+VD_DATA_INI+'&ate='+VD_DATA_FIM+(VD_BUSCA?('&busca='+encodeURIComponent(VD_BUSCA)):'');
+        var _sh = await fetch(_shUrl).then(function(r){return r.json();});
+        if(_sh && _sh.itens && _sh.itens.length){ todos = todos.concat(_sh.itens); }
+      }catch(_eSh){ console.warn('Shopee vendas:', _eSh); }
+    }
     VD_DADOS = todos;
     vdVisaoRender();
   } catch(e){
@@ -8146,7 +8155,7 @@ function vdVisaoRender(){
   h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;">';
   h += '<div><div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Data Inicio (BRT)</div><input type="date" value="'+VD_DATA_INI+'" onchange="VD_DATA_INI=this.value;VD_PERIODO=\'custom\'" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;"></div>';
   h += '<div><div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Data Fim (BRT)</div><input type="date" value="'+VD_DATA_FIM+'" onchange="VD_DATA_FIM=this.value;VD_PERIODO=\'custom\'" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;"></div>';
-  h += '<div><div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Conta</div><select onchange="VD_CONTA=this.value;rVdVisao()" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;background:#fff;"><option value="todas"'+(VD_CONTA==='todas'?' selected':'')+'>Todas</option><option value="look_store"'+(VD_CONTA==='look_store'?' selected':'')+'>LOOK_STORE</option><option value="moda_mix"'+(VD_CONTA==='moda_mix'?' selected':'')+'>MODA_MIX</option></select></div>';
+  h += '<div><div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Conta</div><select onchange="VD_CONTA=this.value;rVdVisao()" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;background:#fff;"><option value="todas"'+(VD_CONTA==='todas'?' selected':'')+'>Todas</option><option value="look_store"'+(VD_CONTA==='look_store'?' selected':'')+'>LOOK_STORE</option><option value="moda_mix"'+(VD_CONTA==='moda_mix'?' selected':'')+'>MODA_MIX</option><option value="verssene_shopee"'+(VD_CONTA==='verssene_shopee'?' selected':'')+'>VERSSENE (Shopee)</option></select></div>';
   h += '<div><div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Status</div><select onchange="VD_STATUS=this.value;vdVisaoRender()" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;background:#fff;"><option value="paid"'+(VD_STATUS==='paid'?' selected':'')+'>Aprovadas</option><option value="cancelled"'+(VD_STATUS==='cancelled'?' selected':'')+'>Canceladas</option><option value="todos"'+(VD_STATUS==='todos'?' selected':'')+'>Todas</option></select></div>';
   /* PATCH_FILTRO_VISAO_MODALIDADE - dropdown Modalidade */
   h += '<div><div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Modalidade</div><select onchange="VD_MODALIDADE=this.value;VD_PAGINA=1;rVdVisao()" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;background:#fff;"><option value="todas"'+(VD_MODALIDADE==='todas'?' selected':'')+'>Todas</option><option value="flex"'+(VD_MODALIDADE==='flex'?' selected':'')+'>Flex</option><option value="full"'+(VD_MODALIDADE==='full'?' selected':'')+'>Full</option><option value="agencia"'+(VD_MODALIDADE==='agencia'?' selected':'')+'>Agencia</option></select></div>';
@@ -8198,7 +8207,11 @@ function vdVisaoRender(){
       h += '<tr style="border-bottom:1px solid #f3f4f6;">';
       var bdg = d.eh_troca_devolucao ? '<span style="background:#fbbf24;color:#78350f;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;margin-right:4px;" title="Troca/Devolucao">TROCA</span>' : '';
       h += '<td style="padding:8px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(d.item_title||'').replace(/"/g,'&quot;')+'">'+bdg+(d.item_title||'-').slice(0,40)+'</td>';
-      h += '<td style="padding:8px;font-size:11px;">'+(d.conta_interna_id||'-')+'</td>';
+      var _mk = (d.marketplace==='Shopee')
+        ? '<span style="background:#FFE8D9;color:#C2410C;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;margin-right:4px;">SHOPEE</span>'
+        : '<span style="background:#FFF3CD;color:#856404;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;margin-right:4px;">ML</span>';
+      var _ct = d.marketplace==='Shopee' ? 'verssene' : (d.conta_interna_id||'-');
+      h += '<td style="padding:8px;font-size:11px;white-space:nowrap;">'+_mk+_ct+'</td>';
       h += '<td style="padding:8px;font-family:monospace;font-size:11px;">'+(d.sku||'-')+'</td>';
       h += '<td style="padding:8px;font-size:11px;">'+dtBR+'</td>';
       h += '<td style="padding:8px;text-align:center;font-size:11px;">'+modal+'</td>';
