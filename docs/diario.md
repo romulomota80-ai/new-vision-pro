@@ -4,6 +4,43 @@ Log das mudanças e decisões. O mais recente em cima.
 
 ## 2026-06-15
 
+### Devoluções Shopee — FASE 5 (responder nativo pela API + provas + Telegram)
+
+A devolução deixou de ser só leitura: agora dá pra **responder direto pelo app**.
+
+**Descoberta segura da API (probes):** os 8 endpoints de escrita da Shopee Returns v2
+existem e o app tem acesso (confirmado com `return_sn` falso — recusa só por "não
+existe", nunca por permissão). Shapes travados rodando READs num return real + body
+incompleto (erro de "param faltando" sem efetivar):
+- `confirm` / `accept_offer` / `cancel_dispute` → `{return_sn}`
+- `dispute` → `{return_sn, email, dispute_reason (int do enum), dispute_text_reason}`
+- `offer` → `{return_sn, proposed_solution (ex.: RETURN_REFUND/REFUND), proposed_compensation_amount?}`
+- `upload_proof` → `{return_sn, proof_image[], proof_video[]}`
+- `get_return_detail` traz `negotiation` (oferta do comprador + `counter_limit`) e
+  `seller_proof` — **fonte autoritativa do estado**, usada pra decidir os botões.
+
+**Backend (`routes/shopee.js`):** 8 endpoints novos. Cada ação chama a API → grava
+evento na timeline (`autor=vendedor`) → re-busca `get_return_detail` e re-mapeia a linha
+(status_interno/precisa_acao autoritativos; preserva resultado_valor/resolvida_em/
+responsavel) → seta campos manuais. Erro soft da Shopee (HTTP 200 + `{error}`) **não**
+altera o banco. READs auxiliares: `/devolucoes/detalhe`, `/devolucoes/motivos-disputa`.
+
+**Provas do vendedor (5C):** `POST /devolucoes/upload` (base64 → Supabase Storage,
+bucket público `devolucoes-provas`, arquivos em `{return_sn}/`) → URLs públicas que
+alimentam o `upload_proof`. Limpeza automática 30 dias após a devolução resolver.
+
+**Alerta Telegram (5E):** ao sincronizar, devoluções **novas que já precisam de resposta**
+disparam mensagem (HTTP direto, sem instanciar 2º bot). Idempotente → sem repetição.
+
+**Cron (`server.js`):** sync de devoluções a cada 2h (mantém prazos frescos — antes o
+badge contava devoluções **já vencidas**, pois o sync era manual) + limpeza de provas 04h.
+
+**Frontend (`index.html`, namespace `dv*`):** o modal de detalhe ganhou painel de ações
+dirigido pelo `/detalhe` — Aceitar devolução / Aceitar oferta (R$ X) / Contraproposta /
+Disputar (com dropdown de motivos + texto) / Enviar provas (upload) / Cancelar disputa.
+Thread (timeline) com ícones por tipo de evento; prazo com alerta visual (já existia).
+Após cada ação: recarrega estado, timeline e badge. JS validado (7 blocos, `node --check`).
+
 ### Devoluções Shopee — FASE 4 (polimento do frontend + produção)
 
 Sub-aba **Devoluções** dentro da aba Shopee finalizada e publicada em produção

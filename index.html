@@ -8739,12 +8739,15 @@ function dvCSV(){
   var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='devolucoes_'+DV_VIEW+'.csv'; a.click();
 }
 
+var DV_SN=null, DV_DET=null;
+function dvPOST(path, body){ var base=(typeof BACKEND_URL!=="undefined"&&BACKEND_URL?BACKEND_URL:''); return fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}).then(function(r){return r.json();}); }
+
 async function dvAbrir(sn){
+  DV_SN=sn; DV_DET=null;
   var d=DV_ROWS.filter(function(x){return x.return_sn===sn;})[0]||{return_sn:sn};
   var pc=d.provas_cliente||{},imgs=pc.imagens||[],vids=pc.videos||[];
   var galeria=imgs.map(function(u){ return '<a href="'+u+'" target="_blank" rel="noopener"><img src="'+u+'" style="width:74px;height:74px;object-fit:cover;border-radius:8px;border:1px solid var(--BR);"></a>'; }).join('')
     + vids.map(function(u){ return '<a href="'+u+'" target="_blank" rel="noopener" style="width:74px;height:74px;border-radius:8px;border:1px solid var(--BR);display:flex;align-items:center;justify-content:center;background:var(--C2);font-size:22px;">🎬</a>'; }).join('');
-  var sellerUrl='https://seller.shopee.com.br/portal/returns';
   var ov=document.createElement('div'); ov.id='dv-modal'; ov.onclick=function(e){ if(e.target===ov) dvFecharModal(); };
   ov.style.cssText='position:fixed;inset:0;background:rgba(10,12,20,.55);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:30px 14px;overflow-y:auto;';
   ov.innerHTML='<div class="card" style="max-width:680px;width:100%;padding:0;overflow:hidden;">'
@@ -8762,18 +8765,121 @@ async function dvAbrir(sn){
     +'</div>'
     +(d.motivo_texto?'<div><div style="font-size:10px;color:var(--MU);text-transform:uppercase;margin-bottom:3px;">Texto do cliente</div><div style="font-size:13px;opacity:.9;">“'+shEsc(d.motivo_texto)+'”</div></div>':'')
     +(galeria?'<div><div style="font-size:10px;color:var(--MU);text-transform:uppercase;margin-bottom:6px;">Provas do cliente</div><div style="display:flex;gap:8px;flex-wrap:wrap;">'+galeria+'</div></div>':'')
+    +'<div id="dv-acoes"><div style="font-size:11px;color:var(--MU);">Carregando ações…</div></div>'
     +'<div id="dv-timeline"><div style="font-size:11px;color:var(--MU);">Carregando histórico…</div></div>'
-    +'<div style="display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--BR);padding-top:12px;flex-wrap:wrap;">'
-    +'<a href="'+sellerUrl+'" target="_blank" rel="noopener" style="text-decoration:none;background:#ee4d2d;color:#fff;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:600;">↗ Responder no Seller Center</a>'
-    +'</div>'
-    +'<div style="font-size:10px;color:var(--MU);text-align:center;">Responder direto pelo app chega na próxima fase (a API permite).</div>'
     +'</div></div>';
   document.body.appendChild(ov);
-  try{ var ev=await dvAPI('/api/shopee/devolucoes/eventos?sn='+encodeURIComponent(sn)); var tl=ge('dv-timeline');
-    if(tl){ var its=(ev&&ev.itens)||[]; tl.innerHTML='<div style="font-size:10px;color:var(--MU);text-transform:uppercase;margin-bottom:6px;">Histórico</div>'+(its.length?its.map(function(e){ return '<div style="border-left:2px solid var(--BR);padding:2px 0 8px 10px;margin-left:3px;"><div style="font-size:11px;color:var(--MU);">'+shFdISO(e.data)+' · '+shEsc(e.autor||'')+'</div><div style="font-size:12px;">'+shEsc(e.texto||e.tipo||'')+'</div></div>'; }).join(''):'<div style="font-size:12px;color:var(--MU);">Sem eventos.</div>'); }
-  }catch(e){}
+  dvCarregaTimeline(sn);
+  try{ var j=await dvAPI('/api/shopee/devolucoes/detalhe?sn='+encodeURIComponent(sn)); DV_DET=(j&&j.detalhe)||{}; }catch(e){ DV_DET={}; }
+  dvRenderAcoes();
 }
 function dvFecharModal(){ var m=ge('dv-modal'); if(m) m.remove(); }
+
+var DV_EV_IC={abertura:'📩',status:'🔁',prova_cliente:'📎',prova_vendedor:'🖼️',oferta:'💬',disputa:'⚖️',nota:'📝'};
+async function dvCarregaTimeline(sn){
+  try{ var ev=await dvAPI('/api/shopee/devolucoes/eventos?sn='+encodeURIComponent(sn)); var tl=ge('dv-timeline'); if(!tl) return;
+    var its=(ev&&ev.itens)||[];
+    tl.innerHTML='<div style="font-size:10px;color:var(--MU);text-transform:uppercase;margin-bottom:6px;">Histórico</div>'+(its.length?its.map(function(e){ var ic=DV_EV_IC[e.tipo]||'•'; return '<div style="border-left:2px solid var(--BR);padding:2px 0 8px 10px;margin-left:3px;"><div style="font-size:11px;color:var(--MU);">'+shFdISO(e.data)+' · '+shEsc(e.autor||'')+'</div><div style="font-size:12px;">'+ic+' '+shEsc(e.texto||e.tipo||'')+'</div></div>'; }).join(''):'<div style="font-size:12px;color:var(--MU);">Sem eventos.</div>');
+  }catch(e){}
+}
+
+function dvRenderAcoes(){
+  var box=ge('dv-acoes'); if(!box) return; var det=DV_DET||{};
+  var status=(det.status||'').toUpperCase();
+  var neg=det.negotiation||{}, negSt=neg.negotiation_status||'';
+  var proofSt=(det.seller_proof&&det.seller_proof.seller_proof_status)||'';
+  var terminal=/ACCEPTED|CANCELLED|CLOSED|SUCCESS|FAIL/.test(status);
+  if(terminal){ box.innerHTML='<div style="background:var(--C2);border-radius:10px;padding:12px;font-size:12px;color:var(--MU);text-align:center;border-top:1px solid var(--BR);">Devolução encerrada — sem ações pendentes.</div>'; return; }
+  var bS='border:none;border-radius:8px;padding:9px 14px;font-size:12px;font-weight:600;cursor:pointer;';
+  var btns='';
+  if(negSt==='PENDING_RESPOND' && neg.latest_offer_amount!=null){
+    btns+='<button onclick="dvAceitarOferta()" style="'+bS+'background:#16a34a;color:#fff;">✅ Aceitar oferta (R$ '+dvFmtR(neg.latest_offer_amount)+')</button>';
+    btns+='<button onclick="dvFormOferta()" style="'+bS+'background:#5b8cff;color:#fff;">💬 Contraproposta</button>';
+  } else {
+    btns+='<button onclick="dvAceitar()" style="'+bS+'background:#16a34a;color:#fff;">✅ Aceitar devolução</button>';
+  }
+  btns+='<button onclick="dvFormDisputa()" style="'+bS+'background:#f59e0b;color:#fff;">⚖️ Disputar</button>';
+  btns+='<button onclick="dvFormProvas()" style="'+bS+'background:var(--C2);color:var(--TX);border:1px solid var(--BR);">🖼️ Enviar provas</button>';
+  if(proofSt==='PENDING') btns+='<button onclick="dvCancelarDisputa()" style="'+bS+'background:transparent;color:var(--MU);border:1px solid var(--BR);">✖ Cancelar disputa</button>';
+  var sellerUrl='https://seller.shopee.com.br/portal/returns';
+  box.innerHTML='<div style="border-top:1px solid var(--BR);padding-top:12px;"><div style="font-size:10px;color:var(--MU);text-transform:uppercase;margin-bottom:8px;">Responder</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'+btns+'</div>'
+    +(negSt==='PENDING_RESPOND'&&neg.latest_offer_amount!=null?'<div style="font-size:10px;color:var(--MU);margin-top:6px;">Comprador propôs '+shEsc(neg.latest_solution||'')+' de R$ '+dvFmtR(neg.latest_offer_amount)+(neg.counter_limit!=null?(' · contrapropostas restantes: '+neg.counter_limit):'')+'</div>':'')
+    +'<div id="dv-form" style="margin-top:10px;"></div>'
+    +'<div style="margin-top:8px;text-align:right;"><a href="'+sellerUrl+'" target="_blank" rel="noopener" style="font-size:10px;color:var(--MU);">ou abrir no Seller Center ↗</a></div>'
+    +'</div>';
+}
+function dvFormFechar(){ var f=ge('dv-form'); if(f) f.innerHTML=''; }
+
+async function dvAposAcao(j, okMsg){
+  if(!j||j.erro||j.ok===false){ alert('Erro: '+((j&&(j.erro||(j.shopee&&j.shopee.message)))||'falha')); return false; }
+  try{ var dj=await dvAPI('/api/shopee/devolucoes/detalhe?sn='+encodeURIComponent(DV_SN)); DV_DET=(dj&&dj.detalhe)||DV_DET; }catch(e){}
+  dvRenderAcoes(); dvCarregaTimeline(DV_SN); dvAtualizaBadge();
+  var f=ge('dv-form'); if(f&&okMsg) f.innerHTML='<div style="color:#16a34a;font-size:12px;font-weight:600;">✔ '+okMsg+'</div>';
+  return true;
+}
+
+async function dvAceitar(){ if(!confirm('Aceitar a devolução? O comprador será reembolsado (vira prejuízo).')) return; var j=await dvPOST('/api/shopee/devolucoes/aceitar',{sn:DV_SN}); if(await dvAposAcao(j,'Devolução aceita.')) dvLoad(); }
+async function dvAceitarOferta(){ if(!confirm('Aceitar a oferta do comprador?')) return; var j=await dvPOST('/api/shopee/devolucoes/aceitar-oferta',{sn:DV_SN}); if(await dvAposAcao(j,'Oferta aceita.')) dvLoad(); }
+async function dvCancelarDisputa(){ if(!confirm('Cancelar a disputa em andamento?')) return; var j=await dvPOST('/api/shopee/devolucoes/cancelar-disputa',{sn:DV_SN}); if(await dvAposAcao(j,'Disputa cancelada.')) dvLoad(); }
+
+async function dvFormDisputa(){
+  var f=ge('dv-form'); if(!f) return; f.innerHTML='<div style="font-size:12px;color:var(--MU);">Carregando motivos…</div>';
+  var mot=[]; try{ var j=await dvAPI('/api/shopee/devolucoes/motivos-disputa?sn='+encodeURIComponent(DV_SN)); mot=(j&&j.motivos)||[]; }catch(e){}
+  var opts=mot.map(function(m){ var req=(m.dispute_requirement||'').replace(/\n/g,' ').slice(0,48); return '<option value="'+m.dispute_reason+'">#'+m.dispute_reason+(req?(' — '+shEsc(req)):'')+'</option>'; }).join('');
+  f.innerHTML='<div style="background:var(--C2);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;">'
+    +'<div style="font-size:11px;font-weight:700;">⚖️ Abrir disputa</div>'
+    +'<input id="dv-disp-email" type="email" placeholder="Seu e-mail de contato" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:8px;padding:8px;font-size:12px;">'
+    +'<select id="dv-disp-reason" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:8px;padding:8px;font-size:12px;">'+(opts||'<option value="">(sem motivos disponíveis)</option>')+'</select>'
+    +'<textarea id="dv-disp-text" placeholder="Explique por que está disputando" rows="3" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:8px;padding:8px;font-size:12px;resize:vertical;font-family:inherit;"></textarea>'
+    +'<div style="font-size:10px;color:var(--MU);">Dica: anexe provas antes (🖼️) — alguns motivos exigem evidência.</div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;"><button onclick="dvFormFechar()" style="background:transparent;border:1px solid var(--BR);color:var(--TX);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;">Cancelar</button><button onclick="dvDisputar()" style="background:#f59e0b;border:none;color:#fff;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;">Enviar disputa</button></div>'
+    +'</div>';
+}
+async function dvDisputar(){
+  var email=(ge('dv-disp-email')||{}).value, reason=(ge('dv-disp-reason')||{}).value, txt=(ge('dv-disp-text')||{}).value;
+  if(!email||!reason){ alert('Informe e-mail e motivo.'); return; }
+  var j=await dvPOST('/api/shopee/devolucoes/disputar',{sn:DV_SN,email:email,dispute_reason:Number(reason),dispute_text_reason:txt});
+  if(await dvAposAcao(j,'Disputa enviada.')) dvLoad();
+}
+
+function dvFormOferta(){
+  var f=ge('dv-form'); if(!f) return;
+  f.innerHTML='<div style="background:var(--C2);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;">'
+    +'<div style="font-size:11px;font-weight:700;">💬 Contraproposta</div>'
+    +'<select id="dv-off-sol" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:8px;padding:8px;font-size:12px;"><option value="REFUND">Reembolso sem devolução do produto</option><option value="RETURN_REFUND">Devolução + reembolso</option></select>'
+    +'<input id="dv-off-amt" type="number" step="0.01" placeholder="Valor do reembolso (R$) — opcional" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:8px;padding:8px;font-size:12px;">'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;"><button onclick="dvFormFechar()" style="background:transparent;border:1px solid var(--BR);color:var(--TX);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;">Cancelar</button><button onclick="dvOfertar()" style="background:#5b8cff;border:none;color:#fff;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;">Enviar oferta</button></div>'
+    +'</div>';
+}
+async function dvOfertar(){
+  var sol=(ge('dv-off-sol')||{}).value, amt=(ge('dv-off-amt')||{}).value;
+  var body={sn:DV_SN,proposed_solution:sol}; if(amt) body.proposed_compensation_amount=Number(amt);
+  var j=await dvPOST('/api/shopee/devolucoes/ofertar',body);
+  if(await dvAposAcao(j,'Oferta enviada.')) dvLoad();
+}
+
+function dvFormProvas(){
+  var f=ge('dv-form'); if(!f) return;
+  f.innerHTML='<div style="background:var(--C2);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;">'
+    +'<div style="font-size:11px;font-weight:700;">🖼️ Enviar provas do vendedor</div>'
+    +'<input id="dv-prov-files" type="file" accept="image/*" multiple style="font-size:12px;color:var(--TX);">'
+    +'<div id="dv-prov-status" style="font-size:11px;color:var(--MU);"></div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;"><button onclick="dvFormFechar()" style="background:transparent;border:1px solid var(--BR);color:var(--TX);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;">Cancelar</button><button onclick="dvEnviarProvas()" style="background:#5b8cff;border:none;color:#fff;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;">Subir e anexar</button></div>'
+    +'</div>';
+}
+function dvFileB64(file){ return new Promise(function(res){ var r=new FileReader(); r.onload=function(){ res({nome:file.name,tipo:file.type,base64:String(r.result)}); }; r.readAsDataURL(file); }); }
+async function dvEnviarProvas(){
+  var inp=ge('dv-prov-files'), st=ge('dv-prov-status');
+  if(!inp||!inp.files||!inp.files.length){ alert('Escolha ao menos uma imagem.'); return; }
+  if(st) st.textContent='Subindo '+inp.files.length+' arquivo(s)…';
+  var arquivos=[]; for(var i=0;i<inp.files.length;i++){ arquivos.push(await dvFileB64(inp.files[i])); }
+  var up=await dvPOST('/api/shopee/devolucoes/upload',{sn:DV_SN,arquivos:arquivos});
+  if(!up||up.erro||!up.urls){ if(st) st.textContent='Erro no upload: '+((up&&up.erro)||'falha'); return; }
+  if(st) st.textContent='Anexando à devolução…';
+  var j=await dvPOST('/api/shopee/devolucoes/provas',{sn:DV_SN,proof_image:up.urls});
+  if(await dvAposAcao(j,'Provas enviadas ('+up.urls.length+').')) dvLoad();
+}
 
 // ── 1) RESUMO (fechamento) ──────────────────────────────────────
 async function rShResumo(){
