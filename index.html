@@ -8107,99 +8107,133 @@ function vdVisaoRender(){
   if(VD_MOSTRAR_TROCAS) visivel = trocas; /*PATCH_TROCAS_V3*/
   visivel = visivel.slice().sort(function(a,b){return new Date(b.data_venda)-new Date(a.data_venda);});
   
-  var h = '';
-  
+  // Estilo "futurista delicado" (injetado 1x): hover/focus/transicoes que inline nao cobre
+  if(!document.getElementById('vd-fx-style')){
+    var _st = document.createElement('style'); _st.id = 'vd-fx-style';
+    _st.textContent = ''
+      + '.vd-surface{background:linear-gradient(180deg,#fcfcff,#f4f5fb);border:1px solid #eceef5;border-radius:22px;padding:20px;}'
+      + '.vd-surface,.vd-surface table{font-variant-numeric:tabular-nums;font-feature-settings:"tnum";}'
+      + '.vd-card.vd-hero{position:relative;}'
+      + '.vd-card.vd-hero:hover{box-shadow:0 14px 34px -10px rgba(30,92,42,.45);}'
+      + '.vd-card{transition:transform .22s cubic-bezier(.2,.7,.3,1),box-shadow .22s ease;}'
+      + '.vd-card:hover{transform:translateY(-3px);box-shadow:0 10px 28px -10px rgba(60,40,120,.28);}'
+      + '.vd-btn{transition:filter .15s,transform .08s,box-shadow .15s;}'
+      + '.vd-btn:hover{filter:brightness(1.06);} .vd-btn:active{transform:translateY(1px);}'
+      + '.vd-fil{transition:border-color .15s,box-shadow .15s,background .15s;}'
+      + '.vd-fil:focus{outline:none;border-color:#7c5cff;box-shadow:0 0 0 3px rgba(124,92,255,.16);background:#fff;}'
+      + '.vd-tb tbody tr{transition:background .12s;} .vd-tb tbody tr:hover{background:#f7f7fd;}'
+      + '.vd-chip{transition:all .15s;} .vd-chk{accent-color:#7c5cff;}';
+    document.head.appendChild(_st);
+  }
+
+  var h = '<div class="vd-surface">';
+
   // Header com botoes de periodo
-  h += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">';
-  h += '<div><div style="font-size:18px;font-weight:600;">Visao Geral - Vendas</div><div style="font-size:11px;color:#888;margin-top:2px;">Periodo (BRT): '+VD_DATA_INI+' ate '+VD_DATA_FIM+'</div></div>';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;">';
+  h += '<div><div style="font-size:19px;font-weight:700;letter-spacing:-.3px;color:#1c2333;">Visao Geral · Vendas</div><div style="font-size:11px;color:#98a0b3;margin-top:3px;letter-spacing:.2px;">Periodo (BRT): '+VD_DATA_INI+' ate '+VD_DATA_FIM+'</div></div>';
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
   var ats = [['hoje','Hoje'],['ontem','Ontem'],['7d','7 dias'],['mes','Este Mes'],['mes_passado','Mes Passado'],['30d','30 dias']];
   ats.forEach(function(a){
     var on = VD_PERIODO === a[0];
-    h += '<button onclick="vdAtalho(\''+a[0]+'\')" style="padding:6px 12px;background:'+(on?'#185FA5':'#fff')+';color:'+(on?'#fff':'#374151')+';border:1px solid '+(on?'#185FA5':'#ddd')+';border-radius:6px;font-size:12px;cursor:pointer;font-weight:'+(on?'600':'400')+';">'+a[1]+'</button>';
+    var stOn = 'background:linear-gradient(135deg,#7c5cff,#5b8cff);color:#fff;border:1px solid transparent;box-shadow:0 4px 12px -2px rgba(108,84,255,.45);font-weight:600;';
+    var stOff = 'background:#fff;color:#5a6478;border:1px solid #e6e8f0;font-weight:500;';
+    h += '<button class="vd-chip vd-btn" onclick="vdAtalho(\''+a[0]+'\')" style="padding:7px 13px;border-radius:9px;font-size:12px;cursor:pointer;'+(on?stOn:stOff)+'">'+a[1]+'</button>';
   });
   h += '</div></div>';
   
   // Banner trocas/devolucoes (nao impactam financeiro)
   if(trocas.length > 0){
-    h += '<div onclick="VD_MOSTRAR_TROCAS=!VD_MOSTRAR_TROCAS;vdVisaoRender()" style="background:' + (VD_MOSTRAR_TROCAS?'#fde68a':'#fef3c7') + ';border:2px solid ' + (VD_MOSTRAR_TROCAS?'#d97706':'#fbbf24') + ';border-radius:8px;padding:12px 16px;margin-bottom:14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;transition:all .15s;">';
-    h += '<div><div style="font-size:11px;color:#92400e;font-weight:600;">&#8505;&#65039; TROCAS / DEVOLUCOES NO PERIODO</div><div style="font-size:13px;color:#78350f;margin-top:2px;">' + trocas.length + ' operacoes &middot; R$ ' + vdFmt(trocasSum) + ' &middot; <span style="opacity:0.7">nao impactam faturamento ou lucro</span></div></div>';
-    h += '<div style="font-size:12px;color:#78350f;font-weight:700;padding:8px 14px;background:rgba(255,255,255,.6);border-radius:6px;white-space:nowrap;">' + (VD_MOSTRAR_TROCAS?'&laquo; Voltar para vendas':'Ver trocas &rsaquo;') + '</div>';
+    h += '<div class="vd-btn" onclick="VD_MOSTRAR_TROCAS=!VD_MOSTRAR_TROCAS;vdVisaoRender()" style="background:' + (VD_MOSTRAR_TROCAS?'linear-gradient(135deg,#fde9b8,#fcdf9b)':'linear-gradient(135deg,#fef6e0,#fdf0cf)') + ';border:1px solid ' + (VD_MOSTRAR_TROCAS?'#e9b949':'#f4dca0') + ';border-radius:14px;padding:13px 17px;margin-bottom:16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;box-shadow:0 4px 14px -8px rgba(180,130,20,.4);">';
+    h += '<div><div style="font-size:10px;color:#a4690c;font-weight:700;letter-spacing:.5px;">&#8505;&#65039; TROCAS / DEVOLUCOES NO PERIODO</div><div style="font-size:13px;color:#78350f;margin-top:3px;">' + trocas.length + ' operacoes &middot; R$ ' + vdFmt(trocasSum) + ' &middot; <span style="opacity:0.7">nao impactam faturamento ou lucro</span></div></div>';
+    h += '<div style="font-size:12px;color:#78350f;font-weight:700;padding:8px 14px;background:rgba(255,255,255,.75);border-radius:9px;white-space:nowrap;">' + (VD_MOSTRAR_TROCAS?'&laquo; Voltar para vendas':'Ver trocas &rsaquo;') + '</div>';
     h += '</div>';
   }
   
   // 5 cards principais
-  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-bottom:14px;">';
-  
-  h += '<div style="background:linear-gradient(135deg,#E6E1F0,#D4CDE6);padding:14px;border-radius:10px;">';
-  h += '<div style="font-size:11px;color:#5C4D8A;margin-bottom:4px;font-weight:600;">VENDAS APROVADAS</div>';
-  h += '<div style="font-size:22px;font-weight:700;color:#3D2D6A;">R$ '+vdFmt(aprovSum)+'</div>';
-  h += '<div style="font-size:10px;color:#5C4D8A;margin-top:6px;">Faturamento: R$ '+vdFmt(faturamentoML)+'</div>';
-  h += '<div style="font-size:10px;color:#A32D2D;">Canceladas: R$ '+vdFmt(cancSum)+'</div>';
+  var _lbl = 'font-size:10px;font-weight:700;letter-spacing:.6px;margin-bottom:7px;opacity:.92;';
+  var _big = 'font-size:23px;font-weight:700;letter-spacing:-.5px;';
+  var _sub = 'font-size:10px;margin-top:7px;opacity:.9;';
+  var _cs  = 'padding:16px 17px;border-radius:18px;border:1px solid rgba(255,255,255,.55);box-shadow:0 1px 2px rgba(20,16,50,.05),0 10px 22px -14px rgba(40,30,90,.3);';
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:16px;">';
+
+  h += '<div class="vd-card" style="background:linear-gradient(135deg,#efeafe,#e4dcfb);'+_cs+'">';
+  h += '<div style="'+_lbl+'color:#5C4D8A;">VENDAS APROVADAS</div>';
+  h += '<div style="'+_big+'color:#3D2D6A;">R$ '+vdFmt(aprovSum)+'</div>';
+  h += '<div style="'+_sub+'color:#5C4D8A;">Faturamento: R$ '+vdFmt(faturamentoML)+'</div>';
+  h += '<div style="font-size:10px;color:#A32D2D;opacity:.9;">Canceladas: R$ '+vdFmt(cancSum)+'</div>';
   h += '</div>';
-  
-  h += '<div style="background:linear-gradient(135deg,#FAEEDA,#F4D8AA);padding:14px;border-radius:10px;">';
-  h += '<div style="font-size:11px;color:#854F0B;margin-bottom:4px;font-weight:600;">CUSTO &amp; IMPOSTO</div>';
-  h += '<div style="font-size:22px;font-weight:700;color:#5C3D0A;">R$ '+vdFmt(custoImp)+'</div>';
-  h += '<div style="font-size:10px;color:#854F0B;margin-top:6px;">Custo: R$ '+vdFmt(custoTotal)+'</div>';
-  h += '<div style="font-size:10px;color:#854F0B;">Imposto: R$ '+vdFmt(impostoTotal)+'</div>';
+
+  h += '<div class="vd-card" style="background:linear-gradient(135deg,#fdf0dc,#f9e3c0);'+_cs+'">';
+  h += '<div style="'+_lbl+'color:#854F0B;">CUSTO &amp; IMPOSTO</div>';
+  h += '<div style="'+_big+'color:#5C3D0A;">R$ '+vdFmt(custoImp)+'</div>';
+  h += '<div style="'+_sub+'color:#854F0B;">Custo: R$ '+vdFmt(custoTotal)+'</div>';
+  h += '<div style="font-size:10px;color:#854F0B;opacity:.9;">Imposto: R$ '+vdFmt(impostoTotal)+'</div>';
   h += '</div>';
-  
-  h += '<div style="background:linear-gradient(135deg,#FFF8DA,#FFEDA8);padding:14px;border-radius:10px;">';
-  h += '<div style="font-size:11px;color:#7A5C0A;margin-bottom:4px;font-weight:600;">TARIFA ML</div>';
-  h += '<div style="font-size:22px;font-weight:700;color:#5C4407;">R$ '+vdFmt(tarifaTotal)+'</div>';
-  h += '<div style="font-size:10px;color:#7A5C0A;margin-top:6px;">'+(aprovSum>0?(tarifaTotal/aprovSum*100).toFixed(1):'0.0')+'% das vendas</div>';
+
+  h += '<div class="vd-card" style="background:linear-gradient(135deg,#fdf8df,#fcf0bd);'+_cs+'">';
+  h += '<div style="'+_lbl+'color:#7A5C0A;">TARIFA ML</div>';
+  h += '<div style="'+_big+'color:#5C4407;">R$ '+vdFmt(tarifaTotal)+'</div>';
+  h += '<div style="'+_sub+'color:#7A5C0A;">'+(aprovSum>0?(tarifaTotal/aprovSum*100).toFixed(1):'0.0')+'% das vendas</div>';
   h += '</div>';
-  
-  h += '<div style="background:linear-gradient(135deg,#DCEAFA,#B8D4F0);padding:14px;border-radius:10px;">';
-  h += '<div style="font-size:11px;color:#1E4880;margin-bottom:4px;font-weight:600;">FRETE VENDEDOR</div>';
-  h += '<div style="font-size:22px;font-weight:700;color:#0D3060;">R$ '+vdFmt(freteVend)+'</div>';
-  h += '<div style="font-size:10px;color:#1E4880;margin-top:6px;">'+(aprovSum>0?(freteVend/aprovSum*100).toFixed(1):'0.0')+'% das vendas</div>';
+
+  h += '<div class="vd-card" style="background:linear-gradient(135deg,#e7f0fd,#d6e6fb);'+_cs+'">';
+  h += '<div style="'+_lbl+'color:#1E4880;">FRETE VENDEDOR</div>';
+  h += '<div style="'+_big+'color:#0D3060;">R$ '+vdFmt(freteVend)+'</div>';
+  h += '<div style="'+_sub+'color:#1E4880;">'+(aprovSum>0?(freteVend/aprovSum*100).toFixed(1):'0.0')+'% das vendas</div>';
   h += '</div>';
-  
-  h += '<div style="background:linear-gradient(135deg,#D5EFD9,#A8DEB1);padding:14px;border-radius:10px;">';
-  h += '<div style="font-size:11px;color:#1E5C2A;margin-bottom:4px;font-weight:600;">MARGEM CONTRIBUICAO</div>';
-  h += '<div style="font-size:22px;font-weight:700;color:#0F4017;">R$ '+vdFmt(mcTotal)+'</div>';
-  h += '<div style="font-size:14px;font-weight:700;color:#1E5C2A;margin-top:4px;">'+mcPct.toFixed(2)+'%</div>';
+
+  var _csMC = 'padding:16px 17px;border-radius:18px;border:1.5px solid #8FC159;box-shadow:0 1px 2px rgba(20,16,50,.05),0 16px 32px -12px rgba(30,92,42,.42);';
+  h += '<div class="vd-card vd-hero" style="background:linear-gradient(135deg,#e2f6e7,#c9edd1);'+_csMC+'">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">';
+  h += '<div style="'+_lbl+'margin-bottom:0;color:#1E5C2A;">MARGEM CONTRIBUICAO</div>';
+  h += '<span style="font-size:8.5px;font-weight:800;letter-spacing:.6px;color:#0F4017;background:rgba(255,255,255,.65);padding:2px 7px;border-radius:20px;">RESULTADO</span>';
+  h += '</div>';
+  h += '<div style="'+_big+'color:#0F4017;">R$ '+vdFmt(mcTotal)+'</div>';
+  h += '<div style="font-size:14px;font-weight:700;color:#1E5C2A;margin-top:5px;">'+mcPct.toFixed(2)+'%</div>';
   h += '</div>';
   /* PATCH_CARD_FILTRO_FLEX */
   var qtdFlexVisao = aprov.filter(function(v){ return (v.modalidade==='self_service') && (!v.eh_troca_devolucao); }).length;
   var custoFlexTransp = qtdFlexVisao * 12;
-  h += '<div style="background:linear-gradient(135deg,#E5E7EB,#D1D5DB);padding:14px;border-radius:10px;">';
-  h += '<div style="font-size:11px;color:#4B5563;margin-bottom:4px;font-weight:600;">CUSTO FLEX</div>';
-  h += '<div style="font-size:22px;font-weight:700;color:#292333;">R$ '+vdFmt(custoFlexTransp)+'</div>';
-  h += '<div style="font-size:10px;color:#6B7280;margin-top:6px;">'+qtdFlexVisao+' vendas × R$12 (nao entra na MC)</div>';
-  h += '<div style="font-size:10px;color:#6B7280;">despesa operacional</div>'
+  h += '<div class="vd-card" style="background:linear-gradient(135deg,#eef0f4,#e3e6ee);'+_cs+'">';
+  h += '<div style="'+_lbl+'color:#4B5563;">CUSTO FLEX</div>';
+  h += '<div style="'+_big+'color:#292333;">R$ '+vdFmt(custoFlexTransp)+'</div>';
+  h += '<div style="'+_sub+'color:#6B7280;">'+qtdFlexVisao+' vendas × R$12 (nao entra na MC)</div>';
+  h += '<div style="font-size:10px;color:#6B7280;opacity:.9;">despesa operacional</div>'
   h += '</div>';
-  
+
   h += '</div>';
   
   // Stats extras
-  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:14px;font-size:12px;">';
-  h += '<div style="background:#f9fafb;padding:10px;border-radius:8px;"><div style="color:#6b7280;">Qtd Aprovadas</div><div style="font-weight:600;font-size:16px;">'+aprov.length+'</div></div>';
-  h += '<div style="background:#FCEBEB;padding:10px;border-radius:8px;"><div style="color:#A32D2D;">Qtd Canceladas</div><div style="font-weight:600;font-size:16px;color:#791F1F;">'+canc.length+'</div></div>';
-  h += '<div style="background:#f9fafb;padding:10px;border-radius:8px;"><div style="color:#6b7280;">Ticket Medio</div><div style="font-weight:600;font-size:16px;">R$ '+vdFmt(ticketMedio)+'</div></div>';
-  h += '<div style="background:#f9fafb;padding:10px;border-radius:8px;"><div style="color:#6b7280;">Taxa Cancel.</div><div style="font-weight:600;font-size:16px;">'+(dados.length>0?(canc.length/dados.length*100).toFixed(1):'0')+'%</div></div>';
+  var _scs = 'padding:12px 14px;border-radius:14px;border:1px solid #edeef4;box-shadow:0 1px 2px rgba(20,16,50,.03);';
+  var _sl = 'font-size:11px;letter-spacing:.2px;';
+  var _sv = 'font-weight:700;font-size:17px;margin-top:3px;letter-spacing:-.3px;';
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px;font-size:12px;">';
+  h += '<div style="background:rgba(255,255,255,.7);'+_scs+'"><div style="'+_sl+'color:#8a93a6;">Qtd Aprovadas</div><div style="'+_sv+'color:#1c2333;">'+aprov.length+'</div></div>';
+  h += '<div style="background:linear-gradient(135deg,#fdedec,#fbe2e0);'+_scs+'"><div style="'+_sl+'color:#A32D2D;">Qtd Canceladas</div><div style="'+_sv+'color:#791F1F;">'+canc.length+'</div></div>';
+  h += '<div style="background:rgba(255,255,255,.7);'+_scs+'"><div style="'+_sl+'color:#8a93a6;">Ticket Medio</div><div style="'+_sv+'color:#1c2333;">R$ '+vdFmt(ticketMedio)+'</div></div>';
+  h += '<div style="background:rgba(255,255,255,.7);'+_scs+'"><div style="'+_sl+'color:#8a93a6;">Taxa Cancel.</div><div style="'+_sv+'color:#1c2333;">'+(dados.length>0?(canc.length/dados.length*100).toFixed(1):'0')+'%</div></div>';
   h += '</div>';
   
   // Filtros
-  h += '<div style="background:#fff;border:1px solid #e5e7eb;padding:12px;border-radius:8px;margin-bottom:14px;">';
-  h += '<div style="font-size:12px;font-weight:600;margin-bottom:8px;">Filtros</div>';
-  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;">';
-  h += '<div><div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Data Inicio (BRT)</div><input type="date" value="'+VD_DATA_INI+'" onchange="VD_DATA_INI=this.value;VD_PERIODO=\'custom\'" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;"></div>';
-  h += '<div><div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Data Fim (BRT)</div><input type="date" value="'+VD_DATA_FIM+'" onchange="VD_DATA_FIM=this.value;VD_PERIODO=\'custom\'" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;"></div>';
-  h += '<div style="grid-column:span 2;"><div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Contas (marque e clique em Pesquisar)</div><div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:7px 0;">'
+  var _fl = 'font-size:10px;color:#8a93a6;margin-bottom:4px;letter-spacing:.3px;font-weight:600;';
+  var _fi = 'width:100%;padding:8px 10px;border:1px solid #e3e6ef;border-radius:10px;font-size:13px;background:#fbfbfe;color:#2a3042;';
+  h += '<div style="background:rgba(255,255,255,.72);border:1px solid #ebedf4;padding:14px 16px;border-radius:16px;margin-bottom:16px;box-shadow:0 1px 2px rgba(20,16,50,.03);">';
+  h += '<div style="font-size:11px;font-weight:700;letter-spacing:.5px;color:#7c5cff;margin-bottom:10px;">FILTROS</div>';
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">';
+  h += '<div><div style="'+_fl+'">Data Inicio (BRT)</div><input class="vd-fil" type="date" value="'+VD_DATA_INI+'" onchange="VD_DATA_INI=this.value;VD_PERIODO=\'custom\'" style="'+_fi+'"></div>';
+  h += '<div><div style="'+_fl+'">Data Fim (BRT)</div><input class="vd-fil" type="date" value="'+VD_DATA_FIM+'" onchange="VD_DATA_FIM=this.value;VD_PERIODO=\'custom\'" style="'+_fi+'"></div>';
+  h += '<div style="grid-column:span 2;"><div style="'+_fl+'">Contas (marque e clique em Pesquisar)</div><div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;padding:8px 0;">'
     + [['look_store','LOOK_STORE'],['moda_mix','MODA_MIX'],['verssene_shopee','VERSSENE (Shopee)']].map(function(o){
         var ck = (VD_CONTAS_SEL||[]).indexOf(o[0]) >= 0 ? ' checked' : '';
-        return '<label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;white-space:nowrap;"><input type="checkbox"'+ck+' onchange="vdToggleConta(\''+o[0]+'\',this.checked)" style="cursor:pointer;width:15px;height:15px;">'+o[1]+'</label>';
+        return '<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#3a4257;cursor:pointer;white-space:nowrap;"><input class="vd-chk" type="checkbox"'+ck+' onchange="vdToggleConta(\''+o[0]+'\',this.checked)" style="cursor:pointer;width:16px;height:16px;">'+o[1]+'</label>';
       }).join('')
     + '</div></div>';
-  h += '<div><div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Status</div><select onchange="VD_STATUS=this.value;vdVisaoRender()" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;background:#fff;"><option value="paid"'+(VD_STATUS==='paid'?' selected':'')+'>Aprovadas</option><option value="cancelled"'+(VD_STATUS==='cancelled'?' selected':'')+'>Canceladas</option><option value="todos"'+(VD_STATUS==='todos'?' selected':'')+'>Todas</option></select></div>';
+  h += '<div><div style="'+_fl+'">Status</div><select class="vd-fil" onchange="VD_STATUS=this.value;vdVisaoRender()" style="'+_fi+'"><option value="paid"'+(VD_STATUS==='paid'?' selected':'')+'>Aprovadas</option><option value="cancelled"'+(VD_STATUS==='cancelled'?' selected':'')+'>Canceladas</option><option value="todos"'+(VD_STATUS==='todos'?' selected':'')+'>Todas</option></select></div>';
   /* PATCH_FILTRO_VISAO_MODALIDADE - dropdown Modalidade */
-  h += '<div><div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Modalidade</div><select onchange="VD_MODALIDADE=this.value;VD_PAGINA=1;rVdVisao()" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;background:#fff;"><option value="todas"'+(VD_MODALIDADE==='todas'?' selected':'')+'>Todas</option><option value="flex"'+(VD_MODALIDADE==='flex'?' selected':'')+'>Flex</option><option value="full"'+(VD_MODALIDADE==='full'?' selected':'')+'>Full</option><option value="agencia"'+(VD_MODALIDADE==='agencia'?' selected':'')+'>Agencia</option></select></div>';
-  h += '<div><div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Buscar SKU/Anuncio</div><input type="text" placeholder="..." value="'+(VD_BUSCA||'')+'" oninput="VD_BUSCA=this.value" onkeydown="if(event.key===\'Enter\')rVdVisao()" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;"></div>';
+  h += '<div><div style="'+_fl+'">Modalidade</div><select class="vd-fil" onchange="VD_MODALIDADE=this.value;VD_PAGINA=1;rVdVisao()" style="'+_fi+'"><option value="todas"'+(VD_MODALIDADE==='todas'?' selected':'')+'>Todas</option><option value="flex"'+(VD_MODALIDADE==='flex'?' selected':'')+'>Flex</option><option value="full"'+(VD_MODALIDADE==='full'?' selected':'')+'>Full</option><option value="agencia"'+(VD_MODALIDADE==='agencia'?' selected':'')+'>Agencia</option></select></div>';
+  h += '<div><div style="'+_fl+'">Buscar SKU/Anuncio</div><input class="vd-fil" type="text" placeholder="..." value="'+(VD_BUSCA||'')+'" oninput="VD_BUSCA=this.value" onkeydown="if(event.key===\'Enter\')rVdVisao()" style="'+_fi+'"></div>';
   // VD_BOTAO_PESQUISAR_INSTALADO
-  h += '<div style="display:flex;align-items:flex-end;grid-column:span 1;"><button onclick="VD_PAGINA=1;rVdVisao()" style="padding:8px 16px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;width:100%;white-space:nowrap;">🔍 Pesquisar</button></div>';
+  h += '<div style="display:flex;align-items:flex-end;grid-column:span 1;"><button class="vd-btn" onclick="VD_PAGINA=1;rVdVisao()" style="padding:9px 16px;background:linear-gradient(135deg,#7c5cff,#5b8cff);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;width:100%;white-space:nowrap;box-shadow:0 4px 14px -3px rgba(108,84,255,.5);">🔍 Pesquisar</button></div>';
   h += '</div></div>';
   
   // Tabela
@@ -8210,21 +8244,22 @@ function vdVisaoRender(){
   var ini = (VD_PAGINA-1)*pp;
   var pag = visivel.slice(ini, ini+pp);
   
-  h += '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">';
-  h += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">';
-  h += '<thead><tr style="background:#f9fafb;border-bottom:1px solid #e5e7eb;">';
-  h += '<th style="text-align:left;padding:8px;font-weight:600;color:#374151;">Anuncio</th>';
-  h += '<th style="text-align:left;padding:8px;font-weight:600;color:#374151;">Conta</th>';
-  h += '<th style="text-align:left;padding:8px;font-weight:600;color:#374151;">SKU</th>';
-  h += '<th style="text-align:left;padding:8px;font-weight:600;color:#374151;">Data</th>';
-  h += '<th style="text-align:center;padding:8px;font-weight:600;color:#374151;">Modal</th>';
-  h += '<th style="text-align:right;padding:8px;font-weight:600;color:#374151;">Valor</th>';
-  h += '<th style="text-align:center;padding:8px;font-weight:600;color:#374151;">Qtd</th>';
-  h += '<th style="text-align:right;padding:8px;font-weight:600;color:#A32D2D;">Custo</th>';
-  h += '<th style="text-align:right;padding:8px;font-weight:600;color:#854F0B;">Tarifa</th>';
-  h += '<th style="text-align:right;padding:8px;font-weight:600;color:#1E4880;">Frete</th>';
-  h += '<th style="text-align:right;padding:8px;font-weight:600;color:#1E5C2A;">MC</th>';
-  h += '<th style="text-align:right;padding:8px;font-weight:600;color:#1E5C2A;">MC%</th>';
+  h += '<div style="background:#fff;border:1px solid #ebedf4;border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(20,16,50,.04),0 12px 28px -18px rgba(40,30,90,.22);">';
+  h += '<div style="overflow-x:auto;"><table class="vd-tb" style="width:100%;border-collapse:collapse;font-size:12px;">';
+  var _th = 'padding:11px 9px;font-weight:700;font-size:10px;letter-spacing:.5px;text-transform:uppercase;';
+  h += '<thead><tr style="background:linear-gradient(180deg,#f7f8fc,#f1f2f8);border-bottom:1px solid #e9ebf2;">';
+  h += '<th style="text-align:left;'+_th+'color:#6a7289;">Anuncio</th>';
+  h += '<th style="text-align:left;'+_th+'color:#6a7289;">Conta</th>';
+  h += '<th style="text-align:left;'+_th+'color:#6a7289;">SKU</th>';
+  h += '<th style="text-align:left;'+_th+'color:#6a7289;">Data</th>';
+  h += '<th style="text-align:center;'+_th+'color:#6a7289;">Modal</th>';
+  h += '<th style="text-align:right;'+_th+'color:#6a7289;">Valor</th>';
+  h += '<th style="text-align:center;'+_th+'color:#6a7289;">Qtd</th>';
+  h += '<th style="text-align:right;'+_th+'color:#A32D2D;">Custo</th>';
+  h += '<th style="text-align:right;'+_th+'color:#854F0B;">Tarifa</th>';
+  h += '<th style="text-align:right;'+_th+'color:#1E4880;">Frete</th>';
+  h += '<th style="text-align:right;'+_th+'color:#1E5C2A;">MC</th>';
+  h += '<th style="text-align:right;'+_th+'color:#1E5C2A;">MC%</th>';
   h += '</tr></thead><tbody>';
   
   if(pag.length === 0){
@@ -8266,15 +8301,17 @@ function vdVisaoRender(){
   h += '</tbody></table></div>';
   
   if(tp > 1){
-    h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;font-size:12px;color:#666;background:#f9fafb;border-top:1px solid #e5e7eb;">';
-    h += '<div>Mostrando '+0+'-'+80+' de '+visivel.length+'</div><div>';
-    if(VD_PAGINA > 1) h += '<button onclick="VD_PAGINA--;vdVisaoRender()" style="padding:4px 8px;background:#fff;border:1px solid #ddd;border-radius:4px;cursor:pointer;margin-right:4px;">&lsaquo;</button>';
-    h += ' Pag '+VD_PAGINA+'/'+tp+' ';
-    if(VD_PAGINA < tp) h += '<button onclick="VD_PAGINA++;vdVisaoRender()" style="padding:4px 8px;background:#fff;border:1px solid #ddd;border-radius:4px;cursor:pointer;margin-left:4px;">&rsaquo;</button>';
+    var _pb = 'padding:5px 11px;background:#fff;border:1px solid #e3e6ef;border-radius:8px;cursor:pointer;color:#5a6478;font-weight:600;';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;font-size:12px;color:#8a93a6;background:linear-gradient(180deg,#fbfbfe,#f5f6fb);border-top:1px solid #eef0f5;">';
+    h += '<div>Mostrando '+(ini+1)+'-'+(ini+pag.length)+' de '+visivel.length+'</div><div style="display:flex;align-items:center;gap:8px;">';
+    if(VD_PAGINA > 1) h += '<button class="vd-btn" onclick="VD_PAGINA--;vdVisaoRender()" style="'+_pb+'margin-right:2px;">&lsaquo;</button>';
+    h += '<span style="color:#5a6478;font-weight:600;">Pag '+VD_PAGINA+'/'+tp+'</span> ';
+    if(VD_PAGINA < tp) h += '<button class="vd-btn" onclick="VD_PAGINA++;vdVisaoRender()" style="'+_pb+'margin-left:2px;">&rsaquo;</button>';
     h += '</div></div>';
   }
   h += '</div>';
-  
+
+  h += '</div>'; // fecha .vd-surface
   cont.innerHTML = h;
 }
 
