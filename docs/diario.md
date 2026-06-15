@@ -4,6 +4,23 @@ Log das mudanças e decisões. O mais recente em cima.
 
 ## 2026-06-15
 
+### Vendas — Shopee AO VIVO (igual Mercado Livre)
+
+- Corrigido o rumo: a aba Vendas precisa das vendas **ao vivo**, não do escrow (que só
+  fecha dias depois). Espelhado o mecanismo do ML.
+- Nova tabela **`shopee_orders`** (formato `ml_orders`, 1 linha/pedido), alimentada por
+  `get_order_list`+`get_order_detail`. `GET /api/shopee/vendas` agora lê dela (ao vivo).
+- **Comissão estimada** pela tabela oficial CNPJ (o escrow real reconcilia depois por
+  order_sn) + margem via `ml_skus_cmv`. Frete fica 0 ao vivo (só fecha no escrow).
+- **Mantido atualizado:** cron a cada 20min (06-23h) sincroniza os últimos 3 dias;
+  endpoint `POST /api/shopee/push` pronto pro **webhook em tempo real** (falta configurar
+  a Push URL no painel do app → `https://newvisionpro.com.br/api/shopee/push`).
+- **Escopo do backfill:** começamos **de hoje pra trás** (última ~semana já carregada:
+  08–15/06) e a janela cresce sozinha daqui pra frente. Sem puxar 60d de histórico.
+- `shopee_repasses` (escrow) segue intacto p/ Auditoria/Saques/Carteira/Fechamento.
+- **Pendência:** configurar a Push URL no painel Shopee p/ tempo real fino; CMV ainda
+  cobre só ~11% dos SKUs (margem superestimada onde falta custo).
+
 ### Vendas — Shopee integrada na aba Vendas (multi-marketplace)
 
 - A aba **Vendas** (estilo Mercado Turbo) agora mostra **ML + Shopee juntos**, mesma lógica
