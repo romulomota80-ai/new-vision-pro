@@ -4,6 +4,25 @@ Log das mudanças e decisões. O mais recente em cima.
 
 ## 2026-06-15
 
+### Devoluções Shopee — ETAPA 0.5 (a API DEIXA responder? SIM)
+
+Probe `node probe-returns-write.js` — testou os endpoints de **escrita** com um
+`return_sn` FALSO ("PROBE_NO_OP_000000") + corpo mínimo (zero risco: nenhuma disputa
+real tocada). Detalhe: a Shopee responde **HTTP 200 com erro no corpo**, então o que
+classifica é o conteúdo.
+
+**Resultado:** todos voltaram com "Return not found / doesn't exist / param error" —
+ou seja, **passaram por auth+autorização** e só recusaram o SN falso. **Nenhum** erro de
+permissão/escopo. Endpoints confirmados acessíveis e autorizados:
+`confirm` (aceitar), `dispute` (contestar), `offer` / `accept_offer` (compensação),
+`upload_proof` (subir prova), `cancel_dispute`, e leituras `get_return_dispute_reason`
+e `query_proof`.
+
+**Conclusão:** dá pra fazer o **"Responder" NATIVO** (contestar / subir prova / ofertar
+dentro do app), não só link pro Seller Center. Validação end-to-end real só quando
+aparecer uma disputa em estado acionável (ou testando 1 caso real com OK do Rômulo).
+→ ETAPA 1 segue com resposta nativa no escopo.
+
 ### Devoluções Shopee — ETAPA 0 (amostra REAL da API, antes de cravar)
 
 Probe `node probe-returns.js` na loja VERSSENE (shop_id 1269418534), 60 dias,
