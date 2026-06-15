@@ -4,6 +4,25 @@ Log das mudanças e decisões. O mais recente em cima.
 
 ## 2026-06-15
 
+### Devoluções Shopee — FASE 2 (sync por loja, idempotente)
+
+`POST /api/shopee/devolucoes/sync` (body `{conta, dias=60}`) + `GET /devolucoes/status`
+no `routes/shopee.js`. Pagina `get_return_list` em janelas de 15d (todas as páginas),
+dedupe por `return_sn` (Map), `upsert` por PK → **idempotente** (re-sync não duplica;
+não mexe em resultado_valor/resolvida_em/responsavel). Seed de evento `abertura` só pras
+novas.
+
+- **1.343 devoluções/60d** carregadas, 0 erros (volume bem maior que a amostra de página
+  única sugeria — a loja tem MUITA devolução).
+- **status_interno** (terminal tem prioridade): ACCEPTED→contra, CANCELLED→favor, senão
+  proof PENDING/negociação→em_disputa, senão nova. **precisa_acao**: proof PENDING OU
+  negociação OU prazo <48h — **nunca** em status terminal (corrigido um edge case de
+  CANCELLED com prova velha que vinha marcado como ação).
+- Distribuição: **contra 749 · favor 542 · nova 35 · em_disputa 17**; **21 precisam de
+  ação**. 1.043 com retorno físico; 194 SKUs distintos.
+
+Próximo: Fase 3 (endpoints de leitura: lista filtrada + produtos + métricas).
+
 ### Devoluções Shopee — FASE 1 (DDL aditivo)
 
 `sql/devolucoes.sql` aplicado via `run-sql.js` (a SERVICE_KEY não roda DDL). Aditivo,
