@@ -7940,6 +7940,15 @@ if(btnOut2)btnOut2.addEventListener("click",logout);
 window.VD_DATA_INI = window.VD_DATA_INI || vdHojeBRT();
 window.VD_DATA_FIM = window.VD_DATA_FIM || vdHojeBRT();
 window.VD_CONTA = window.VD_CONTA || 'todas';
+// Selecao multipla de contas (checkboxes). Default: todas. So aplica ao clicar Pesquisar.
+window.VD_CONTAS_SEL = window.VD_CONTAS_SEL || ['look_store','moda_mix','verssene_shopee'];
+function vdToggleConta(c, on){
+  if(!Array.isArray(window.VD_CONTAS_SEL)) window.VD_CONTAS_SEL = [];
+  var i = VD_CONTAS_SEL.indexOf(c);
+  if(on && i < 0) VD_CONTAS_SEL.push(c);
+  if(!on && i >= 0) VD_CONTAS_SEL.splice(i, 1);
+  // nao recarrega: a busca so e aplicada no botao Pesquisar
+}
 window.VD_STATUS = window.VD_STATUS || 'paid';
 window.VD_BUSCA = window.VD_BUSCA || '';
 window.VD_PAGINA = window.VD_PAGINA || 1;
@@ -7994,12 +8003,14 @@ async function rVdVisao(){
     var todos = [];
     var pageSize = 1000;
     var offset = 0;
-    while(true){
+    // contas ML selecionadas (look_store/moda_mix). Se nenhuma marcada, nao consulta o ML.
+    var _mlSel = (VD_CONTAS_SEL || []).filter(function(c){ return c==='look_store' || c==='moda_mix'; });
+    while(_mlSel.length > 0){
       /* VD_COLS_SELECT: elimina raw_json (era 157MB/30d) */
       var _COLS = 'id,sku,item_id,item_title,qty,preco_unit,preco_total,comissao_ml,frete_seller,net_amount,cmv_unit_snap,cmv_total_snap,imposto_pct_snap,imposto_valor,mc_valor,mc_pct,modalidade,data_venda,status,shipping_id,pack_id,conta_interna_id,eh_troca_devolucao,data_estorno';
       /* PATCH_PAGINACAO_ORDER - ordem deterministica evita duplicatas/puladas */
       var q = sb.from('ml_orders').select(_COLS).gte('data_venda', iniUTC).lte('data_venda', fimUTC).order('id', { ascending: true }).range(offset, offset + pageSize - 1);
-      if(VD_CONTA && VD_CONTA!=='todas') q = q.eq('conta_interna_id', VD_CONTA);
+      if(_mlSel.length === 1) q = q.eq('conta_interna_id', _mlSel[0]); // 2 contas marcadas = todas as do ML, sem filtro
       if(VD_BUSCA) q = q.or('sku.ilike.%'+VD_BUSCA+'%,item_title.ilike.%'+VD_BUSCA+'%');
       var r = await q;
       if(r.error) throw r.error;
@@ -8036,8 +8047,8 @@ async function rVdVisao(){
     } catch(eOv){ console.warn('Erro ao aplicar override de frete:', eOv); }
     
     todos.forEach(function(v){ if(!v.marketplace) v.marketplace='ML'; });
-    // Mescla vendas Shopee (mesmo formato) quando a conta selecionada permite
-    if(VD_CONTA==='todas' || VD_CONTA==='verssene_shopee'){
+    // Mescla vendas Shopee (mesmo formato) quando a Shopee esta marcada
+    if((VD_CONTAS_SEL || []).indexOf('verssene_shopee') >= 0){
       try{
         var _shUrl = '/api/shopee/vendas?de='+VD_DATA_INI+'&ate='+VD_DATA_FIM+(VD_BUSCA?('&busca='+encodeURIComponent(VD_BUSCA)):'');
         var _sh = await fetch(_shUrl).then(function(r){return r.json();});
@@ -8177,7 +8188,12 @@ function vdVisaoRender(){
   h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;">';
   h += '<div><div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Data Inicio (BRT)</div><input type="date" value="'+VD_DATA_INI+'" onchange="VD_DATA_INI=this.value;VD_PERIODO=\'custom\'" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;"></div>';
   h += '<div><div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Data Fim (BRT)</div><input type="date" value="'+VD_DATA_FIM+'" onchange="VD_DATA_FIM=this.value;VD_PERIODO=\'custom\'" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;"></div>';
-  h += '<div><div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Conta</div><select onchange="VD_CONTA=this.value;rVdVisao()" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;background:#fff;"><option value="todas"'+(VD_CONTA==='todas'?' selected':'')+'>Todas</option><option value="look_store"'+(VD_CONTA==='look_store'?' selected':'')+'>LOOK_STORE</option><option value="moda_mix"'+(VD_CONTA==='moda_mix'?' selected':'')+'>MODA_MIX</option><option value="verssene_shopee"'+(VD_CONTA==='verssene_shopee'?' selected':'')+'>VERSSENE (Shopee)</option></select></div>';
+  h += '<div style="grid-column:span 2;"><div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Contas (marque e clique em Pesquisar)</div><div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:7px 0;">'
+    + [['look_store','LOOK_STORE'],['moda_mix','MODA_MIX'],['verssene_shopee','VERSSENE (Shopee)']].map(function(o){
+        var ck = (VD_CONTAS_SEL||[]).indexOf(o[0]) >= 0 ? ' checked' : '';
+        return '<label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;white-space:nowrap;"><input type="checkbox"'+ck+' onchange="vdToggleConta(\''+o[0]+'\',this.checked)" style="cursor:pointer;width:15px;height:15px;">'+o[1]+'</label>';
+      }).join('')
+    + '</div></div>';
   h += '<div><div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Status</div><select onchange="VD_STATUS=this.value;vdVisaoRender()" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;background:#fff;"><option value="paid"'+(VD_STATUS==='paid'?' selected':'')+'>Aprovadas</option><option value="cancelled"'+(VD_STATUS==='cancelled'?' selected':'')+'>Canceladas</option><option value="todos"'+(VD_STATUS==='todos'?' selected':'')+'>Todas</option></select></div>';
   /* PATCH_FILTRO_VISAO_MODALIDADE - dropdown Modalidade */
   h += '<div><div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Modalidade</div><select onchange="VD_MODALIDADE=this.value;VD_PAGINA=1;rVdVisao()" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;background:#fff;"><option value="todas"'+(VD_MODALIDADE==='todas'?' selected':'')+'>Todas</option><option value="flex"'+(VD_MODALIDADE==='flex'?' selected':'')+'>Flex</option><option value="full"'+(VD_MODALIDADE==='full'?' selected':'')+'>Full</option><option value="agencia"'+(VD_MODALIDADE==='agencia'?' selected':'')+'>Agencia</option></select></div>';
