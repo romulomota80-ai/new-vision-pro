@@ -4,6 +4,23 @@ Log das mudanças e decisões. O mais recente em cima.
 
 ## 2026-06-15
 
+### Devoluções Shopee — FASE 1 (DDL aditivo)
+
+`sql/devolucoes.sql` aplicado via `run-sql.js` (a SERVICE_KEY não roda DDL). Aditivo,
+sem drops:
+- **`devolucoes`** — PK natural `return_sn` (sync idempotente por upsert). Campos: loja,
+  order_sn, sku/produto, valor/valor_antes_desc, motivo/motivo_texto, data_solicitacao,
+  status_shopee, **status_interno** (nova|em_disputa|favor|contra), prazo_resposta,
+  seller_proof_status, needs_logistics/tracking/logistics_status, **precisa_acao**,
+  comprador, **provas_cliente** (jsonb, URLs Shopee), responsavel (opcional),
+  resultado_valor (recuperado/prejuízo), resolvida_em, raw_json. Índices por shop,
+  status_interno, precisa_acao, data, sku, order, prazo.
+- **`devolucoes_eventos`** — timeline estruturada (abertura|status|prova_cliente|
+  prova_vendedor|oferta|disputa|nota), FK `return_sn` on delete cascade. Substitui o
+  "chat" que a API não tem.
+
+Próximo: Fase 2 (sync por loja, idempotente, janelas de 15d + mapeamento de status).
+
 ### Devoluções Shopee — ETAPA 0.5 (a API DEIXA responder? SIM)
 
 Probe `node probe-returns-write.js` — testou os endpoints de **escrita** com um
