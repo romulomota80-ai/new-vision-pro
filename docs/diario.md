@@ -4,6 +4,24 @@ Log das mudanças e decisões. O mais recente em cima.
 
 ## 2026-06-15
 
+### Devoluções Shopee — FASE 4 (polimento do frontend + produção)
+
+Sub-aba **Devoluções** dentro da aba Shopee finalizada e publicada em produção
+(`netlify deploy --prod`):
+- **Namespace próprio** pra não colidir com o código de repasses da Shopee:
+  `shAPI`→`dvAPI`, container `sh-dv-body`→`dv-body`, estado `SH_CONTA`→`DV_CONTA`
+  (mais `DV_VIEW`/`DV_MES`/`DV_ROWS`/`DV_LOJAS`). O bloco de devoluções (≈8621-8780)
+  ficou independente; só compartilha utilitários (`shEsc`).
+- **Badge no boot:** `rShopee()` agora chama `dvAtualizaBadge()`, então o número de
+  devoluções que "precisa responder" (`?filtro=precisa_acao`) já aparece no chip
+  `sb-badge-dv` assim que a aba Shopee abre — espelhando o badge de Boletos. O badge
+  também atualiza ao trocar de loja e ao abrir a sub-aba.
+- JS validado (extração dos 7 blocos `<script>` inline + `node --check`, 0 erros).
+
+**Em aberto (plano de devoluções):** thread de mensagens + galeria de provas
+(Supabase Storage, expira 30d após resolver), prazo+alerta visual, responder nativo
+pela API (Fase 5), notificação Telegram (opcional).
+
 ### Devoluções Shopee — FASE 3 (endpoints de leitura)
 
 `routes/shopee.js`, via `pgPool` (agregação):
