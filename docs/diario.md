@@ -4,6 +4,22 @@ Log das mudanças e decisões. O mais recente em cima.
 
 ## 2026-06-15
 
+### Devoluções Shopee — FASE 3 (endpoints de leitura)
+
+`routes/shopee.js`, via `pgPool` (agregação):
+- `GET /devolucoes?conta=&filtro=&busca=&limit=` — filtros precisa_acao (default) |
+  novas | em_disputa | favor | contra | todas; precisa_acao ordena por prazo (urgência).
+- `GET /devolucoes/produtos?conta=&mes=` — ranking por SKU: qtd, **% devolução**
+  (devoluções ÷ vendas do SKU em `shopee_orders`), motivo top, prejuízo.
+- `GET /devolucoes/metricas?conta=&mes=` — favor/contra, R$ recuperado/prejuízo, taxa de
+  sucesso, motivo top, tempo médio (data_status − data_solicitacao).
+
+**Insights que já saltaram (60d):** taxa de sucesso **42%** · R$ 32.507 recuperado vs
+**R$ 45.937 de prejuízo** · motivo top "não serviu". **CAL-CAR-PRETO-GG com 19,9% de
+devolução** (54/271) e -G 17,8% — calça cargo preta tem taxa altíssima por modelagem.
+
+Próximo: Fase 4 (frontend — sub-aba Devoluções no padrão visual novo).
+
 ### Devoluções Shopee — FASE 2 (sync por loja, idempotente)
 
 `POST /api/shopee/devolucoes/sync` (body `{conta, dias=60}`) + `GET /devolucoes/status`
