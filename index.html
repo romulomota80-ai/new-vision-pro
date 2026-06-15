@@ -789,6 +789,7 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
 
  <div class="lbar" id="shbar" style="overflow-x:auto;flex-wrap:nowrap;">
   <button class="ltab on" data-sh="re" onclick="shAba('re')">📊 Resumo</button>
+  <button class="ltab" data-sh="dv" onclick="shAba('dv')">↩️ Devoluções <span id="sh-dv-badge" style="display:none;background:#e5484d;color:#fff;border-radius:10px;padding:0 6px;font-size:10px;font-weight:700;margin-left:2px;"></span></button>
   <button class="ltab" data-sh="rp" onclick="shAba('rp')">💰 Repasses</button>
   <button class="ltab" data-sh="au" onclick="shAba('au')">🔎 Auditoria</button>
   <button class="ltab" data-sh="ca" onclick="shAba('ca')">👛 Carteira</button>
@@ -797,6 +798,7 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
  </div>
 
  <div id="sh-re" style="display:flex;flex-direction:column;gap:12px;"></div>
+ <div id="sh-dv" style="display:none;flex-direction:column;gap:12px;"></div>
  <div id="sh-rp" style="display:none;flex-direction:column;gap:12px;"></div>
  <div id="sh-au" style="display:none;flex-direction:column;gap:12px;"></div>
  <div id="sh-ca" style="display:none;flex-direction:column;gap:12px;"></div>
@@ -8595,14 +8597,16 @@ async function shCarregaLojas(){
 async function rShopee(){
  if(!SH_SHOPS_LOADED) await shCarregaLojas();
  shAba(SH_SUBABA);
+ if(typeof dvAtualizaBadge==='function') dvAtualizaBadge();
 }
 function shAba(t){
  SH_SUBABA = t;
- ['re','rp','au','ca','sq','tx'].forEach(function(x){
+ ['re','dv','rp','au','ca','sq','tx'].forEach(function(x){
   var bt = document.querySelector('[data-sh="'+x+'"]'); if(bt) bt.classList.toggle('on', x===t);
   var pn = ge('sh-'+x); if(pn) pn.style.display = (x===t) ? 'flex' : 'none';
  });
  if(t==='re') rShResumo();
+ if(t==='dv') rShDevol();
  if(t==='rp') rShRepasses();
  if(t==='au') rShAuditoria();
  if(t==='ca') rShCarteira();
@@ -8610,6 +8614,151 @@ function shAba(t){
  if(t==='tx') rShTaxas();
 }
 function shTrocaLoja(){ var s=ge('sh-loja'); if(s) SH_CONTA = s.value; shAba(SH_SUBABA); }
+
+// ── DEVOLUCOES (sub-aba) ────────────────────────────────────────
+var DV_VIEW='precisa_acao', DV_MES='', DV_ROWS=[];
+var DV_VIEWS=[['precisa_acao','🔔 Precisa responder'],['novas','🆕 Novas'],['em_disputa','⚖️ Em disputa'],['favor','✅ A favor'],['contra','❌ Contra'],['produtos','📦 Produtos'],['metricas','📊 Métricas']];
+function dvFmtR(n){ return Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function dvNeedsMes(){ return DV_VIEW==='produtos'||DV_VIEW==='metricas'; }
+function dvMotivoPt(r){ var m={ITEM_NOT_FIT:'Não serviu',NOT_RECEIPT:'Não recebido',WRONG_ITEM:'Item errado',DAMAGED_OTHERS:'Danificado',FUNCTIONAL_DMG:'Defeito',ITEM_MISSING:'Item faltando',CHANGE_MIND:'Desistência',SUSPICIOUS_PARCEL:'Pacote suspeito'}; return m[r]||r||'-'; }
+function dvStatusBadge(s){ var map={nova:['#3b82f6','Nova'],em_disputa:['#f59e0b','Em disputa'],favor:['#16a34a','A favor'],contra:['#e5484d','Contra']}; var m=map[s]||['#888',s||'-']; return '<span style="background:'+m[0]+'22;color:'+m[0]+';border:1px solid '+m[0]+'55;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;">'+m[1]+'</span>'; }
+function dvFmtPrazo(iso){ if(!iso) return ''; var dt=new Date(iso),ms=dt.getTime()-Date.now(),venc=ms<0,soon=ms>0&&ms<48*3600*1000,cor=venc?'#e5484d':(soon?'#f59e0b':'var(--MU)'); var txt=venc?'⏰ prazo vencido':'⏰ responda até '+dt.toLocaleDateString('pt-BR')+' '+dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); return '<span style="color:'+cor+';font-weight:'+(venc||soon?'700':'400')+';font-size:11px;">'+txt+'</span>'; }
+
+async function rShDevol(){
+  var el=ge('sh-dv'); if(!el) return;
+  var tabs=DV_VIEWS.map(function(v){ return '<button class="ltab'+(v[0]===DV_VIEW?' on':'')+'" onclick="dvAba(\''+v[0]+'\')" style="white-space:nowrap;">'+v[1]+'</button>'; }).join('');
+  var dir=dvNeedsMes()
+    ? '<input type="month" value="'+(DV_MES||'')+'" onchange="DV_MES=this.value;dvLoad()" style="margin-left:auto;background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:8px;padding:6px 10px;font-size:12px;font-family:inherit;">'
+    : '<button id="dv-sync" onclick="dvSync()" style="margin-left:auto;background:var(--R);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">🔄 Sincronizar</button>';
+  el.innerHTML='<div class="lbar" style="overflow-x:auto;flex-wrap:nowrap;display:flex;align-items:center;gap:6px;">'+tabs+dir+'</div>'
+    +'<div id="sh-dv-body"><div class="card" style="padding:24px;text-align:center;color:var(--MU);">Carregando…</div></div>';
+  dvLoad(); dvAtualizaBadge();
+}
+function dvAba(v){ DV_VIEW=v; rShDevol(); }
+function dvLoad(){ if(DV_VIEW==='produtos') return dvRenderProdutos(); if(DV_VIEW==='metricas') return dvRenderMetricas(); return dvRenderLista(); }
+
+async function dvAtualizaBadge(){ try{ var j=await shAPI('/api/shopee/devolucoes?filtro=precisa_acao'); var n=(j&&j.total)||0,b=ge('sh-dv-badge'); if(b){ b.textContent=n; b.style.display=n>0?'':'none'; } }catch(e){} }
+
+async function dvRenderLista(){
+  var body=ge('sh-dv-body'); if(!body) return;
+  body.innerHTML='<div class="card" style="padding:24px;text-align:center;color:var(--MU);">Carregando…</div>';
+  var j; try{ j=await shAPI('/api/shopee/devolucoes?filtro='+DV_VIEW+'&limit=500'); }catch(e){ j={erro:e.message}; }
+  if(!j||j.erro){ body.innerHTML='<div class="card" style="padding:20px;color:var(--R);">Erro: '+shEsc((j&&j.erro)||'falha')+'</div>'; return; }
+  DV_ROWS=j.itens||[];
+  if(!DV_ROWS.length){ body.innerHTML='<div class="card" style="padding:34px;text-align:center;color:var(--MU);">Nenhuma devolução aqui 🎉</div>'; return; }
+  var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;"><div style="font-size:12px;color:var(--MU);">'+DV_ROWS.length+' devoluções</div><button onclick="dvCSV()" style="background:transparent;border:1px solid var(--BR);color:var(--TX);border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;">📥 CSV</button></div>';
+  DV_ROWS.forEach(function(d){ h+=dvCardLinha(d); });
+  body.innerHTML=h;
+}
+function dvCardLinha(d){
+  var pc=d.provas_cliente||{},fotos=(pc.imagens||[]).length,videos=(pc.videos||[]).length;
+  var prazoHTML=(d.precisa_acao||d.status_interno==='em_disputa')?dvFmtPrazo(d.prazo_resposta):'';
+  return '<div class="card" style="padding:13px 15px;">'
+    +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">'
+    +'<div style="flex:1;min-width:200px;">'
+    +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'+dvStatusBadge(d.status_interno)+(d.precisa_acao?'<span style="background:#e5484d;color:#fff;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;">⚡ precisa ação</span>':'')+'<span style="font-size:11px;color:var(--MU);">'+dvMotivoPt(d.motivo)+'</span></div>'
+    +'<div style="font-weight:600;margin-top:5px;font-size:13px;">'+shEsc((d.produto||'-').slice(0,55))+'</div>'
+    +'<div style="font-size:11px;color:var(--MU);margin-top:2px;font-family:var(--FONT-M);">'+shEsc(d.sku||'-')+' · pedido '+shEsc(d.order_sn||'-')+'</div>'
+    +(d.motivo_texto?'<div style="font-size:11px;margin-top:5px;opacity:.8;">“'+shEsc(d.motivo_texto.slice(0,120))+'”</div>':'')
+    +'</div>'
+    +'<div style="text-align:right;min-width:120px;">'
+    +'<div style="font-size:17px;font-weight:800;">R$ '+dvFmtR(d.valor)+'</div>'
+    +((fotos||videos)?'<div style="font-size:11px;color:var(--MU);margin-top:3px;">📎 '+fotos+' foto'+(fotos!==1?'s':'')+(videos?(' · 🎬 '+videos):'')+'</div>':'')
+    +(prazoHTML?'<div style="margin-top:4px;">'+prazoHTML+'</div>':'')
+    +(d.needs_logistics?'<div style="font-size:10px;color:var(--MU);margin-top:3px;">📦 retorno físico</div>':'')
+    +'</div></div>'
+    +'<div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end;"><button onclick="dvAbrir(\''+d.return_sn+'\')" style="background:linear-gradient(135deg,#7c5cff,#5b8cff);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">Ver detalhe</button></div>'
+    +'</div>';
+}
+
+async function dvRenderProdutos(){
+  var body=ge('sh-dv-body'); if(!body) return; body.innerHTML='<div class="card" style="padding:24px;text-align:center;color:var(--MU);">Carregando…</div>';
+  var j; try{ j=await shAPI('/api/shopee/devolucoes/produtos'+(DV_MES?('?mes='+DV_MES):'')); }catch(e){ j={erro:e.message}; }
+  if(!j||j.erro){ body.innerHTML='<div class="card" style="padding:20px;color:var(--R);">Erro: '+shEsc((j&&j.erro)||'falha')+'</div>'; return; }
+  var its=j.itens||[];
+  if(!its.length){ body.innerHTML='<div class="card" style="padding:34px;text-align:center;color:var(--MU);">Sem dados.</div>'; return; }
+  var h='<div class="card" style="padding:0;overflow:hidden;"><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:var(--C2);color:var(--MU);text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;">'
+    +'<th style="padding:10px;">SKU</th><th style="padding:10px;text-align:center;">Devoluções</th><th style="padding:10px;text-align:center;">Vendas</th><th style="padding:10px;text-align:center;">% devolução</th><th style="padding:10px;">Motivo top</th><th style="padding:10px;text-align:right;">Prejuízo</th></tr></thead><tbody>';
+  its.forEach(function(p){ var pct=p.pct_devolucao; var cor=pct>=10?'#e5484d':(pct>=5?'#f59e0b':'var(--TX)');
+    h+='<tr style="border-top:1px solid var(--BR);"><td style="padding:9px 10px;font-family:var(--FONT-M);">'+shEsc(p.sku)+'</td><td style="padding:9px 10px;text-align:center;font-weight:700;">'+p.qtd+'</td><td style="padding:9px 10px;text-align:center;color:var(--MU);">'+p.vendas+'</td><td style="padding:9px 10px;text-align:center;font-weight:700;color:'+cor+';">'+(pct!=null?pct+'%':'—')+'</td><td style="padding:9px 10px;color:var(--MU);">'+dvMotivoPt(p.motivo_top)+'</td><td style="padding:9px 10px;text-align:right;color:#e5484d;">R$ '+dvFmtR(p.prejuizo)+'</td></tr>'; });
+  h+='</tbody></table></div></div>';
+  body.innerHTML=h;
+}
+
+async function dvRenderMetricas(){
+  var body=ge('sh-dv-body'); if(!body) return; body.innerHTML='<div class="card" style="padding:24px;text-align:center;color:var(--MU);">Carregando…</div>';
+  var j; try{ j=await shAPI('/api/shopee/devolucoes/metricas'+(DV_MES?('?mes='+DV_MES):'')); }catch(e){ j={erro:e.message}; }
+  if(!j||j.erro){ body.innerHTML='<div class="card" style="padding:20px;color:var(--R);">Erro: '+shEsc((j&&j.erro)||'falha')+'</div>'; return; }
+  var h='<div style="display:flex;flex-wrap:wrap;gap:10px;">';
+  h+=shKpi('Total devoluções', j.total||0);
+  h+=shKpi('Taxa de sucesso', (j.taxa_sucesso!=null?j.taxa_sucesso+'%':'—'), (j.taxa_sucesso>=50?'#16a34a':'#e5484d'), j.favor+' a favor · '+j.contra+' contra');
+  h+=shKpi('R$ recuperado', 'R$ '+dvFmtR(j.recuperado), '#16a34a');
+  h+=shKpi('R$ prejuízo', 'R$ '+dvFmtR(j.prejuizo), '#e5484d');
+  h+=shKpi('Abertas (em aberto)', j.abertas||0, '#f59e0b');
+  h+=shKpi('Motivo top', dvMotivoPt(j.motivo_top));
+  h+=shKpi('Tempo médio', (j.tempo_medio_dias!=null?j.tempo_medio_dias+' dias':'—'));
+  h+='</div>';
+  body.innerHTML=h;
+}
+
+async function dvSync(){
+  var btn=ge('dv-sync'); if(btn){ btn.disabled=true; btn.textContent='⏳ Sincronizando…'; }
+  var base=(typeof BACKEND_URL!=="undefined"&&BACKEND_URL?BACKEND_URL:'');
+  var q=SH_CONTA?('?conta='+encodeURIComponent(SH_CONTA)):'';
+  try{
+    await fetch(base+'/api/shopee/devolucoes/sync'+q,{method:'POST'});
+    for(var i=0;i<60;i++){ await new Promise(function(r){setTimeout(r,3000);});
+      var st=await shAPI('/api/shopee/devolucoes/status'); if(st&&(st.fase==='concluido'||st.fase==='erro')) break;
+      if(btn) btn.textContent='⏳ '+((st&&st.feitos)||0)+'/'+((st&&st.total)||0);
+    }
+  }catch(e){}
+  if(btn){ btn.disabled=false; btn.textContent='🔄 Sincronizar'; }
+  dvLoad(); dvAtualizaBadge();
+}
+
+function dvCSV(){
+  if(!DV_ROWS.length) return;
+  var cols=['return_sn','order_sn','sku','produto','motivo','valor','status_shopee','status_interno','prazo_resposta','comprador','data_solicitacao'];
+  var linhas=[cols.join(';')].concat(DV_ROWS.map(function(d){ return cols.map(function(c){ var v=d[c]==null?'':String(d[c]).replace(/;/g,',').replace(/\n/g,' '); return v; }).join(';'); }));
+  var blob=new Blob(['﻿'+linhas.join('\n')],{type:'text/csv;charset=utf-8;'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='devolucoes_'+DV_VIEW+'.csv'; a.click();
+}
+
+async function dvAbrir(sn){
+  var d=DV_ROWS.filter(function(x){return x.return_sn===sn;})[0]||{return_sn:sn};
+  var pc=d.provas_cliente||{},imgs=pc.imagens||[],vids=pc.videos||[];
+  var galeria=imgs.map(function(u){ return '<a href="'+u+'" target="_blank" rel="noopener"><img src="'+u+'" style="width:74px;height:74px;object-fit:cover;border-radius:8px;border:1px solid var(--BR);"></a>'; }).join('')
+    + vids.map(function(u){ return '<a href="'+u+'" target="_blank" rel="noopener" style="width:74px;height:74px;border-radius:8px;border:1px solid var(--BR);display:flex;align-items:center;justify-content:center;background:var(--C2);font-size:22px;">🎬</a>'; }).join('');
+  var sellerUrl='https://seller.shopee.com.br/portal/returns';
+  var ov=document.createElement('div'); ov.id='dv-modal'; ov.onclick=function(e){ if(e.target===ov) dvFecharModal(); };
+  ov.style.cssText='position:fixed;inset:0;background:rgba(10,12,20,.55);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:30px 14px;overflow-y:auto;';
+  ov.innerHTML='<div class="card" style="max-width:680px;width:100%;padding:0;overflow:hidden;">'
+    +'<div style="padding:14px 18px;border-bottom:1px solid var(--BR);display:flex;justify-content:space-between;align-items:center;gap:10px;">'
+    +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'+dvStatusBadge(d.status_interno)+'<span style="font-weight:700;">'+dvMotivoPt(d.motivo)+'</span><span style="font-size:11px;color:var(--MU);font-family:var(--FONT-M);">'+shEsc(d.return_sn)+'</span></div>'
+    +'<button onclick="dvFecharModal()" style="background:transparent;border:none;color:var(--MU);font-size:20px;cursor:pointer;line-height:1;">×</button></div>'
+    +'<div style="padding:18px;display:flex;flex-direction:column;gap:14px;">'
+    +((d.precisa_acao||d.status_interno==='em_disputa')&&d.prazo_resposta?'<div style="background:#e5484d18;border:1px solid #e5484d55;border-radius:10px;padding:10px 12px;">'+dvFmtPrazo(d.prazo_resposta)+'</div>':'')
+    +'<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px;">'
+    +'<div><div style="font-size:10px;color:var(--MU);text-transform:uppercase;">Valor</div><div style="font-weight:800;font-size:18px;">R$ '+dvFmtR(d.valor)+'</div></div>'
+    +'<div><div style="font-size:10px;color:var(--MU);text-transform:uppercase;">Pedido</div><div style="font-family:var(--FONT-M);">'+shEsc(d.order_sn||'-')+'</div></div>'
+    +'<div><div style="font-size:10px;color:var(--MU);text-transform:uppercase;">SKU</div><div style="font-family:var(--FONT-M);">'+shEsc(d.sku||'-')+'</div></div>'
+    +'<div><div style="font-size:10px;color:var(--MU);text-transform:uppercase;">Comprador</div><div>'+shEsc(d.comprador||'-')+'</div></div>'
+    +(d.needs_logistics?'<div><div style="font-size:10px;color:var(--MU);text-transform:uppercase;">Logística</div><div>📦 '+shEsc(d.tracking_number||'retorno físico')+'</div></div>':'')
+    +'</div>'
+    +(d.motivo_texto?'<div><div style="font-size:10px;color:var(--MU);text-transform:uppercase;margin-bottom:3px;">Texto do cliente</div><div style="font-size:13px;opacity:.9;">“'+shEsc(d.motivo_texto)+'”</div></div>':'')
+    +(galeria?'<div><div style="font-size:10px;color:var(--MU);text-transform:uppercase;margin-bottom:6px;">Provas do cliente</div><div style="display:flex;gap:8px;flex-wrap:wrap;">'+galeria+'</div></div>':'')
+    +'<div id="dv-timeline"><div style="font-size:11px;color:var(--MU);">Carregando histórico…</div></div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--BR);padding-top:12px;flex-wrap:wrap;">'
+    +'<a href="'+sellerUrl+'" target="_blank" rel="noopener" style="text-decoration:none;background:#ee4d2d;color:#fff;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:600;">↗ Responder no Seller Center</a>'
+    +'</div>'
+    +'<div style="font-size:10px;color:var(--MU);text-align:center;">Responder direto pelo app chega na próxima fase (a API permite).</div>'
+    +'</div></div>';
+  document.body.appendChild(ov);
+  try{ var ev=await shAPI('/api/shopee/devolucoes/eventos?sn='+encodeURIComponent(sn)); var tl=ge('dv-timeline');
+    if(tl){ var its=(ev&&ev.itens)||[]; tl.innerHTML='<div style="font-size:10px;color:var(--MU);text-transform:uppercase;margin-bottom:6px;">Histórico</div>'+(its.length?its.map(function(e){ return '<div style="border-left:2px solid var(--BR);padding:2px 0 8px 10px;margin-left:3px;"><div style="font-size:11px;color:var(--MU);">'+shFdISO(e.data)+' · '+shEsc(e.autor||'')+'</div><div style="font-size:12px;">'+shEsc(e.texto||e.tipo||'')+'</div></div>'; }).join(''):'<div style="font-size:12px;color:var(--MU);">Sem eventos.</div>'); }
+  }catch(e){}
+}
+function dvFecharModal(){ var m=ge('dv-modal'); if(m) m.remove(); }
 
 // ── 1) RESUMO (fechamento) ──────────────────────────────────────
 async function rShResumo(){
