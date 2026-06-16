@@ -1037,7 +1037,8 @@ async function carregarTudo(){
    saldo:parseFloat(c.saldo_atual)||0,
    cnpj:c.cnpj||"", agencia:c.agencia||"", numero:c.numero_conta||"",
    ativa:c.ativa!==false, obs:c.observacao||"",
-   titular:c.titular||"", palavras_chave:c.palavras_chave||""
+   titular:c.titular||"", palavras_chave:c.palavras_chave||"",
+   ultima_sync:c.ultima_sync||null, of:!!c.openfinance_account_id
   };});
  }
  if(rSaques && rSaques.data){
@@ -3225,13 +3226,53 @@ async function deletarNota(notaId, histId, nomeConta){
   }catch(e){ toast("Erro: "+e.message, false); }
 }
 
+// "ha' X" amigavel a partir de um ISO timestamp (ultima_sync do saldo).
+function tempoAtras(iso){
+ if(!iso) return '';
+ var t=new Date(iso).getTime(); if(isNaN(t)) return '';
+ var s=Math.floor((Date.now()-t)/1000);
+ if(s<60) return 'agora mesmo';
+ var m=Math.floor(s/60); if(m<60) return 'h\u00e1 '+m+' min';
+ var hh=Math.floor(m/60); if(hh<24) return 'h\u00e1 '+hh+'h';
+ var dd=Math.floor(hh/24); if(dd<30) return 'h\u00e1 '+dd+' dia'+(dd!==1?'s':'');
+ return 'em '+new Date(iso).toLocaleDateString('pt-BR');
+}
+
+// Atualiza o saldo de UMA conta (botao do card). Gasta cota so' dessa conta.
+async function contaAtualizarSaldo(id, ev){
+ var btn = ev && (ev.currentTarget || ev.target);
+ if(btn){ btn.disabled=true; btn.dataset.txt=btn.innerHTML; btn.innerHTML='\u23f3 ...'; }
+ try {
+  var r = await fetch('/api/bancos/sync/conta/'+id, {method:'POST', headers:{'Content-Type':'application/json'}});
+  var d = await r.json();
+  if(r.status===429){ toast('\u26a0\ufe0f '+(d.message||'limite diario atingido'), false); if(btn){ btn.disabled=false; btn.innerHTML=btn.dataset.txt||'\ud83d\udd04 Atualizar'; } return; }
+  if(!r.ok || d.ok===false) throw new Error(d.message || d.erro || ('HTTP '+r.status));
+  var st=null;
+  for(var i=0;i<24;i++){
+   await new Promise(function(res){ setTimeout(res, 2500); });
+   var rs = await fetch('/api/bancos/sync/conta/'+id+'/status');
+   st = await rs.json();
+   if(st && st.running===false) break;
+  }
+  if(!st || st.running) throw new Error('demorou demais, tente de novo');
+  if(st.ok===false) throw new Error(st.erro || 'falhou');
+  await carregarTudo();
+  if(typeof fcAba==='function') fcAba('co'); else if(typeof rContas==='function') rContas();
+  toast('\u2705 Saldo atualizado');
+ } catch(e){
+  toast('\u26a0\ufe0f N\u00e3o consegui atualizar essa conta \u2014 \u00faltimo saldo mantido. ('+e.message+')', false);
+  if(btn){ btn.disabled=false; btn.innerHTML=btn.dataset.txt||'\ud83d\udd04 Atualizar'; }
+ }
+}
+
 async function contasAtualizarSaldos(ev){
  var btn = ev && (ev.currentTarget || ev.target);
  if(btn){ btn.disabled=true; btn.dataset.txt=btn.innerHTML; btn.innerHTML='\u23f3 Buscando saldo...'; }
  try {
   var r = await fetch('/api/bancos/sync', {method:'POST', headers:{'Content-Type':'application/json'}});
   var d = await r.json();
-  if(!r.ok || d.ok===false) throw new Error(d.erro || ('HTTP '+r.status));
+  if(r.status===429){ toast('\u26a0\ufe0f '+(d.message||'limite diario atingido'), false); if(btn){ btn.disabled=false; btn.innerHTML=btn.dataset.txt||'\ud83d\udd04 Atualizar saldos'; } return; }
+  if(!r.ok || d.ok===false) throw new Error(d.message || d.erro || ('HTTP '+r.status));
   var st=null;
   for(var i=0;i<24;i++){
    await new Promise(function(res){ setTimeout(res, 2500); });
@@ -3244,7 +3285,8 @@ async function contasAtualizarSaldos(ev){
   await carregarTudo();
   if(typeof fcAba==='function') fcAba('co'); else if(typeof rContas==='function') rContas();
   var n = (st.atualizados||[]).length;
-  toast('\u2705 Saldo atualizado'+(n?(' ('+n+' conta'+(n!==1?'s':'')+')'):''));
+  var p = (st.pulados||[]).length;
+  toast('\u2705 Saldo atualizado'+(n?(' ('+n+' conta'+(n!==1?'s':'')+')'):'')+(p?(' \u2014 '+p+' no limite di\u00e1rio'):''));
  } catch(e){
   toast('\u26a0\ufe0f N\u00e3o consegui atualizar agora \u2014 mostrando o \u00faltimo saldo salvo. ('+e.message+')', false);
   if(btn){ btn.disabled=false; btn.innerHTML=btn.dataset.txt||'\ud83d\udd04 Atualizar saldos'; }
@@ -3290,13 +3332,17 @@ function rContas(){
    h+='<div style="font-size:11px;color:var(--MU);margin-bottom:3px;">'+c.nome+'</div>';
    if(c.titular) h+='<div style="font-size:11px;font-weight:700;color:var(--TX);margin:-1px 0 4px;">👤 '+c.titular+'</div>';
    h+='<div style="font-size:22px;font-weight:800;color:'+(c.saldo>=0?"#5a8a3a":"#a04040")+';font-family:var(--FONT-M);">'+fv(c.saldo)+'</div>';
+   if(c.of||c.ultima_sync){
+    h+='<div id="csync-'+c.id+'" style="font-size:10px;color:var(--MU);margin-top:5px;">'+(c.ultima_sync?('🕐 Atualizado '+tempoAtras(c.ultima_sync)):'🕐 nunca atualizado')+'</div>';
+   }
    if(c.agencia||c.numero){
     h+='<div style="font-size:10px;color:var(--MU);margin-top:6px;">';
     if(c.agencia) h+='Ag '+c.agencia+' ';
     if(c.numero) h+='C/C '+c.numero;
     h+='</div>';
    }
-   h+='<div style="display:flex;gap:6px;margin-top:10px;">';
+   h+='<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">';
+   if(c.of) h+='<button onclick="contaAtualizarSaldo('+c.id+',event)" style="background:rgba(0,177,234,.1);border:1px solid rgba(0,177,234,.35);color:#0089b8;cursor:pointer;font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;font-family:inherit;">🔄 Atualizar</button>';
    h+='<button onclick="verHistoricoConta('+c.id+',\''+c.nome.replace(/\'/g,"\\\\\\'")+'\')" style="background:rgba(184,134,11,.1);border:1px solid rgba(184,134,11,.3);color:#b8860b;cursor:pointer;font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;font-family:inherit;">📋 Histórico</button>';
    h+='<button onclick="verExtratoConta('+c.id+',\''+c.nome.replace(/\'/g,"\\\\\\'")+'\')" style="background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);color:#2a8a4a;cursor:pointer;font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;font-family:inherit;">📄 Extrato</button>';
    h+='<button onclick="contaEdit('+c.id+')" style="background:rgba(74,78,154,.1);border:1px solid rgba(74,78,154,.3);color:#4a4e9a;cursor:pointer;font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;font-family:inherit;">Editar</button>';
