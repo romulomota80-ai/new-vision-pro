@@ -8687,6 +8687,14 @@ function dvOfertaChip(d){ var o=dvOferta(d); if(!o) return '';
   var cor=o.code==='reembolso_devolucao'?'#5b8cff':'#f59e0b';
   return '<span title="'+o.desc+'" style="background:'+cor+'1f;color:'+cor+';border:1px solid '+cor+'55;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;white-space:nowrap;">'+o.ic+' '+o.curto+'</span>';
 }
+// Solução de negociação no jargão da Shopee -> texto humano.
+function dvSolPt(s){ if(s==='RETURN_REFUND') return 'Devolução + reembolso'; if(s==='REFUND') return 'Somente reembolso'; return s||'—'; }
+// Rótulo de um motivo de disputa EXATAMENTE como a Shopee descreve (usa o texto que a API retorna).
+function dvDispLabel(m){
+  var ev=(m.evidence_module_list||[]).map(function(e){return e.requirement;}).filter(Boolean);
+  var base=ev[0]||m.dispute_requirement||('Motivo '+m.dispute_reason);
+  return base.replace(/\s+/g,' ').trim();
+}
 function dvCardLinha(d){
   var pc=d.provas_cliente||{},fotos=(pc.imagens||[]).length,videos=(pc.videos||[]).length;
   var prazoHTML=(d.precisa_acao||d.status_interno==='em_disputa')?dvFmtPrazo(d.prazo_resposta):'';
@@ -8837,21 +8845,24 @@ function dvRenderAcoes(){
   var terminal=/ACCEPTED|CANCELLED|CLOSED|SUCCESS|FAIL/.test(status);
   if(terminal){ box.innerHTML='<div style="background:var(--C2);border-radius:10px;padding:12px;font-size:12px;color:var(--MU);text-align:center;border-top:1px solid var(--BR);">Devolução encerrada — sem ações pendentes.</div>'; return; }
   var bS='border:none;border-radius:8px;padding:9px 14px;font-size:12px;font-weight:600;cursor:pointer;';
-  var btns='';
-  if(negSt==='PENDING_RESPOND' && neg.latest_offer_amount!=null){
+  var btns='', dica='';
+  var temOferta=(negSt==='PENDING_RESPOND' && neg.latest_offer_amount!=null);
+  if(temOferta){
+    // Fase de negociação: a Shopee só permite ACEITAR a oferta ou CONTRAPOR. "Disputar" não aparece aqui (espelha o Seller Center).
     btns+='<button onclick="dvAceitarOferta()" style="'+bS+'background:#16a34a;color:#fff;">✅ Aceitar oferta (R$ '+dvFmtR(neg.latest_offer_amount)+')</button>';
-    btns+='<button onclick="dvFormOferta()" style="'+bS+'background:#5b8cff;color:#fff;">💬 Contraproposta</button>';
+    if(neg.counter_limit==null || neg.counter_limit>0) btns+='<button onclick="dvFormOferta()" style="'+bS+'background:#5b8cff;color:#fff;">💬 Contraproposta</button>';
+    dica='<div style="font-size:10px;color:var(--MU);margin-top:6px;">Comprador propôs <b>'+dvSolPt(neg.latest_solution)+'</b> de R$ '+dvFmtR(neg.latest_offer_amount)+(neg.counter_limit!=null?(' · você ainda pode contrapor '+neg.counter_limit+'x'):'')+'. Disputa não fica disponível nesta fase (igual à Shopee) — responda à oferta primeiro.</div>';
   } else {
     var of=dvOferta(det); var lbl=of?('✅ Aceitar — '+of.curto):'✅ Aceitar devolução';
     btns+='<button onclick="dvAceitar()" title="'+(of?of.desc:'')+'" style="'+bS+'background:#16a34a;color:#fff;">'+lbl+'</button>';
+    btns+='<button onclick="dvFormDisputa()" style="'+bS+'background:#f59e0b;color:#fff;">⚖️ Disputar</button>';
+    btns+='<button onclick="dvFormProvas()" style="'+bS+'background:var(--C2);color:var(--TX);border:1px solid var(--BR);">🖼️ Enviar provas</button>';
+    if(proofSt==='PENDING') btns+='<button onclick="dvCancelarDisputa()" style="'+bS+'background:transparent;color:var(--MU);border:1px solid var(--BR);">✖ Cancelar disputa</button>';
   }
-  btns+='<button onclick="dvFormDisputa()" style="'+bS+'background:#f59e0b;color:#fff;">⚖️ Disputar</button>';
-  btns+='<button onclick="dvFormProvas()" style="'+bS+'background:var(--C2);color:var(--TX);border:1px solid var(--BR);">🖼️ Enviar provas</button>';
-  if(proofSt==='PENDING') btns+='<button onclick="dvCancelarDisputa()" style="'+bS+'background:transparent;color:var(--MU);border:1px solid var(--BR);">✖ Cancelar disputa</button>';
   var sellerUrl='https://seller.shopee.com.br/portal/returns';
   box.innerHTML='<div style="border-top:1px solid var(--BR);padding-top:12px;"><div style="font-size:10px;color:var(--MU);text-transform:uppercase;margin-bottom:8px;">Responder</div>'
     +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'+btns+'</div>'
-    +(negSt==='PENDING_RESPOND'&&neg.latest_offer_amount!=null?'<div style="font-size:10px;color:var(--MU);margin-top:6px;">Comprador propôs '+shEsc(neg.latest_solution||'')+' de R$ '+dvFmtR(neg.latest_offer_amount)+(neg.counter_limit!=null?(' · contrapropostas restantes: '+neg.counter_limit):'')+'</div>':'')
+    +dica
     +'<div id="dv-form" style="margin-top:10px;"></div>'
     +'<div style="margin-top:8px;text-align:right;"><a href="'+sellerUrl+'" target="_blank" rel="noopener" style="font-size:10px;color:var(--MU);">ou abrir no Seller Center ↗</a></div>'
     +'</div>';
@@ -8870,18 +8881,33 @@ async function dvAceitar(){ if(!confirm('Aceitar a devolução? O comprador ser�
 async function dvAceitarOferta(){ if(!confirm('Aceitar a oferta do comprador?')) return; var j=await dvPOST('/api/shopee/devolucoes/aceitar-oferta',{sn:DV_SN}); if(await dvAposAcao(j,'Oferta aceita.')) dvLoad(); }
 async function dvCancelarDisputa(){ if(!confirm('Cancelar a disputa em andamento?')) return; var j=await dvPOST('/api/shopee/devolucoes/cancelar-disputa',{sn:DV_SN}); if(await dvAposAcao(j,'Disputa cancelada.')) dvLoad(); }
 
+var DV_DISP_MOT=[];
 async function dvFormDisputa(){
-  var f=ge('dv-form'); if(!f) return; f.innerHTML='<div style="font-size:12px;color:var(--MU);">Carregando motivos…</div>';
-  var mot=[]; try{ var j=await dvAPI('/api/shopee/devolucoes/motivos-disputa?sn='+encodeURIComponent(DV_SN)); mot=(j&&j.motivos)||[]; }catch(e){}
-  var opts=mot.map(function(m){ var req=(m.dispute_requirement||'').replace(/\n/g,' ').slice(0,48); return '<option value="'+m.dispute_reason+'">#'+m.dispute_reason+(req?(' — '+shEsc(req)):'')+'</option>'; }).join('');
+  var f=ge('dv-form'); if(!f) return; f.innerHTML='<div style="font-size:12px;color:var(--MU);">Carregando motivos da Shopee…</div>';
+  DV_DISP_MOT=[]; try{ var j=await dvAPI('/api/shopee/devolucoes/motivos-disputa?sn='+encodeURIComponent(DV_SN)); DV_DISP_MOT=(j&&j.motivos)||[]; }catch(e){}
+  if(!DV_DISP_MOT.length){ f.innerHTML='<div style="background:var(--C2);border-radius:10px;padding:12px;font-size:12px;color:var(--MU);">A Shopee não retornou motivos de disputa para esta reclamação agora — normalmente isso significa que ela ainda não está na fase de disputa.</div>'; return; }
+  var opts=DV_DISP_MOT.map(function(m){ return '<option value="'+m.dispute_reason+'">'+shEsc(dvDispLabel(m))+'</option>'; }).join('');
   f.innerHTML='<div style="background:var(--C2);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;">'
     +'<div style="font-size:11px;font-weight:700;">⚖️ Abrir disputa</div>'
     +'<input id="dv-disp-email" type="email" placeholder="Seu e-mail de contato" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:8px;padding:8px;font-size:12px;">'
-    +'<select id="dv-disp-reason" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:8px;padding:8px;font-size:12px;">'+(opts||'<option value="">(sem motivos disponíveis)</option>')+'</select>'
+    +'<div style="font-size:10px;color:var(--MU);">Motivo (exatamente como a Shopee classifica):</div>'
+    +'<select id="dv-disp-reason" onchange="dvDispDetalhe()" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:8px;padding:8px;font-size:12px;">'+opts+'</select>'
+    +'<div id="dv-disp-req"></div>'
     +'<textarea id="dv-disp-text" placeholder="Explique por que está disputando" rows="3" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:8px;padding:8px;font-size:12px;resize:vertical;font-family:inherit;"></textarea>'
-    +'<div style="font-size:10px;color:var(--MU);">Dica: anexe provas antes (🖼️) — alguns motivos exigem evidência.</div>'
     +'<div style="display:flex;gap:8px;justify-content:flex-end;"><button onclick="dvFormFechar()" style="background:transparent;border:1px solid var(--BR);color:var(--TX);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;">Cancelar</button><button onclick="dvDisputar()" style="background:#f59e0b;border:none;color:#fff;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;">Enviar disputa</button></div>'
     +'</div>';
+  dvDispDetalhe();
+}
+// Mostra o requisito + a checklist de provas EXATA que a Shopee exige pro motivo selecionado.
+function dvDispDetalhe(){
+  var sel=ge('dv-disp-reason'), box=ge('dv-disp-req'); if(!sel||!box) return;
+  var m=DV_DISP_MOT.filter(function(x){return String(x.dispute_reason)===String(sel.value);})[0]; if(!m){ box.innerHTML=''; return; }
+  var ev=(m.evidence_module_list||[]); var h='';
+  if(m.dispute_requirement) h+='<div style="font-size:11px;color:var(--MU);white-space:pre-line;background:var(--BG);border:1px solid var(--BR);border-radius:8px;padding:8px;">'+shEsc(m.dispute_requirement)+'</div>';
+  if(ev.length){ h+='<div style="margin-top:6px;font-size:11px;"><div style="font-weight:700;margin-bottom:3px;">📎 Provas que a Shopee exige:</div><ul style="margin:0 0 0 16px;padding:0;">'
+    +ev.map(function(e){ return '<li style="margin-bottom:3px;">'+shEsc(e.requirement||'')+(e.is_required?' <span style="color:#e5484d;font-weight:700;">(obrigatória)</span>':' <span style="color:var(--MU);">(opcional)</span>')+'</li>'; }).join('')
+    +'</ul></div>'; }
+  box.innerHTML=h;
 }
 async function dvDisputar(){
   var email=(ge('dv-disp-email')||{}).value, reason=(ge('dv-disp-reason')||{}).value, txt=(ge('dv-disp-text')||{}).value;
@@ -8892,9 +8918,16 @@ async function dvDisputar(){
 
 function dvFormOferta(){
   var f=ge('dv-form'); if(!f) return;
+  var neg=(DV_DET&&DV_DET.negotiation)||{};
+  var ctx = neg.latest_offer_amount!=null
+    ? '<div style="font-size:11px;color:var(--MU);background:var(--BG);border:1px solid var(--BR);border-radius:8px;padding:8px;">Oferta atual do comprador: <b>'+dvSolPt(neg.latest_solution)+'</b> de R$ '+dvFmtR(neg.latest_offer_amount)+(neg.counter_limit!=null?(' · contrapropostas restantes: <b>'+neg.counter_limit+'</b>'):'')+'</div>'
+    : '';
+  // A Shopee só aceita estes 2 tipos de solução em contraproposta (REFUND / RETURN_REFUND).
   f.innerHTML='<div style="background:var(--C2);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;">'
     +'<div style="font-size:11px;font-weight:700;">💬 Contraproposta</div>'
-    +'<select id="dv-off-sol" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:8px;padding:8px;font-size:12px;"><option value="REFUND">Reembolso sem devolução do produto</option><option value="RETURN_REFUND">Devolução + reembolso</option></select>'
+    +ctx
+    +'<div style="font-size:10px;color:var(--MU);">Solução que você propõe:</div>'
+    +'<select id="dv-off-sol" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:8px;padding:8px;font-size:12px;"><option value="REFUND">Somente reembolso (cliente fica com o produto)</option><option value="RETURN_REFUND">Devolução + reembolso (cliente devolve o produto)</option></select>'
     +'<input id="dv-off-amt" type="number" step="0.01" placeholder="Valor do reembolso (R$) — opcional" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:8px;padding:8px;font-size:12px;">'
     +'<div style="display:flex;gap:8px;justify-content:flex-end;"><button onclick="dvFormFechar()" style="background:transparent;border:1px solid var(--BR);color:var(--TX);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;">Cancelar</button><button onclick="dvOfertar()" style="background:#5b8cff;border:none;color:#fff;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;">Enviar oferta</button></div>'
     +'</div>';
