@@ -8681,8 +8681,8 @@ function dvOferta(d){
     else if(d.needs_logistics===true) code='reembolso_devolucao';
     else if(d.needs_logistics===false) code='reembolso';
   }
-  if(code==='reembolso_devolucao') return {code:code,curto:'Reembolso + devolução',desc:'cliente devolve o produto',ic:'📦'};
-  if(code==='reembolso')           return {code:code,curto:'Somente reembolso',    desc:'cliente fica com o produto',ic:'💸'};
+  if(code==='reembolso_devolucao') return {code:code,curto:'Devolução e Reembolso',desc:'cliente devolve o produto',ic:'📦'};
+  if(code==='reembolso')           return {code:code,curto:'Apenas reembolso',     desc:'cliente fica com o produto',ic:'💸'};
   return null;
 }
 function dvOfertaChip(d){ var o=dvOferta(d); if(!o) return '';
@@ -8690,7 +8690,7 @@ function dvOfertaChip(d){ var o=dvOferta(d); if(!o) return '';
   return '<span title="'+o.desc+'" style="background:'+cor+'1f;color:'+cor+';border:1px solid '+cor+'55;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;white-space:nowrap;">'+o.ic+' '+o.curto+'</span>';
 }
 // Solução de negociação no jargão da Shopee -> texto humano.
-function dvSolPt(s){ if(s==='RETURN_REFUND') return 'Devolução + reembolso'; if(s==='REFUND') return 'Somente reembolso'; return s||'—'; }
+function dvSolPt(s){ if(s==='RETURN_REFUND') return 'Devolução e Reembolso'; if(s==='REFUND') return 'Apenas reembolso'; return s||'—'; }
 // Rótulo de um motivo de disputa EXATAMENTE como a Shopee descreve (usa o texto que a API retorna).
 function dvDispLabel(m){
   var ev=(m.evidence_module_list||[]).map(function(e){return e.requirement;}).filter(Boolean);
@@ -8839,47 +8839,49 @@ async function dvCarregaTimeline(sn){
   }catch(e){}
 }
 
+// Estado da reclamação igual ao Seller Center da Shopee — título, mensagem e ações.
+// Derivado dos prints + API: status + reverse_logistics_status + reason mandam.
+// acoes: 'disputar' | 'finalizar'  (a Shopee só dá esses 2 botões pro vendedor).
+function dvEstadoShopee(det){
+  det=det||{};
+  var status=(det.status||'').toUpperCase();
+  var reason=(det.reason||'').toUpperCase();
+  var rev=(det.reverse_logistics_status||'').toUpperCase();
+  var prazoPostar=det.return_ship_due_date||det.due_date;          // comprador postar a devolução
+  var prazoDisputa=det.return_seller_due_date||det.due_date;        // validar/disputar item devolvido
+  var entregue=(rev==='LOGISTICS_DELIVERY_DONE')||det.is_arrived_at_warehouse;
+  // Terminais
+  if(/CANCELLED/.test(status)) return {tit:'Solicitação cancelada', msg:'Esta solicitação foi cancelada.', cor:'#888', acoes:[]};
+  if(/CLOSED|SUCCESS|FAIL|COMPLETED/.test(status)) return {tit:'Solicitação encerrada', msg:'Esta devolução já foi encerrada — sem ações pendentes.', cor:'#888', acoes:[]};
+  if(status==='ACCEPTED') return {tit:'A Shopee aprovou o reembolso', msg:'A Shopee aprovou o reembolso do comprador.'+(prazoDisputa?' Caso tenha algum problema com o pedido devolvido, você pode abrir uma disputa '+dvPrazoUnix(prazoDisputa)+'.':''), cor:'#16a34a', acoes: prazoDisputa?['disputar']:[]};
+  // Não recebido -> Shopee investiga, vendedor aguarda
+  if(reason==='NOT_RECEIPT') return {tit:'Solicitação em Análise', msg:'Estamos aguardando o envio de informações adicionais do Comprador. O prazo para o envio dessas informações é '+(det.due_date?dvPrazoUnix(det.due_date):'de alguns dias')+'.', cor:'#5b8cff', acoes:[]};
+  // Item já devolvido e entregue a você -> validar (Disputar ou Finalizar)
+  if(entregue) return {tit:'Devolução pendente de validação', msg:'O pedido em devolução foi entregue à você. Caso tenha algum problema com os itens devolvidos, por favor, abra uma disputa '+(prazoDisputa?dvPrazoUnix(prazoDisputa):'dentro do prazo')+'.', cor:'#f59e0b', acoes:['disputar','finalizar']};
+  // Devolução aprovada, aguardando o comprador postar
+  if(det.needs_logistics!==false) return {tit:'Devolução Pendente', msg:'A devolução do pedido foi aprovada pela Shopee. O comprador deverá postar o pedido '+(prazoPostar?dvPrazoUnix(prazoPostar):'dentro do prazo')+'.', cor:'#5b8cff', acoes:['finalizar']};
+  // Apenas reembolso ainda em aberto (sem logística)
+  return {tit:'Solicitação em andamento', msg:'Aguardando a Shopee. Você pode finalizar e reembolsar o comprador ou abrir uma disputa.', cor:'#5b8cff', acoes:['finalizar','disputar']};
+}
 function dvRenderAcoes(){
   var box=ge('dv-acoes'); if(!box) return; var det=DV_DET||{};
-  var status=(det.status||'').toUpperCase();
-  var neg=det.negotiation||{}, negSt=neg.negotiation_status||'';
   var proofSt=(det.seller_proof&&det.seller_proof.seller_proof_status)||'';
-  var terminal=/ACCEPTED|CANCELLED|CLOSED|SUCCESS|FAIL/.test(status);
-  if(terminal){ box.innerHTML='<div style="background:var(--C2);border-radius:10px;padding:12px;font-size:12px;color:var(--MU);text-align:center;border-top:1px solid var(--BR);">Devolução encerrada — sem ações pendentes.</div>'; return; }
-  // "Produto não recebido" (NOT_RECEIPT): quem investiga é a Shopee + transportadora. O Seller
-  // Center não dá ação ao vendedor enquanto analisa — espelhamos isso (e evitamos reembolso à toa).
-  var reason=(det.reason||'').toUpperCase();
-  if(reason==='NOT_RECEIPT'){
-    box.innerHTML='<div style="border-top:1px solid var(--BR);padding-top:12px;">'
-      +'<div style="background:#5b8cff14;border:1px solid #5b8cff55;border-radius:10px;padding:12px;">'
-      +'<div style="font-weight:700;font-size:13px;color:#5b8cff;">⏳ A Shopee está analisando</div>'
-      +(det.due_date?'<div style="font-size:12px;font-weight:700;margin-top:4px;">🕒 A Shopee deve responder '+shEsc(dvPrazoUnix(det.due_date))+'</div>':'')
-      +'<div style="font-size:12px;color:var(--MU);margin-top:5px;line-height:1.5;">Reclamação de <b>produto não recebido</b> — a Shopee verifica a entrega com a transportadora. Em geral <b>nenhuma ação sua é necessária</b>: aguarde a decisão. Aceitar/reembolsar agora pode te fazer perder dinheiro que a Shopee poderia cobrir.</div>'
-      +'<div style="margin-top:8px;text-align:right;"><a href="https://seller.shopee.com.br/portal/returns" target="_blank" rel="noopener" style="font-size:10px;color:var(--MU);">conferir no Seller Center ↗</a></div>'
-      +'</div></div>';
-    return;
-  }
+  var est=dvEstadoShopee(det);
   var bS='border:none;border-radius:8px;padding:9px 14px;font-size:12px;font-weight:600;cursor:pointer;';
-  var btns='', dica='';
-  var temOferta=(negSt==='PENDING_RESPOND' && neg.latest_offer_amount!=null);
-  if(temOferta){
-    // Fase de negociação: a Shopee só permite ACEITAR a oferta ou CONTRAPOR. "Disputar" não aparece aqui (espelha o Seller Center).
-    btns+='<button onclick="dvAceitarOferta()" style="'+bS+'background:#16a34a;color:#fff;">✅ Aceitar oferta (R$ '+dvFmtR(neg.latest_offer_amount)+')</button>';
-    if(neg.counter_limit==null || neg.counter_limit>0) btns+='<button onclick="dvFormOferta()" style="'+bS+'background:#5b8cff;color:#fff;">💬 Contraproposta</button>';
-    dica='<div style="font-size:10px;color:var(--MU);margin-top:6px;">Comprador propôs <b>'+dvSolPt(neg.latest_solution)+'</b> de R$ '+dvFmtR(neg.latest_offer_amount)+(neg.counter_limit!=null?(' · você ainda pode contrapor '+neg.counter_limit+'x'):'')+'. Disputa não fica disponível nesta fase (igual à Shopee) — responda à oferta primeiro.</div>';
-  } else {
-    var of=dvOferta(det); var lbl=of?('✅ Aceitar — '+of.curto):'✅ Aceitar devolução';
-    btns+='<button onclick="dvAceitar()" title="'+(of?of.desc:'')+'" style="'+bS+'background:#16a34a;color:#fff;">'+lbl+'</button>';
-    btns+='<button onclick="dvFormDisputa()" style="'+bS+'background:#f59e0b;color:#fff;">⚖️ Disputar</button>';
-    btns+='<button onclick="dvFormProvas()" style="'+bS+'background:var(--C2);color:var(--TX);border:1px solid var(--BR);">🖼️ Enviar provas</button>';
-    if(proofSt==='PENDING') btns+='<button onclick="dvCancelarDisputa()" style="'+bS+'background:transparent;color:var(--MU);border:1px solid var(--BR);">✖ Cancelar disputa</button>';
-  }
+  var btns='';
+  if(est.acoes.indexOf('disputar')>=0) btns+='<button onclick="dvFormDisputa()" style="'+bS+'background:#f59e0b;color:#fff;">⚖️ Disputar</button>';
+  if(est.acoes.indexOf('finalizar')>=0) btns+='<button onclick="dvAceitar()" style="'+bS+'background:#16a34a;color:#fff;">✅ Finalizar sem disputas e reembolsar comprador</button>';
+  if(est.acoes.indexOf('disputar')>=0) btns+='<button onclick="dvFormProvas()" style="'+bS+'background:var(--C2);color:var(--TX);border:1px solid var(--BR);">🖼️ Enviar provas</button>';
+  if(proofSt==='PENDING') btns+='<button onclick="dvCancelarDisputa()" style="'+bS+'background:transparent;color:var(--MU);border:1px solid var(--BR);">✖ Cancelar disputa</button>';
   var sellerUrl='https://seller.shopee.com.br/portal/returns';
-  box.innerHTML='<div style="border-top:1px solid var(--BR);padding-top:12px;"><div style="font-size:10px;color:var(--MU);text-transform:uppercase;margin-bottom:8px;">Responder</div>'
-    +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'+btns+'</div>'
-    +dica
+  box.innerHTML='<div style="border-top:1px solid var(--BR);padding-top:12px;">'
+    +'<div style="background:'+est.cor+'14;border:1px solid '+est.cor+'55;border-radius:10px;padding:12px;">'
+      +'<div style="font-weight:800;font-size:14px;color:'+est.cor+';">'+shEsc(est.tit)+'</div>'
+      +'<div style="font-size:12px;color:var(--MU);margin-top:5px;line-height:1.5;">'+shEsc(est.msg)+'</div>'
+    +'</div>'
+    +(btns?'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">'+btns+'</div>':'')
     +'<div id="dv-form" style="margin-top:10px;"></div>'
-    +'<div style="margin-top:8px;text-align:right;"><a href="'+sellerUrl+'" target="_blank" rel="noopener" style="font-size:10px;color:var(--MU);">ou abrir no Seller Center ↗</a></div>'
+    +'<div style="margin-top:8px;text-align:right;"><a href="'+sellerUrl+'" target="_blank" rel="noopener" style="font-size:10px;color:var(--MU);">conferir no Seller Center ↗</a></div>'
     +'</div>';
 }
 function dvFormFechar(){ var f=ge('dv-form'); if(f) f.innerHTML=''; }
@@ -8892,7 +8894,7 @@ async function dvAposAcao(j, okMsg){
   return true;
 }
 
-async function dvAceitar(){ if(!confirm('Aceitar a devolução? O comprador será reembolsado (vira prejuízo).')) return; var j=await dvPOST('/api/shopee/devolucoes/aceitar',{sn:DV_SN}); if(await dvAposAcao(j,'Devolução aceita.')) dvLoad(); }
+async function dvAceitar(){ if(!confirm('Finalizar sem disputas e reembolsar o comprador? O comprador será reembolsado (vira prejuízo).')) return; var j=await dvPOST('/api/shopee/devolucoes/aceitar',{sn:DV_SN}); if(await dvAposAcao(j,'Finalizada — comprador reembolsado.')) dvLoad(); }
 async function dvAceitarOferta(){ if(!confirm('Aceitar a oferta do comprador?')) return; var j=await dvPOST('/api/shopee/devolucoes/aceitar-oferta',{sn:DV_SN}); if(await dvAposAcao(j,'Oferta aceita.')) dvLoad(); }
 async function dvCancelarDisputa(){ if(!confirm('Cancelar a disputa em andamento?')) return; var j=await dvPOST('/api/shopee/devolucoes/cancelar-disputa',{sn:DV_SN}); if(await dvAposAcao(j,'Disputa cancelada.')) dvLoad(); }
 
