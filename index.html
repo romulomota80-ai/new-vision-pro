@@ -8710,10 +8710,19 @@ function dvOfertaChip(d){ var o=dvOferta(d); if(!o) return '';
 }
 // Solução de negociação no jargão da Shopee -> texto humano.
 function dvSolPt(s){ if(s==='RETURN_REFUND') return 'Devolução e Reembolso'; if(s==='REFUND') return 'Apenas reembolso'; return s||'—'; }
-// Rótulo de um motivo de disputa EXATAMENTE como a Shopee descreve (usa o texto que a API retorna).
+// Títulos dos motivos de disputa EXATAMENTE como a Shopee mostra (a API só manda o código, não o título).
+var DV_DISP_TITULOS={
+  81:'Não recebi o produto devolvido pelo comprador, mas consta como entregue na Central do Vendedor',
+  82:'Recebi produtos devolvidos amassados, arranhados ou quebrados / danos físicos',
+  83:'O pacote chegou vazio ou estão faltando peças e/ou acessórios no pedido devolvido pelo comprador',
+  84:'O produto que recebi não é o mesmo que enviei ao comprador',
+  88:'[Apenas para vendedor com logística própria] Não foi possível realizar a coleta',
+  86:'Não concordo com o desconto das taxas de devolução'
+};
 function dvDispLabel(m){
+  if(DV_DISP_TITULOS[m.dispute_reason]) return DV_DISP_TITULOS[m.dispute_reason];   // título exato da Shopee
   var ev=(m.evidence_module_list||[]).map(function(e){return e.requirement;}).filter(Boolean);
-  var base=ev[0]||m.dispute_requirement||('Motivo '+m.dispute_reason);
+  var base=ev[0]||m.dispute_requirement||('Motivo '+m.dispute_reason);               // fallback p/ códigos ainda não mapeados
   return base.replace(/\s+/g,' ').trim();
 }
 function dvCardLinha(d){
