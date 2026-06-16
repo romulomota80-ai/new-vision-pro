@@ -8620,7 +8620,7 @@ function shAba(t){
 function shTrocaLoja(){ var s=ge('sh-loja'); if(s) SH_CONTA = s.value; shAba(SH_SUBABA); }
 
 // ── DEVOLUCOES (aba independente) ───────────────────────────────
-var DV_VIEW='precisa_acao', DV_MES='', DV_ROWS=[], DV_CONTA=null, DV_LOJAS=[], DV_SHOPS_LOADED=false;
+var DV_VIEW='precisa_acao', DV_MES='', DV_ROWS=[], DV_CONTA=null, DV_LOJAS=[], DV_SHOPS_LOADED=false, DV_BUSCA='';
 var DV_VIEWS=[['precisa_acao','🔔 Precisa responder'],['aguardando','⏳ Aguardando Shopee'],['logistica','📦 Logística'],['em_disputa','⚖️ Em disputa'],['favor','✅ A favor'],['contra','❌ Contra'],['produtos','📦 Produtos'],['metricas','📊 Métricas']];
 var DV_LOG='aguardando';
 var DV_LOG_SUB=[['aguardando','📦 Aguardando devolução','log_aguardando'],['a_caminho','🚚 A caminho','log_caminho']];
@@ -8652,11 +8652,38 @@ async function rDvScreen(){
       +'<div style="font-family:var(--FONT-H);font-size:22px;font-weight:800;letter-spacing:-.5px;">↩️ Devoluções</div>'+lojaSel+'</div>'
     +'<div style="font-size:11px;color:var(--MU);margin-bottom:10px;">Disputas e devoluções — responda no prazo e acompanhe recuperado vs prejuízo</div>'
     +'<div class="lbar" style="overflow-x:auto;flex-wrap:nowrap;display:flex;align-items:center;gap:6px;">'+tabs+dir+'</div>'
+    +'<div style="margin-top:10px;display:flex;gap:6px;">'
+      +'<input id="dv-busca" type="text" placeholder="🔍 Buscar por ID da Solicitação ou ID do Pedido" value="'+shEsc(DV_BUSCA||'')+'" onkeydown="if(event.key===\'Enter\')dvBuscar()" style="flex:1;background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:8px;padding:9px 12px;font-size:12px;font-family:inherit;outline:none;">'
+      +'<button onclick="dvBuscar()" style="background:var(--R);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:12px;font-weight:600;cursor:pointer;">Buscar</button>'
+      +(DV_BUSCA?'<button onclick="dvLimparBusca()" style="background:transparent;border:1px solid var(--BR);color:var(--MU);border-radius:8px;padding:9px 12px;font-size:12px;cursor:pointer;">✕ limpar</button>':'')
+    +'</div>'
     +'<div id="dv-body" style="margin-top:12px;"><div class="card" style="padding:24px;text-align:center;color:var(--MU);">Carregando…</div></div>';
   dvLoad(); dvAtualizaBadge();
 }
-function dvAba(v){ DV_VIEW=v; rDvScreen(); }
-function dvLoad(){ if(DV_VIEW==='produtos') return dvRenderProdutos(); if(DV_VIEW==='metricas') return dvRenderMetricas(); if(DV_VIEW==='logistica') return dvRenderLogistica(); return dvRenderLista(); }
+function dvAba(v){ DV_VIEW=v; DV_BUSCA=''; rDvScreen(); }
+function dvLoad(){ if(DV_BUSCA) return dvRenderBusca(); if(DV_VIEW==='produtos') return dvRenderProdutos(); if(DV_VIEW==='metricas') return dvRenderMetricas(); if(DV_VIEW==='logistica') return dvRenderLogistica(); return dvRenderLista(); }
+function dvBuscar(){ var i=ge('dv-busca'); DV_BUSCA=((i&&i.value)||'').trim(); rDvScreen(); }
+function dvLimparBusca(){ DV_BUSCA=''; rDvScreen(); }
+// Em qual balde/aba a devolução está (pra mostrar no resultado da busca).
+function dvBalde(d){
+  if(d.status_interno==='favor') return '✅ A favor';
+  if(d.status_interno==='contra') return '❌ Contra';
+  if(d.precisa_acao) return '🔔 Precisa responder';
+  if(d.fase_logistica==='aguardando') return '📦 Logística · Aguardando devolução';
+  if(d.fase_logistica==='a_caminho') return '🚚 Logística · A caminho';
+  return '⏳ Aguardando Shopee';
+}
+async function dvRenderBusca(){
+  var body=ge('dv-body'); if(!body) return;
+  body.innerHTML='<div class="card" style="padding:24px;text-align:center;color:var(--MU);">Buscando…</div>';
+  var j; try{ j=await dvAPI('/api/shopee/devolucoes?filtro=todas&busca='+encodeURIComponent(DV_BUSCA)+'&limit=50'); }catch(e){ j={erro:e.message}; }
+  if(!j||j.erro){ body.innerHTML='<div class="card" style="padding:20px;color:var(--R);">Erro: '+shEsc((j&&j.erro)||'falha')+'</div>'; return; }
+  DV_ROWS=j.itens||[];
+  if(!DV_ROWS.length){ body.innerHTML='<div class="card" style="padding:34px;text-align:center;color:var(--MU);">Nada encontrado para “'+shEsc(DV_BUSCA)+'”.</div>'; return; }
+  var h='<div style="font-size:12px;color:var(--MU);margin-bottom:6px;">'+DV_ROWS.length+' resultado(s) para “'+shEsc(DV_BUSCA)+'”</div>';
+  DV_ROWS.forEach(function(d){ h+='<div style="font-size:11px;font-weight:700;color:var(--R);margin:8px 0 3px;">📍 Está em: '+dvBalde(d)+'</div>'+dvCardLinha(d); });
+  body.innerHTML=h;
+}
 function dvLogSet(v){ DV_LOG=v; dvRenderLogistica(); }
 async function dvRenderLogistica(){
   var body=ge('dv-body'); if(!body) return;
