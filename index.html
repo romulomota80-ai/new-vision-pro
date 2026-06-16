@@ -9015,6 +9015,9 @@ async function dvFormDisputa(){
   var f=ge('dv-form'); if(!f) return; f.innerHTML='<div style="font-size:12px;color:var(--MU);">Carregando motivos da Shopee…</div>';
   DV_DISP_MOT=[]; try{ var j=await dvAPI('/api/shopee/devolucoes/motivos-disputa?sn='+encodeURIComponent(DV_SN)); DV_DISP_MOT=(j&&j.motivos)||[]; }catch(e){}
   if(!DV_DISP_MOT.length){ f.innerHTML='<div style="background:var(--C2);border-radius:10px;padding:12px;font-size:12px;color:var(--MU);">A Shopee não retornou motivos de disputa para esta reclamação agora — normalmente isso significa que ela ainda não está na fase de disputa.</div>'; return; }
+  // Ordem igual à Shopee (a API devolve em ordem diferente). Códigos fora do mapa vão pro fim.
+  var DV_DISP_ORDEM={54:1,53:2,55:3,81:10,82:11,83:12,84:13,88:14,86:15};
+  DV_DISP_MOT.sort(function(a,b){ return (DV_DISP_ORDEM[a.dispute_reason]||99)-(DV_DISP_ORDEM[b.dispute_reason]||99); });
   var opts=DV_DISP_MOT.map(function(m){ return '<option value="'+m.dispute_reason+'">'+shEsc(dvDispLabel(m))+'</option>'; }).join('');
   f.innerHTML='<div style="background:var(--C2);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;">'
     +'<div style="font-size:11px;font-weight:700;">⚖️ Abrir disputa</div>'
