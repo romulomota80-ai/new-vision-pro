@@ -2,6 +2,40 @@
 
 Log das mudanças e decisões. O mais recente em cima.
 
+## 2026-06-16
+
+### Devoluções Shopee — custo real de caixa + culpa (quem paga o frete)
+
+Pergunta do Rômulo: "nem toda devolução eu pago — preciso ver quando pago frete e
+quanto." Investigado no escrow real (`get_escrow_detail` → `shopee_repasses`) e
+**confirmado na web** (política Shopee BR + docs internacionais FSF/RSF).
+
+**Mecânica descoberta (e provada nos dados):**
+- Em **venda normal**, `shopee_shipping_rebate = actual_shipping_fee` → o vendedor paga
+  **R$0** de frete (a Shopee subsidia 100%; o "grátis" do cliente é a Shopee pagando).
+- Em **devolução**, a Shopee às vezes **cancela o subsídio** (`rebate → 0`) e joga o
+  frete de ida (FSF) + o reverso (RSF) no vendedor. O `valor_liquido` (escrow_amount_
+  after_adjustment) negativo é o caixa que de fato saiu.
+- **Cruzamento motivo × pagamento (prova):** culpa do vendedor (WRONG_ITEM 46% paga
+  ~R$9, FUNCTIONAL_DMG 60% paga ~R$12, ITEM_MISSING) concentra o custo; arrependimento
+  (ITEM_NOT_FIT, CHANGE_MIND) quase nunca paga (centavos). **89% do que o Rômulo pagou
+  de frete foi em devolução de culpa dele.**
+
+**Totais reais (histórico):** de R$83,7k reembolsados aos clientes, só **R$2.558 saíram
+do caixa** (frete ida R$1.977 + volta R$650); 157 devoluções custaram, **1.034 a Shopee
+cobriu**, 159 pendentes de repasse.
+
+**Backend (`routes/shopee.js`):** `GET /devolucoes` e `/devolucoes/metricas` agora fazem
+LEFT JOIN em `shopee_repasses` por `order_sn` e devolvem por item `custo_caixa`,
+`frete_ida`, `frete_volta`, `culpa` (vendedor/comprador/neutro via motivo) e
+`repasse_pendente`; métricas somam tudo + quebra por culpa. Fonte da verdade = escrow,
+não chute.
+
+**Frontend (`index.html`):** badge de **culpa** (🔴 sua / 🟢 cliente / ⚪ neutro) e de
+**custo** (💸 Você pagou R$X / 🟢 Sem custo / 💰 pendente) em cada card; bloco de custo
+de caixa no modal (ida/volta); seção nas Métricas com "frete que você pagou" + quebra
+por culpa. JS validado (7 blocos).
+
 ## 2026-06-15
 
 ### Devoluções Shopee — FASE 5 (responder nativo pela API + provas + Telegram)
