@@ -8799,14 +8799,15 @@ async function dvAbrir(sn){
   ov.style.cssText='position:fixed;inset:0;background:rgba(10,12,20,.55);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:30px 14px;overflow-y:auto;';
   ov.innerHTML='<div class="card" style="max-width:680px;width:100%;padding:0;overflow:hidden;">'
     +'<div style="padding:14px 18px;border-bottom:1px solid var(--BR);display:flex;justify-content:space-between;align-items:center;gap:10px;">'
-    +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'+dvStatusBadge(d.status_interno)+'<span style="font-weight:700;">'+dvMotivoPt(d.motivo)+'</span><span style="font-size:11px;color:var(--MU);font-family:var(--FONT-M);">'+shEsc(d.return_sn)+'</span></div>'
+    +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'+dvStatusBadge(d.status_interno)+'<span style="font-weight:700;">'+dvMotivoPt(d.motivo)+'</span><span style="font-size:11px;color:var(--MU);font-family:var(--FONT-M);">Solicitação '+shEsc(d.return_sn)+'</span></div>'
     +'<button onclick="dvFecharModal()" style="background:transparent;border:none;color:var(--MU);font-size:20px;cursor:pointer;line-height:1;">×</button></div>'
     +'<div style="padding:18px;display:flex;flex-direction:column;gap:14px;">'
     +((d.precisa_acao||d.status_interno==='em_disputa')&&d.prazo_resposta?'<div style="background:#e5484d18;border:1px solid #e5484d55;border-radius:10px;padding:10px 12px;">'+dvFmtPrazo(d.prazo_resposta)+'</div>':'')
     +(function(){var o=dvOferta(d); if(!o) return ''; var cor=o.code==='reembolso_devolucao'?'#5b8cff':'#f59e0b'; return '<div style="background:'+cor+'14;border:1px solid '+cor+'55;border-radius:10px;padding:10px 12px;"><div style="font-size:10px;color:var(--MU);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">O comprador está solicitando</div><div style="font-size:15px;font-weight:800;color:'+cor+';">'+o.ic+' '+o.curto+'</div><div style="font-size:11px;color:var(--MU);margin-top:2px;">'+o.desc+'</div></div>';})()
     +'<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px;">'
     +'<div><div style="font-size:10px;color:var(--MU);text-transform:uppercase;">Valor</div><div style="font-weight:800;font-size:18px;">R$ '+dvFmtR(d.valor)+'</div></div>'
-    +'<div><div style="font-size:10px;color:var(--MU);text-transform:uppercase;">Pedido</div><div style="font-family:var(--FONT-M);">'+shEsc(d.order_sn||'-')+'</div></div>'
+    +'<div><div style="font-size:10px;color:var(--MU);text-transform:uppercase;">ID da Solicitação</div><div style="font-family:var(--FONT-M);">'+shEsc(d.return_sn||'-')+'</div><div style="font-size:9px;color:var(--MU);">(a devolução)</div></div>'
+    +'<div><div style="font-size:10px;color:var(--MU);text-transform:uppercase;">ID do Pedido</div><div style="font-family:var(--FONT-M);">'+shEsc(d.order_sn||'-')+'</div><div style="font-size:9px;color:var(--MU);">(a venda)</div></div>'
     +'<div><div style="font-size:10px;color:var(--MU);text-transform:uppercase;">SKU</div><div style="font-family:var(--FONT-M);">'+shEsc(d.sku||'-')+'</div></div>'
     +'<div><div style="font-size:10px;color:var(--MU);text-transform:uppercase;">Comprador</div><div>'+shEsc(d.comprador||'-')+'</div></div>'
     +(d.needs_logistics?'<div><div style="font-size:10px;color:var(--MU);text-transform:uppercase;">Logística</div><div>📦 '+shEsc(d.tracking_number||'retorno físico')+'</div></div>':'')
