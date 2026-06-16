@@ -8667,13 +8667,33 @@ async function dvRenderLista(){
   DV_ROWS.forEach(function(d){ h+=dvCardLinha(d); });
   body.innerHTML=h;
 }
+// O que o comprador está solicitando. Aceita tanto a linha da lista (tipo_solucao)
+// quanto o detalhe cru da Shopee (return_solution / needs_logistics).
+function dvOferta(d){
+  d=d||{};
+  var code=d.tipo_solucao||'';
+  if(!code){
+    var s=d.return_solution;
+    if(s===0||s==='0') code='reembolso_devolucao';
+    else if(s===1||s==='1') code='reembolso';
+    else if(d.needs_logistics===true) code='reembolso_devolucao';
+    else if(d.needs_logistics===false) code='reembolso';
+  }
+  if(code==='reembolso_devolucao') return {code:code,curto:'Reembolso + devolução',desc:'cliente devolve o produto',ic:'📦'};
+  if(code==='reembolso')           return {code:code,curto:'Somente reembolso',    desc:'cliente fica com o produto',ic:'💸'};
+  return null;
+}
+function dvOfertaChip(d){ var o=dvOferta(d); if(!o) return '';
+  var cor=o.code==='reembolso_devolucao'?'#5b8cff':'#f59e0b';
+  return '<span title="'+o.desc+'" style="background:'+cor+'1f;color:'+cor+';border:1px solid '+cor+'55;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;white-space:nowrap;">'+o.ic+' '+o.curto+'</span>';
+}
 function dvCardLinha(d){
   var pc=d.provas_cliente||{},fotos=(pc.imagens||[]).length,videos=(pc.videos||[]).length;
   var prazoHTML=(d.precisa_acao||d.status_interno==='em_disputa')?dvFmtPrazo(d.prazo_resposta):'';
   return '<div class="card" style="padding:13px 15px;">'
     +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">'
     +'<div style="flex:1;min-width:200px;">'
-    +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'+dvStatusBadge(d.status_interno)+dvCulpa(d.culpa)+(d.precisa_acao?'<span style="background:#e5484d;color:#fff;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;">⚡ precisa ação</span>':'')+'<span style="font-size:11px;color:var(--MU);">'+dvMotivoPt(d.motivo)+'</span></div>'
+    +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'+dvStatusBadge(d.status_interno)+dvCulpa(d.culpa)+(d.precisa_acao?'<span style="background:#e5484d;color:#fff;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;">⚡ precisa ação</span>':'')+dvOfertaChip(d)+'<span style="font-size:11px;color:var(--MU);">'+dvMotivoPt(d.motivo)+'</span></div>'
     +'<div style="font-weight:600;margin-top:5px;font-size:13px;">'+shEsc((d.produto||'-').slice(0,55))+'</div>'
     +'<div style="font-size:11px;color:var(--MU);margin-top:2px;font-family:var(--FONT-M);">'+shEsc(d.sku||'-')+' · pedido '+shEsc(d.order_sn||'-')+'</div>'
     +(d.motivo_texto?'<div style="font-size:11px;margin-top:5px;opacity:.8;">“'+shEsc(d.motivo_texto.slice(0,120))+'”</div>':'')
@@ -8773,6 +8793,7 @@ async function dvAbrir(sn){
     +'<button onclick="dvFecharModal()" style="background:transparent;border:none;color:var(--MU);font-size:20px;cursor:pointer;line-height:1;">×</button></div>'
     +'<div style="padding:18px;display:flex;flex-direction:column;gap:14px;">'
     +((d.precisa_acao||d.status_interno==='em_disputa')&&d.prazo_resposta?'<div style="background:#e5484d18;border:1px solid #e5484d55;border-radius:10px;padding:10px 12px;">'+dvFmtPrazo(d.prazo_resposta)+'</div>':'')
+    +(function(){var o=dvOferta(d); if(!o) return ''; var cor=o.code==='reembolso_devolucao'?'#5b8cff':'#f59e0b'; return '<div style="background:'+cor+'14;border:1px solid '+cor+'55;border-radius:10px;padding:10px 12px;"><div style="font-size:10px;color:var(--MU);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">O comprador está solicitando</div><div style="font-size:15px;font-weight:800;color:'+cor+';">'+o.ic+' '+o.curto+'</div><div style="font-size:11px;color:var(--MU);margin-top:2px;">'+o.desc+'</div></div>';})()
     +'<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px;">'
     +'<div><div style="font-size:10px;color:var(--MU);text-transform:uppercase;">Valor</div><div style="font-weight:800;font-size:18px;">R$ '+dvFmtR(d.valor)+'</div></div>'
     +'<div><div style="font-size:10px;color:var(--MU);text-transform:uppercase;">Pedido</div><div style="font-family:var(--FONT-M);">'+shEsc(d.order_sn||'-')+'</div></div>'
@@ -8821,7 +8842,8 @@ function dvRenderAcoes(){
     btns+='<button onclick="dvAceitarOferta()" style="'+bS+'background:#16a34a;color:#fff;">✅ Aceitar oferta (R$ '+dvFmtR(neg.latest_offer_amount)+')</button>';
     btns+='<button onclick="dvFormOferta()" style="'+bS+'background:#5b8cff;color:#fff;">💬 Contraproposta</button>';
   } else {
-    btns+='<button onclick="dvAceitar()" style="'+bS+'background:#16a34a;color:#fff;">✅ Aceitar devolução</button>';
+    var of=dvOferta(det); var lbl=of?('✅ Aceitar — '+of.curto):'✅ Aceitar devolução';
+    btns+='<button onclick="dvAceitar()" title="'+(of?of.desc:'')+'" style="'+bS+'background:#16a34a;color:#fff;">'+lbl+'</button>';
   }
   btns+='<button onclick="dvFormDisputa()" style="'+bS+'background:#f59e0b;color:#fff;">⚖️ Disputar</button>';
   btns+='<button onclick="dvFormProvas()" style="'+bS+'background:var(--C2);color:var(--TX);border:1px solid var(--BR);">🖼️ Enviar provas</button>';
