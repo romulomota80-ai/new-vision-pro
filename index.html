@@ -8959,8 +8959,18 @@ function dvRenderAcoes(){
 }
 function dvFormFechar(){ var f=ge('dv-form'); if(f) f.innerHTML=''; }
 
+// Traduz os erros mais comuns da Shopee pro português.
+function dvErroPt(msg){
+  var m=String(msg||'').toLowerCase();
+  if(m.indexOf('proof overdue')>=0) return 'O prazo para enviar provas desta devolução já venceu — não dá mais para disputar com prova.';
+  if(m.indexOf('dispute reason is invalid')>=0) return 'Motivo de disputa inválido. Se o motivo exige foto/vídeo, anexe a prova antes de enviar.';
+  if(m.indexOf('overdue')>=0 || m.indexOf('deadline')>=0) return 'O prazo desta ação já venceu na Shopee.';
+  if(m.indexOf("doesn't exist")>=0 || m.indexOf('not queried')>=0) return 'Devolução não encontrada na Shopee (verifique o ID).';
+  if(m.indexOf('permission')>=0 || m.indexOf('no_scope')>=0) return 'Sem permissão para esta ação na conta Shopee.';
+  return msg||'falha';
+}
 async function dvAposAcao(j, okMsg){
-  if(!j||j.erro||j.ok===false){ alert('Erro: '+((j&&(j.erro||(j.shopee&&j.shopee.message)))||'falha')); return false; }
+  if(!j||j.erro||j.ok===false){ alert('Erro: '+dvErroPt((j&&(j.erro||(j.shopee&&j.shopee.message)))||'falha')); return false; }
   try{ var dj=await dvAPI('/api/shopee/devolucoes/detalhe?sn='+encodeURIComponent(DV_SN)); DV_DET=(dj&&dj.detalhe)||DV_DET; }catch(e){}
   dvRenderAcoes(); dvCarregaTimeline(DV_SN); dvAtualizaBadge();
   var f=ge('dv-form'); if(f&&okMsg) f.innerHTML='<div style="color:#16a34a;font-size:12px;font-weight:600;">✔ '+okMsg+'</div>';
