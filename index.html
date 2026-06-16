@@ -3335,9 +3335,6 @@ function rContas(){
    if(c.of||c.ultima_sync){
     h+='<div id="csync-'+c.id+'" style="font-size:10px;color:var(--MU);margin-top:5px;">'+(c.ultima_sync?('🕐 Atualizado '+tempoAtras(c.ultima_sync)):'🕐 nunca atualizado')+'</div>';
    }
-   if(c.of){
-    h+='<div id="cota-'+c.id+'" style="font-size:10px;color:var(--MU);margin-top:2px;opacity:.85;">📊 cota: …</div>';
-   }
    if(c.agencia||c.numero){
     h+='<div style="font-size:10px;color:var(--MU);margin-top:6px;">';
     if(c.agencia) h+='Ag '+c.agencia+' ';
@@ -3372,7 +3369,6 @@ function rContas(){
  h+='</div></div></div>';
 
  el.innerHTML=h;
- carregarLimitesOF();
 }
 
 // Busca a cota de dados restante por conta (Open Finance) e preenche os cards.
