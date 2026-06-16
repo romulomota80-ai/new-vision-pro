@@ -8945,7 +8945,6 @@ function dvRenderAcoes(){
   var btns=(est.acoes||[]).map(function(a){ var b=DV_ACAO_BTN[a]; if(!b) return '';
     var st=bS+'background:'+b.bg+';color:'+(b.borda?'var(--TX)':'#fff')+';'+(b.borda?'border:1px solid var(--BR);':'');
     return '<button onclick="'+b.fn+'" style="'+st+'">'+shEsc(b.txt)+'</button>'; }).join('');
-  if(est.acoes.indexOf('disputar')>=0) btns+='<button onclick="dvFormProvas()" style="'+bS+'background:var(--C2);color:var(--TX);border:1px solid var(--BR);">🖼️ Enviar provas</button>';
   if(proofSt==='PENDING') btns+='<button onclick="dvCancelarDisputa()" style="'+bS+'background:transparent;color:var(--MU);border:1px solid var(--BR);">✖ Cancelar disputa</button>';
   box.innerHTML='<div style="border-top:1px solid var(--BR);padding-top:12px;">'
     +'<div style="background:'+est.cor+'14;border:1px solid '+est.cor+'55;border-radius:10px;padding:12px;">'
@@ -9024,6 +9023,9 @@ async function dvFormDisputa(){
     +'<div style="font-size:10px;color:var(--MU);">Motivo (exatamente como a Shopee classifica):</div>'
     +'<select id="dv-disp-reason" onchange="dvDispDetalhe()" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:8px;padding:8px;font-size:12px;">'+opts+'</select>'
     +'<div id="dv-disp-req"></div>'
+    +'<div style="font-size:10px;color:var(--MU);">Anexar foto/vídeo de prova:</div>'
+    +'<input id="dv-disp-files" type="file" accept="image/*,video/*" multiple style="font-size:12px;color:var(--TX);">'
+    +'<div id="dv-disp-upstatus" style="font-size:11px;color:var(--MU);"></div>'
     +'<textarea id="dv-disp-text" placeholder="Explique por que está disputando" rows="3" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:8px;padding:8px;font-size:12px;resize:vertical;font-family:inherit;"></textarea>'
     +'<div style="display:flex;gap:8px;justify-content:flex-end;"><button onclick="dvFormFechar()" style="background:transparent;border:1px solid var(--BR);color:var(--TX);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;">Cancelar</button><button onclick="dvDisputar()" style="background:#f59e0b;border:none;color:#fff;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;">Enviar disputa</button></div>'
     +'</div>';
@@ -9035,7 +9037,7 @@ function dvDispDetalhe(){
   var m=DV_DISP_MOT.filter(function(x){return String(x.dispute_reason)===String(sel.value);})[0]; if(!m){ box.innerHTML=''; return; }
   var ev=(m.evidence_module_list||[]); var h='';
   var obrig=ev.some(function(e){return e.is_required;});
-  if(obrig) h+='<div style="background:#e5484d18;border:1px solid #e5484d66;border-radius:8px;padding:9px 11px;font-size:11px;color:#e5484d;font-weight:700;">⚠️ Foto ou vídeo é OBRIGATÓRIO para este motivo. Anexe a prova em “🖼️ Enviar provas” ANTES de enviar a disputa — sem isso a Shopee recusa.</div>';
+  if(obrig) h+='<div style="background:#e5484d18;border:1px solid #e5484d66;border-radius:8px;padding:9px 11px;font-size:11px;color:#e5484d;font-weight:700;">⚠️ Foto ou vídeo é OBRIGATÓRIO para este motivo. Anexe o arquivo no campo abaixo — sem isso a Shopee recusa.</div>';
   if(m.dispute_requirement) h+='<div style="margin-top:6px;font-size:11px;color:var(--MU);white-space:pre-line;background:var(--BG);border:1px solid var(--BR);border-radius:8px;padding:8px;">'+shEsc(m.dispute_requirement)+'</div>';
   if(ev.length){ h+='<div style="margin-top:6px;font-size:11px;"><div style="font-weight:700;margin-bottom:3px;">📎 Provas que a Shopee exige:</div><ul style="margin:0 0 0 16px;padding:0;">'
     +ev.map(function(e){ return '<li style="margin-bottom:3px;">'+shEsc(e.requirement||'')+(e.is_required?' <span style="color:#e5484d;font-weight:700;">(obrigatória)</span>':' <span style="color:var(--MU);">(opcional)</span>')+'</li>'; }).join('')
@@ -9047,8 +9049,23 @@ async function dvDisputar(){
   if(!reason){ alert('Selecione o motivo.'); return; }
   var m=DV_DISP_MOT.filter(function(x){return String(x.dispute_reason)===String(reason);})[0]||{};
   var obrig=(m.evidence_module_list||[]).some(function(e){return e.is_required;});
-  if(obrig && !confirm('⚠️ Este motivo EXIGE foto ou vídeo como prova.\n\nVocê já enviou a prova em “Enviar provas”? Sem a prova, a Shopee recusa a disputa.\n\nClique OK só se já anexou a prova.')) return;
-  var j=await dvPOST('/api/shopee/devolucoes/disputar',{sn:DV_SN,dispute_reason:Number(reason),dispute_text_reason:txt});
+  var inp=ge('dv-disp-files'), st=ge('dv-disp-upstatus');
+  var temArquivo=inp&&inp.files&&inp.files.length;
+  if(obrig && !temArquivo){ alert('⚠️ Este motivo EXIGE foto ou vídeo como prova. Anexe o arquivo antes de enviar.'); return; }
+  var body={sn:DV_SN,dispute_reason:Number(reason),dispute_text_reason:txt};
+  // Sobe a prova (se anexada) e manda junto — o backend anexa antes de disputar.
+  if(temArquivo){
+    if(st) st.textContent='Subindo prova…';
+    var arquivos=[]; for(var i=0;i<inp.files.length;i++){ arquivos.push(await dvFileB64(inp.files[i])); }
+    var up=await dvPOST('/api/shopee/devolucoes/upload',{sn:DV_SN,arquivos:arquivos});
+    if(!up||up.erro||!up.urls){ if(st) st.textContent=''; alert('Erro ao subir a prova: '+((up&&up.erro)||'falha')); return; }
+    var imgs=[], vids=[];
+    for(var k=0;k<inp.files.length;k++){ ((inp.files[k].type||'').indexOf('video')>=0?vids:imgs).push(up.urls[k]); }
+    if(imgs.length) body.proof_image=imgs;
+    if(vids.length) body.proof_video=vids;
+    if(st) st.textContent='Enviando disputa…';
+  }
+  var j=await dvPOST('/api/shopee/devolucoes/disputar',body);
   if(await dvAposAcao(j,'Disputa enviada.')) dvLoad();
 }
 
