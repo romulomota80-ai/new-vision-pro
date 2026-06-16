@@ -8927,7 +8927,7 @@ function dvEstadoShopee(det){
   var negSt=((det.negotiation||{}).negotiation_status||'').toUpperCase();
   var rrType=(det.return_refund_type||'').toUpperCase();   // RRBOC = antes de concluir o pedido; RRAOC = depois
   // Item já devolvido e entregue a você -> validar (Disputar ou Finalizar)
-  if(entregue) return {tit:'Devolução pendente de validação', msg:'O pedido em devolução foi entregue à você. Caso tenha algum problema com os itens devolvidos, por favor, abra uma disputa '+(prazoDisputa?dvPrazoUnix(prazoDisputa):'dentro do prazo')+'.', cor:'#f59e0b', acoes:['disputar','finalizar']};
+  if(entregue) return {tit:'Devolução pendente de validação', msg:'O pedido em devolução foi entregue à você. Caso tenha algum problema com os itens devolvidos, por favor, abra uma disputa '+(prazoDisputa?dvPrazoUnix(prazoDisputa):'dentro do prazo')+'.', cor:'#f59e0b', acoes: rrType==='RRBOC' ? ['disputar','finalizar'] : ['disputar']};
   // Negociação aberta + reembolso ANTES da conclusão (RRBOC) -> a Shopee deixa reembolsar sem/parcial devolução
   if(negSt==='PENDING_RESPOND' && rrType==='RRBOC') return {tit:'Devolução Pendente', msg:'A devolução do pedido foi aprovada pela Shopee. O comprador deverá postar o pedido '+(prazoPostar?dvPrazoUnix(prazoPostar):'dentro do prazo')+'. Caso não tenha interesse na devolução do item, você pode oferecer um reembolso total ou parcial pelo item (reembolsos parciais precisam ser aceitos pelo comprador).', cor:'#5b8cff', acoes:['aguardar','reemb_parcial','reemb_sem_dev']};
   // Negociação aberta + reembolso DEPOIS da conclusão (RRAOC) -> Shopee NÃO dá ação ao vendedor, só aguardar
