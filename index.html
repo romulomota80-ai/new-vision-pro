@@ -8750,9 +8750,18 @@ var DV_DISP_TITULOS={
   86:'Não concordo com o desconto das taxas de devolução'
 };
 function dvDispLabel(m){
-  if(DV_DISP_TITULOS[m.dispute_reason]) return DV_DISP_TITULOS[m.dispute_reason];   // título exato da Shopee
-  var ev=(m.evidence_module_list||[]).map(function(e){return e.requirement;}).filter(Boolean);
-  var base=ev[0]||m.dispute_requirement||('Motivo '+m.dispute_reason);               // fallback p/ códigos ainda não mapeados
+  if(DV_DISP_TITULOS[m.dispute_reason]) return DV_DISP_TITULOS[m.dispute_reason];   // título exato por código (casos ambíguos: 53/54, etc.)
+  // Mapa pelo TEXTO da evidência — consistente entre os vários conjuntos de código da Shopee (81-88, 53-55, 46-50…).
+  var ev=(((m.evidence_module_list||[])[0]||{}).requirement||'').toLowerCase();
+  if(/dano|amassad|arranhad|quebrad/.test(ev)) return 'Recebi produtos devolvidos amassados, arranhados ou quebrados / danos físicos';
+  if(/pacote vazio|faltando pe/.test(ev)) return 'O pacote chegou vazio ou estão faltando peças e/ou acessórios no pedido devolvido pelo comprador';
+  if(/diferente do item|item retornado é diferente|diferente do an/.test(ev)) return 'O produto que recebi não é o mesmo que enviei ao comprador';
+  if(/embalagem|pacote utilizado no envio/.test(ev)) return 'Pedido foi danificado, apesar de ter sido enviado em embalagem adequada. Solicito a compensação pelo pedido';
+  if(/componentes|itens enviados|expedi/.test(ev)) return 'Pedido foi enviado com todos os seus componentes e na quantidade correta. Solicito a compensação pelo pedido';
+  if(/coleta|não foi poss/.test(ev)) return '[Apenas para vendedor com logística própria] Não foi possível realizar a coleta';
+  if(/support your request|upload evidence/.test(ev)) return 'Não concordo com o desconto das taxas de devolução';
+  if(!ev) return 'Não recebi o produto devolvido pelo comprador, mas consta como entregue na Central do Vendedor';  // motivo sem evidência exigida
+  var base=(((m.evidence_module_list||[])[0]||{}).requirement)||m.dispute_requirement||('Motivo '+m.dispute_reason);
   return base.replace(/\s+/g,' ').trim();
 }
 function dvCardLinha(d){
