@@ -8865,23 +8865,18 @@ function dvEstadoShopee(det){
 }
 function dvRenderAcoes(){
   var box=ge('dv-acoes'); if(!box) return; var det=DV_DET||{};
-  var proofSt=(det.seller_proof&&det.seller_proof.seller_proof_status)||'';
   var est=dvEstadoShopee(det);
-  var bS='border:none;border-radius:8px;padding:9px 14px;font-size:12px;font-weight:600;cursor:pointer;';
-  var btns='';
-  if(est.acoes.indexOf('disputar')>=0) btns+='<button onclick="dvFormDisputa()" style="'+bS+'background:#f59e0b;color:#fff;">⚖️ Disputar</button>';
-  if(est.acoes.indexOf('finalizar')>=0) btns+='<button onclick="dvAceitar()" style="'+bS+'background:#16a34a;color:#fff;">✅ Finalizar sem disputas e reembolsar comprador</button>';
-  if(est.acoes.indexOf('disputar')>=0) btns+='<button onclick="dvFormProvas()" style="'+bS+'background:var(--C2);color:var(--TX);border:1px solid var(--BR);">🖼️ Enviar provas</button>';
-  if(proofSt==='PENDING') btns+='<button onclick="dvCancelarDisputa()" style="'+bS+'background:transparent;color:var(--MU);border:1px solid var(--BR);">✖ Cancelar disputa</button>';
   var sellerUrl='https://seller.shopee.com.br/portal/returns';
+  // Decisão do dono: o site só mostra o ESTADO da reclamação; quem resolve (aceitar/reembolsar/
+  // disputar) é o funcionário direto no Seller Center. A Shopee não expõe os botões pela API.
   box.innerHTML='<div style="border-top:1px solid var(--BR);padding-top:12px;">'
     +'<div style="background:'+est.cor+'14;border:1px solid '+est.cor+'55;border-radius:10px;padding:12px;">'
+      +'<div style="font-size:10px;color:var(--MU);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">Situação na Shopee</div>'
       +'<div style="font-weight:800;font-size:14px;color:'+est.cor+';">'+shEsc(est.tit)+'</div>'
       +'<div style="font-size:12px;color:var(--MU);margin-top:5px;line-height:1.5;">'+shEsc(est.msg)+'</div>'
     +'</div>'
-    +(btns?'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">'+btns+'</div>':'')
-    +'<div id="dv-form" style="margin-top:10px;"></div>'
-    +'<div style="margin-top:8px;text-align:right;"><a href="'+sellerUrl+'" target="_blank" rel="noopener" style="font-size:10px;color:var(--MU);">conferir no Seller Center ↗</a></div>'
+    +'<a href="'+sellerUrl+'" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:12px;background:linear-gradient(135deg,#ee4d2d,#ff7337);color:#fff;border-radius:8px;padding:12px 14px;font-size:13px;font-weight:700;text-decoration:none;">Resolver na Shopee ↗</a>'
+    +'<div style="font-size:10px;color:var(--MU);text-align:center;margin-top:6px;">Abra a reclamação no Seller Center para aceitar, reembolsar ou disputar.</div>'
     +'</div>';
 }
 function dvFormFechar(){ var f=ge('dv-form'); if(f) f.innerHTML=''; }
