@@ -8844,6 +8844,18 @@ function dvRenderAcoes(){
   var proofSt=(det.seller_proof&&det.seller_proof.seller_proof_status)||'';
   var terminal=/ACCEPTED|CANCELLED|CLOSED|SUCCESS|FAIL/.test(status);
   if(terminal){ box.innerHTML='<div style="background:var(--C2);border-radius:10px;padding:12px;font-size:12px;color:var(--MU);text-align:center;border-top:1px solid var(--BR);">Devolução encerrada — sem ações pendentes.</div>'; return; }
+  // "Produto não recebido" (NOT_RECEIPT): quem investiga é a Shopee + transportadora. O Seller
+  // Center não dá ação ao vendedor enquanto analisa — espelhamos isso (e evitamos reembolso à toa).
+  var reason=(det.reason||'').toUpperCase();
+  if(reason==='NOT_RECEIPT'){
+    box.innerHTML='<div style="border-top:1px solid var(--BR);padding-top:12px;">'
+      +'<div style="background:#5b8cff14;border:1px solid #5b8cff55;border-radius:10px;padding:12px;">'
+      +'<div style="font-weight:700;font-size:13px;color:#5b8cff;">⏳ A Shopee está analisando</div>'
+      +'<div style="font-size:12px;color:var(--MU);margin-top:5px;line-height:1.5;">Reclamação de <b>produto não recebido</b> — a Shopee verifica a entrega com a transportadora. Em geral <b>nenhuma ação sua é necessária</b>: aguarde a decisão. Aceitar/reembolsar agora pode te fazer perder dinheiro que a Shopee poderia cobrir.</div>'
+      +'<div style="margin-top:8px;text-align:right;"><a href="https://seller.shopee.com.br/portal/returns" target="_blank" rel="noopener" style="font-size:10px;color:var(--MU);">conferir no Seller Center ↗</a></div>'
+      +'</div></div>';
+    return;
+  }
   var bS='border:none;border-radius:8px;padding:9px 14px;font-size:12px;font-weight:600;cursor:pointer;';
   var btns='', dica='';
   var temOferta=(negSt==='PENDING_RESPOND' && neg.latest_offer_amount!=null);
