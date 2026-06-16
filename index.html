@@ -8861,9 +8861,11 @@ function dvEstadoShopee(det){
   var rrType=(det.return_refund_type||'').toUpperCase();   // RRBOC = antes de concluir o pedido; RRAOC = depois
   // Item já devolvido e entregue a você -> validar (Disputar ou Finalizar)
   if(entregue) return {tit:'Devolução pendente de validação', msg:'O pedido em devolução foi entregue à você. Caso tenha algum problema com os itens devolvidos, por favor, abra uma disputa '+(prazoDisputa?dvPrazoUnix(prazoDisputa):'dentro do prazo')+'.', cor:'#f59e0b', acoes:['disputar','finalizar']};
-  // Negociação aberta E reembolso ANTES da conclusão (RRBOC) -> a Shopee deixa reembolsar sem/parcial devolução
+  // Negociação aberta + reembolso ANTES da conclusão (RRBOC) -> a Shopee deixa reembolsar sem/parcial devolução
   if(negSt==='PENDING_RESPOND' && rrType==='RRBOC') return {tit:'Devolução Pendente', msg:'A devolução do pedido foi aprovada pela Shopee. O comprador deverá postar o pedido '+(prazoPostar?dvPrazoUnix(prazoPostar):'dentro do prazo')+'. Caso não tenha interesse na devolução do item, você pode oferecer um reembolso total ou parcial pelo item (reembolsos parciais precisam ser aceitos pelo comprador).', cor:'#5b8cff', acoes:['aguardar','reemb_parcial','reemb_sem_dev']};
-  // Aguardando o comprador postar (RRAOC, ou negociação já resolvida) -> só finalizar
+  // Negociação aberta + reembolso DEPOIS da conclusão (RRAOC) -> Shopee NÃO dá ação ao vendedor, só aguardar
+  if(negSt==='PENDING_RESPOND') return {tit:'Devolução Pendente', msg:'O comprador deverá postar o pedido para devolução '+(prazoPostar?dvPrazoUnix(prazoPostar):'dentro do prazo')+'. Aguarde o produto voltar — não há ação sua no momento.', cor:'#5b8cff', acoes:[]};
+  // Negociação já resolvida, item ainda não voltou -> finalizar (reembolsar) disponível
   if(det.needs_logistics!==false) return {tit:'Devolução Pendente', msg:'A devolução do pedido foi aprovada pela Shopee. O comprador deverá postar o pedido '+(prazoPostar?dvPrazoUnix(prazoPostar):'dentro do prazo')+'.', cor:'#5b8cff', acoes:['finalizar']};
   // Apenas reembolso ainda em aberto (sem logística)
   return {tit:'Solicitação em andamento', msg:'Aguardando a Shopee. Você pode finalizar e reembolsar o comprador ou abrir uma disputa.', cor:'#5b8cff', acoes:['finalizar','disputar']};
