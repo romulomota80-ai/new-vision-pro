@@ -9034,7 +9034,9 @@ function dvDispDetalhe(){
   var sel=ge('dv-disp-reason'), box=ge('dv-disp-req'); if(!sel||!box) return;
   var m=DV_DISP_MOT.filter(function(x){return String(x.dispute_reason)===String(sel.value);})[0]; if(!m){ box.innerHTML=''; return; }
   var ev=(m.evidence_module_list||[]); var h='';
-  if(m.dispute_requirement) h+='<div style="font-size:11px;color:var(--MU);white-space:pre-line;background:var(--BG);border:1px solid var(--BR);border-radius:8px;padding:8px;">'+shEsc(m.dispute_requirement)+'</div>';
+  var obrig=ev.some(function(e){return e.is_required;});
+  if(obrig) h+='<div style="background:#e5484d18;border:1px solid #e5484d66;border-radius:8px;padding:9px 11px;font-size:11px;color:#e5484d;font-weight:700;">⚠️ Foto ou vídeo é OBRIGATÓRIO para este motivo. Anexe a prova em “🖼️ Enviar provas” ANTES de enviar a disputa — sem isso a Shopee recusa.</div>';
+  if(m.dispute_requirement) h+='<div style="margin-top:6px;font-size:11px;color:var(--MU);white-space:pre-line;background:var(--BG);border:1px solid var(--BR);border-radius:8px;padding:8px;">'+shEsc(m.dispute_requirement)+'</div>';
   if(ev.length){ h+='<div style="margin-top:6px;font-size:11px;"><div style="font-weight:700;margin-bottom:3px;">📎 Provas que a Shopee exige:</div><ul style="margin:0 0 0 16px;padding:0;">'
     +ev.map(function(e){ return '<li style="margin-bottom:3px;">'+shEsc(e.requirement||'')+(e.is_required?' <span style="color:#e5484d;font-weight:700;">(obrigatória)</span>':' <span style="color:var(--MU);">(opcional)</span>')+'</li>'; }).join('')
     +'</ul></div>'; }
@@ -9043,6 +9045,9 @@ function dvDispDetalhe(){
 async function dvDisputar(){
   var reason=(ge('dv-disp-reason')||{}).value, txt=(ge('dv-disp-text')||{}).value;
   if(!reason){ alert('Selecione o motivo.'); return; }
+  var m=DV_DISP_MOT.filter(function(x){return String(x.dispute_reason)===String(reason);})[0]||{};
+  var obrig=(m.evidence_module_list||[]).some(function(e){return e.is_required;});
+  if(obrig && !confirm('⚠️ Este motivo EXIGE foto ou vídeo como prova.\n\nVocê já enviou a prova em “Enviar provas”? Sem a prova, a Shopee recusa a disputa.\n\nClique OK só se já anexou a prova.')) return;
   var j=await dvPOST('/api/shopee/devolucoes/disputar',{sn:DV_SN,dispute_reason:Number(reason),dispute_text_reason:txt});
   if(await dvAposAcao(j,'Disputa enviada.')) dvLoad();
 }
