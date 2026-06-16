@@ -3335,6 +3335,9 @@ function rContas(){
    if(c.of||c.ultima_sync){
     h+='<div id="csync-'+c.id+'" style="font-size:10px;color:var(--MU);margin-top:5px;">'+(c.ultima_sync?('🕐 Atualizado '+tempoAtras(c.ultima_sync)):'🕐 nunca atualizado')+'</div>';
    }
+   if(c.of){
+    h+='<div id="cota-'+c.id+'" style="font-size:10px;color:var(--MU);margin-top:2px;opacity:.85;">📊 cota: …</div>';
+   }
    if(c.agencia||c.numero){
     h+='<div style="font-size:10px;color:var(--MU);margin-top:6px;">';
     if(c.agencia) h+='Ag '+c.agencia+' ';
@@ -3367,8 +3370,25 @@ function rContas(){
  h+='<button class="btn g" onclick="contaFechar()">Cancelar</button>';
  h+='<button class="btn" onclick="contaSalvar()">Salvar</button>';
  h+='</div></div></div>';
- 
+
  el.innerHTML=h;
+ carregarLimitesOF();
+}
+
+// Busca a cota de dados restante por conta (Open Finance) e preenche os cards.
+async function carregarLimitesOF(){
+ try{
+  var r = await fetch('/api/bancos/limites');
+  if(!r.ok) return;
+  var d = await r.json();
+  (d.contas||[]).forEach(function(c){
+   var el = ge('cota-'+c.conta_id); if(!el) return;
+   var critico = c.restante_hoje<=2;
+   el.style.color = critico ? '#a04040' : 'var(--MU)';
+   el.innerHTML = '📊 cota hoje '+c.usos_hoje+'/'+c.limite_diario+
+     ' (restam '+c.restante_hoje+') · mês ~'+c.usos_mes+'/'+c.limite_mensal;
+  });
+ }catch(e){ /* silencioso */ }
 }
 
 function contaNovo(){
