@@ -8621,7 +8621,7 @@ function shTrocaLoja(){ var s=ge('sh-loja'); if(s) SH_CONTA = s.value; shAba(SH_
 
 // ── DEVOLUCOES (aba independente) ───────────────────────────────
 var DV_VIEW='precisa_acao', DV_MES='', DV_ROWS=[], DV_CONTA=null, DV_LOJAS=[], DV_SHOPS_LOADED=false;
-var DV_VIEWS=[['precisa_acao','🔔 Precisa responder'],['novas','🆕 Novas'],['em_disputa','⚖️ Em disputa'],['favor','✅ A favor'],['contra','❌ Contra'],['produtos','📦 Produtos'],['metricas','📊 Métricas']];
+var DV_VIEWS=[['precisa_acao','🔔 Precisa responder'],['aguardando','⏳ Aguardando Shopee'],['em_disputa','⚖️ Em disputa'],['favor','✅ A favor'],['contra','❌ Contra'],['produtos','📦 Produtos'],['metricas','📊 Métricas']];
 function dvAPI(path){ var sep=path.indexOf('?')>=0?'&':'?'; var base=(typeof BACKEND_URL!=="undefined"&&BACKEND_URL?BACKEND_URL:''); var url=base+path+(DV_CONTA?(sep+'conta='+encodeURIComponent(DV_CONTA)):''); return fetch(url).then(function(r){return r.json();}); }
 async function dvCarregaLojas(){ try{ var base=(typeof BACKEND_URL!=="undefined"&&BACKEND_URL?BACKEND_URL:''); var j=await fetch(base+'/api/shopee/shops').then(function(r){return r.json();}); DV_LOJAS=(j&&j.lojas)||[]; if(!DV_CONTA&&DV_LOJAS.length) DV_CONTA=DV_LOJAS[0].conta_interna_id; DV_SHOPS_LOADED=true; }catch(e){ DV_SHOPS_LOADED=true; } }
 function dvFmtR(n){ return Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
