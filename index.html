@@ -9021,7 +9021,6 @@ async function dvFormDisputa(){
   var opts=DV_DISP_MOT.map(function(m){ return '<option value="'+m.dispute_reason+'">'+shEsc(dvDispLabel(m))+'</option>'; }).join('');
   f.innerHTML='<div style="background:var(--C2);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;">'
     +'<div style="font-size:11px;font-weight:700;">⚖️ Abrir disputa</div>'
-    +'<input id="dv-disp-email" type="email" placeholder="Seu e-mail de contato" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:8px;padding:8px;font-size:12px;">'
     +'<div style="font-size:10px;color:var(--MU);">Motivo (exatamente como a Shopee classifica):</div>'
     +'<select id="dv-disp-reason" onchange="dvDispDetalhe()" style="background:var(--BG);color:var(--TX);border:1px solid var(--BR);border-radius:8px;padding:8px;font-size:12px;">'+opts+'</select>'
     +'<div id="dv-disp-req"></div>'
@@ -9042,9 +9041,9 @@ function dvDispDetalhe(){
   box.innerHTML=h;
 }
 async function dvDisputar(){
-  var email=(ge('dv-disp-email')||{}).value, reason=(ge('dv-disp-reason')||{}).value, txt=(ge('dv-disp-text')||{}).value;
-  if(!email||!reason){ alert('Informe e-mail e motivo.'); return; }
-  var j=await dvPOST('/api/shopee/devolucoes/disputar',{sn:DV_SN,email:email,dispute_reason:Number(reason),dispute_text_reason:txt});
+  var reason=(ge('dv-disp-reason')||{}).value, txt=(ge('dv-disp-text')||{}).value;
+  if(!reason){ alert('Selecione o motivo.'); return; }
+  var j=await dvPOST('/api/shopee/devolucoes/disputar',{sn:DV_SN,dispute_reason:Number(reason),dispute_text_reason:txt});
   if(await dvAposAcao(j,'Disputa enviada.')) dvLoad();
 }
 
