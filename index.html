@@ -8683,7 +8683,7 @@ function shTrocaLoja(){ var s=ge('sh-loja'); if(s) SH_CONTA = s.value; shAba(SH_
 
 // ── DEVOLUCOES (aba independente) ───────────────────────────────
 var DV_VIEW='precisa_acao', DV_MES='', DV_ROWS=[], DV_CONTA=null, DV_LOJAS=[], DV_SHOPS_LOADED=false, DV_BUSCA='';
-var DV_VIEWS=[['recebidas','📥 Recebidas'],['precisa_acao','🔔 Precisa responder'],['aguardando','⏳ Aguardando Shopee'],['logistica','📦 Logística'],['em_disputa','⚖️ Em disputa'],['favor','✅ A favor'],['contra','❌ Contra'],['produtos','📦 Produtos'],['metricas','📊 Métricas']];
+var DV_VIEWS=[['recebidas','📥 Recebidas'],['precisa_acao','🔔 Precisa responder'],['voltando','🚚 Voltando pra você'],['aguardando','⏳ Aguardando Shopee'],['favor','✅ A favor'],['contra','❌ Contra'],['produtos','📦 Produtos'],['metricas','📊 Métricas']];
 var DV_LOG='aguardando';
 var DV_LOG_SUB=[['aguardando','📦 Aguardando devolução','log_aguardando'],['a_caminho','🚚 A caminho','log_caminho']];
 function dvAPI(path){ var sep=path.indexOf('?')>=0?'&':'?'; var base=(typeof BACKEND_URL!=="undefined"&&BACKEND_URL?BACKEND_URL:''); var url=base+path+(DV_CONTA?(sep+'conta='+encodeURIComponent(DV_CONTA)):''); return fetch(url).then(function(r){return r.json();}); }
@@ -8723,7 +8723,7 @@ async function rDvScreen(){
   dvLoad(); dvAtualizaBadge();
 }
 function dvAba(v){ DV_VIEW=v; DV_BUSCA=''; rDvScreen(); }
-function dvLoad(){ if(DV_BUSCA) return dvRenderBusca(); if(DV_VIEW==='produtos') return dvRenderProdutos(); if(DV_VIEW==='metricas') return dvRenderMetricas(); if(DV_VIEW==='logistica') return dvRenderLogistica(); return dvRenderLista(); }
+function dvLoad(){ if(DV_BUSCA) return dvRenderBusca(); if(DV_VIEW==='produtos') return dvRenderProdutos(); if(DV_VIEW==='metricas') return dvRenderMetricas(); return dvRenderLista(); }
 function dvBuscar(){ var i=ge('dv-busca'); DV_BUSCA=((i&&i.value)||'').trim(); rDvScreen(); }
 function dvLimparBusca(){ DV_BUSCA=''; rDvScreen(); }
 // Em qual balde/aba a devolução está (pra mostrar no resultado da busca).
@@ -8732,8 +8732,7 @@ function dvBalde(d){
   if(d.status_interno==='contra') return '❌ Contra';
   if(d.precisa_acao&&d.fase_logistica==='chegou') return '📥 Recebidas';
   if(d.precisa_acao) return '🔔 Precisa responder';
-  if(d.fase_logistica==='aguardando') return '📦 Logística · Aguardando devolução';
-  if(d.fase_logistica==='a_caminho') return '🚚 Logística · A caminho';
+  if(d.fase_logistica==='aguardando'||d.fase_logistica==='a_caminho') return '🚚 Voltando pra você';
   return '⏳ Aguardando Shopee';
 }
 async function dvRenderBusca(){
