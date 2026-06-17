@@ -2,6 +2,28 @@
 
 Log das mudanças e decisões. O mais recente em cima.
 
+## 2026-06-17
+
+### Devoluções Shopee — aba "Recebidas" + fix do falso "precisa responder"
+
+Rômulo notou que "Precisa responder" mostrava devoluções que **não** precisavam de
+resposta: o produto ainda estava **em trânsito** (a caminho), só faltava chegar — e só
+então, se quiser, ele disputa. Causa: `devPrecisaAcao` marcava `precisa_acao=true` para
+qualquer `return_seller_due_date` aberto, mesmo com a logística pendente.
+
+**Correções (`routes/shopee.js`):**
+- `precisa_acao` **não** dispara mais pelo prazo enquanto o produto está `a_caminho` ou
+  `aguardando` postagem — só na **chegada** (`fase=chegou`) ou quando não há logística
+  pendente. Corrigiu 25 falsos positivos (migraram pra "A caminho").
+- Nova aba **📥 Recebidas** (`filtro=recebidas` = `precisa_acao=true` e `fase=chegou`):
+  produto chegou, conferir e aceitar/disputar. "Precisa responder" passou a conter só
+  reclamações/negociações novas aguardando resposta. Ficou 13 + 13 (antes 26 juntos).
+- Doc de referência: `new-vision-backend/docs/devolucoes-abas.md` (regra de buckets
+  disjuntos por precedência: recebidas > precisa_acao > logística > status).
+
+**Frontend:** aba Recebidas antes de Precisa responder; badge da sidebar soma
+`recebidas + precisa_acao`; texto da Logística aponta pra Recebidas na chegada.
+
 ## 2026-06-16
 
 ### Devoluções Shopee — custo real de caixa + culpa (quem paga o frete)
