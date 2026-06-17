@@ -9054,17 +9054,12 @@ async function dvAceitarOferta(){ if(!confirm('Aceitar a oferta do comprador?'))
 async function dvCancelarDisputa(){ if(!confirm('Cancelar a disputa em andamento?')) return; var j=await dvPOST('/api/shopee/devolucoes/cancelar-disputa',{sn:DV_SN}); if(await dvAposAcao(j,'Disputa cancelada.')) dvLoad(); }
 
 // "Aguardar devolução": NÃO mexe em dinheiro — só esperar o produto voltar. Mostra só o Finalizar (igual à Shopee).
-function dvAguardarDevolucao(){
-  var box=ge('dv-acoes'); if(!box) return;
-  var bS='border:none;border-radius:8px;padding:10px 14px;font-size:12px;font-weight:600;cursor:pointer;width:100%;';
-  box.innerHTML='<div style="border-top:1px solid var(--BR);padding-top:12px;">'
-    +'<div style="background:#5b8cff14;border:1px solid #5b8cff55;border-radius:10px;padding:12px;">'
-      +'<div style="font-weight:800;font-size:14px;color:#5b8cff;">Aguardando a devolução</div>'
-      +'<div style="font-size:12px;color:var(--MU);margin-top:5px;line-height:1.5;">Você optou por esperar o comprador devolver o produto. Quando ele chegar, finalize o reembolso (ou abra uma disputa se houver problema).</div>'
-    +'</div>'
-    +'<div style="margin-top:10px;"><button onclick="dvAceitar()" style="'+bS+'background:#16a34a;color:#fff;">Finalizar sem disputas e reembolsar comprador</button></div>'
-    +'<div style="margin-top:8px;text-align:right;"><a href="javascript:void(0)" onclick="dvRenderAcoes()" style="font-size:10px;color:var(--MU);">← voltar às opções</a></div>'
-    +'</div>';
+// "Aguardar devolução" = ACEITAR a oferta de devolução do cliente (accept_offer na Shopee).
+// O cliente devolve o produto e é reembolsado na chegada; você ainda pode disputar quando chegar.
+async function dvAguardarDevolucao(){
+  if(!confirm('Aceitar a devolução proposta pelo cliente?\n\nEle vai postar o produto de volta e será reembolsado quando o produto chegar. Você ainda poderá abrir uma disputa na chegada se houver algum problema com o item.')) return;
+  var j=await dvPOST('/api/shopee/devolucoes/aceitar-oferta',{sn:DV_SN});
+  if(await dvAposAcao(j,'Devolução aceita — aguarde o produto voltar para finalizar.')) dvLoad();
 }
 // "Reembolsar sem devolução": reembolso cheio, cliente fica com o produto (oferta de REFUND).
 async function dvReembolsarSemDev(){
