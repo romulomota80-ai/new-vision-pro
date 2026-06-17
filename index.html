@@ -8922,7 +8922,7 @@ function dvPOST(path, body){ var base=(typeof BACKEND_URL!=="undefined"&&BACKEND
 async function dvAbrir(sn){
   DV_SN=sn; DV_DET=null;
   var d=DV_ROWS.filter(function(x){return x.return_sn===sn;})[0]||{return_sn:sn};
-  var pc=d.provas_cliente||{},imgs=pc.imagens||[],vids=pc.videos||[];
+  var pc=d.provas_cliente||{},dvHttps=function(u){ return String(u||'').replace(/^http:\/\//i,'https://'); },imgs=(pc.imagens||[]).map(dvHttps),vids=(pc.videos||[]).map(dvHttps);
   var galeria=imgs.map(function(u){ return '<a href="'+u+'" target="_blank" rel="noopener"><img src="'+u+'" style="width:74px;height:74px;object-fit:cover;border-radius:8px;border:1px solid var(--BR);"></a>'; }).join('')
     + vids.map(function(u){ return '<a href="'+u+'" target="_blank" rel="noopener" style="width:74px;height:74px;border-radius:8px;border:1px solid var(--BR);display:flex;align-items:center;justify-content:center;background:var(--C2);font-size:22px;">🎬</a>'; }).join('');
   var ov=document.createElement('div'); ov.id='dv-modal'; ov.onclick=function(e){ if(e.target===ov) dvFecharModal(); };
