@@ -8683,7 +8683,7 @@ function shTrocaLoja(){ var s=ge('sh-loja'); if(s) SH_CONTA = s.value; shAba(SH_
 
 // ── DEVOLUCOES (aba independente) ───────────────────────────────
 var DV_VIEW='precisa_acao', DV_MES='', DV_ROWS=[], DV_CONTA=null, DV_LOJAS=[], DV_SHOPS_LOADED=false, DV_BUSCA='';
-var DV_VIEWS=[['precisa_acao','🔔 Precisa responder'],['aguardando','⏳ Aguardando Shopee'],['logistica','📦 Logística'],['em_disputa','⚖️ Em disputa'],['favor','✅ A favor'],['contra','❌ Contra'],['produtos','📦 Produtos'],['metricas','📊 Métricas']];
+var DV_VIEWS=[['recebidas','📥 Recebidas'],['precisa_acao','🔔 Precisa responder'],['aguardando','⏳ Aguardando Shopee'],['logistica','📦 Logística'],['em_disputa','⚖️ Em disputa'],['favor','✅ A favor'],['contra','❌ Contra'],['produtos','📦 Produtos'],['metricas','📊 Métricas']];
 var DV_LOG='aguardando';
 var DV_LOG_SUB=[['aguardando','📦 Aguardando devolução','log_aguardando'],['a_caminho','🚚 A caminho','log_caminho']];
 function dvAPI(path){ var sep=path.indexOf('?')>=0?'&':'?'; var base=(typeof BACKEND_URL!=="undefined"&&BACKEND_URL?BACKEND_URL:''); var url=base+path+(DV_CONTA?(sep+'conta='+encodeURIComponent(DV_CONTA)):''); return fetch(url).then(function(r){return r.json();}); }
@@ -8730,6 +8730,7 @@ function dvLimparBusca(){ DV_BUSCA=''; rDvScreen(); }
 function dvBalde(d){
   if(d.status_interno==='favor') return '✅ A favor';
   if(d.status_interno==='contra') return '❌ Contra';
+  if(d.precisa_acao&&d.fase_logistica==='chegou') return '📥 Recebidas';
   if(d.precisa_acao) return '🔔 Precisa responder';
   if(d.fase_logistica==='aguardando') return '📦 Logística · Aguardando devolução';
   if(d.fase_logistica==='a_caminho') return '🚚 Logística · A caminho';
@@ -8751,7 +8752,7 @@ async function dvRenderLogistica(){
   var body=ge('dv-body'); if(!body) return;
   var subRow=DV_LOG_SUB.map(function(s){ var on=s[0]===DV_LOG; return '<button onclick="dvLogSet(\''+s[0]+'\')" style="background:'+(on?'var(--R)':'var(--C2)')+';color:'+(on?'#fff':'var(--TX)')+';border:1px solid var(--BR);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">'+s[1]+'</button>'; }).join('');
   body.innerHTML='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">'+subRow+'</div>'
-    +'<div style="font-size:10px;color:var(--MU);margin-bottom:10px;">Quando o produto chega na empresa, a devolução passa pra 🔔 Precisa responder (pra você validar/disputar).</div>'
+    +'<div style="font-size:10px;color:var(--MU);margin-bottom:10px;">Quando o produto chega na empresa, a devolução passa pra 📥 Recebidas (pra você conferir e aceitar/disputar).</div>'
     +'<div id="dv-log-list"><div class="card" style="padding:24px;text-align:center;color:var(--MU);">Carregando…</div></div>';
   var sub=DV_LOG_SUB.filter(function(s){return s[0]===DV_LOG;})[0]||DV_LOG_SUB[0];
   var j; try{ j=await dvAPI('/api/shopee/devolucoes?filtro='+sub[2]+'&limit=2000'); }catch(e){ j={erro:e.message}; }
@@ -8764,7 +8765,7 @@ async function dvRenderLogistica(){
   list.innerHTML=h;
 }
 
-async function dvAtualizaBadge(){ try{ var j=await dvAPI('/api/shopee/devolucoes?filtro=precisa_acao'); var n=(j&&j.total)||0,b=ge('sb-badge-dv'); if(b){ b.textContent=n; b.style.display=n>0?'':'none'; } }catch(e){} }
+async function dvAtualizaBadge(){ try{ var r=await Promise.all([dvAPI('/api/shopee/devolucoes?filtro=recebidas&limit=1'),dvAPI('/api/shopee/devolucoes?filtro=precisa_acao&limit=1')]); var n=((r[0]&&r[0].total)||0)+((r[1]&&r[1].total)||0),b=ge('sb-badge-dv'); if(b){ b.textContent=n; b.style.display=n>0?'':'none'; } }catch(e){} }
 
 async function dvRenderLista(){
   var body=ge('dv-body'); if(!body) return;
