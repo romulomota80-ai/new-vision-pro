@@ -8754,7 +8754,7 @@ async function dvRenderLogistica(){
     +'<div style="font-size:10px;color:var(--MU);margin-bottom:10px;">Quando o produto chega na empresa, a devolução passa pra 🔔 Precisa responder (pra você validar/disputar).</div>'
     +'<div id="dv-log-list"><div class="card" style="padding:24px;text-align:center;color:var(--MU);">Carregando…</div></div>';
   var sub=DV_LOG_SUB.filter(function(s){return s[0]===DV_LOG;})[0]||DV_LOG_SUB[0];
-  var j; try{ j=await dvAPI('/api/shopee/devolucoes?filtro='+sub[2]+'&limit=500'); }catch(e){ j={erro:e.message}; }
+  var j; try{ j=await dvAPI('/api/shopee/devolucoes?filtro='+sub[2]+'&limit=2000'); }catch(e){ j={erro:e.message}; }
   var list=ge('dv-log-list'); if(!list) return;
   if(!j||j.erro){ list.innerHTML='<div class="card" style="padding:20px;color:var(--R);">Erro: '+shEsc((j&&j.erro)||'falha')+'</div>'; return; }
   DV_ROWS=j.itens||[];
@@ -8769,7 +8769,7 @@ async function dvAtualizaBadge(){ try{ var j=await dvAPI('/api/shopee/devolucoes
 async function dvRenderLista(){
   var body=ge('dv-body'); if(!body) return;
   body.innerHTML='<div class="card" style="padding:24px;text-align:center;color:var(--MU);">Carregando…</div>';
-  var j; try{ j=await dvAPI('/api/shopee/devolucoes?filtro='+DV_VIEW+'&limit=500'); }catch(e){ j={erro:e.message}; }
+  var j; try{ j=await dvAPI('/api/shopee/devolucoes?filtro='+DV_VIEW+'&limit=2000'); }catch(e){ j={erro:e.message}; }
   if(!j||j.erro){ body.innerHTML='<div class="card" style="padding:20px;color:var(--R);">Erro: '+shEsc((j&&j.erro)||'falha')+'</div>'; return; }
   DV_ROWS=j.itens||[];
   if(!DV_ROWS.length){ body.innerHTML='<div class="card" style="padding:34px;text-align:center;color:var(--MU);">Nenhuma devolução aqui 🎉</div>'; return; }
@@ -8870,7 +8870,7 @@ async function dvRenderMetricas(){
   h+=shKpi('Total devoluções', j.total||0);
   h+=shKpi('Taxa de sucesso', (j.taxa_sucesso!=null?j.taxa_sucesso+'%':'—'), (j.taxa_sucesso>=50?'#16a34a':'#e5484d'), j.favor+' a favor · '+j.contra+' contra');
   h+=shKpi('R$ recuperado', 'R$ '+dvFmtR(j.recuperado), '#16a34a');
-  h+=shKpi('R$ prejuízo', 'R$ '+dvFmtR(j.prejuizo), '#e5484d');
+  h+=shKpi('R$ prejuízo', 'R$ '+dvFmtR(j.prejuizo), '#e5484d', 'caixa real (escrow) · reembolsado ao cliente R$ '+dvFmtR(j.refund_concedido||0));
   h+=shKpi('Abertas (em aberto)', j.abertas||0, '#f59e0b');
   h+=shKpi('Motivo top', dvMotivoPt(j.motivo_top));
   h+=shKpi('Tempo médio', (j.tempo_medio_dias!=null?j.tempo_medio_dias+' dias':'—'));
