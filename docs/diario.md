@@ -2,6 +2,52 @@
 
 Log das mudanças e decisões. O mais recente em cima.
 
+## 2026-06-18
+
+### Mercado Pago — ANTECIPAÇÃO no Fluxo de Caixa (investigação / ETAPA 0)
+
+**Problema:** quando se ANTECIPA recebíveis na MP (saca antes da data), a projeção de
+"dinheiro a cair" não desconta — o fluxo conta **em dobro** (o valor antecipado que já
+caiu no banco + a projeção futura do mesmo recebível).
+
+**O que olhei na API REAL** (contas LOOK e MODA, tokens `MP_*_ACCESS_TOKEN` no `.env`):
+
+- **(a) O que vai cair:** vem de `GET /v1/payments/search` → tabela `mp_releases` →
+  `recebiveis_programados` (via `/api/mp/aggregate-releases`). Cada pagamento aprovado
+  traz `money_release_date` (data futura) e `money_release_status`. Na amostra recente
+  (LOOK, abril+) **todos `pending`**, `money_release_schema=null`, com data futura.
+- **(b) O que já foi liberado:** o sync já **pula** pagamentos com
+  `money_release_date < hoje` (linha "pulados_ja_caiu" em `mercadopago.js`). Ou seja, o
+  sistema só projeta o que ainda não liberou — **no nível do pagamento**.
+- **(c) A antecipação — causa-raiz:** a antecipação é um evento **de CONTA**, não do
+  pagamento. Ao antecipar, o `money_release_date` de cada pagamento **continua na data
+  futura original** e o status segue `pending`. Logo `recebiveis_programados` fica
+  **cego à antecipação** e segue projetando "vai cair", mesmo o dinheiro já tendo saído
+  via antecipação → **contagem em dobro**.
+
+**Endpoints testados (token de pagamentos):**
+- `GET /v1/account/balance` → **404**; `GET /users/me/.../balance` → **403 forbidden**.
+  → **Não dá pra ler "saldo disponível vs a liberar" pela API** com esse token.
+- Endpoints de antecipação direta (`/anticipations`, `/withdrawals`, variações asgard)
+  → todos **404/403**. → A API pública **não expõe a antecipação como recurso próprio**.
+- `GET /v1/account/settlement_report/*` → **funciona**. Config: `format=CSV`,
+  `separator=";"`, **`include_withdraw=true`** (inclui saques/antecipações). É o
+  relatório **de conta** — única fonte na API onde a antecipação aparece explícita.
+  Geração é assíncrona/manual e estava **lenta** (>8 min `pending`); captura da linha
+  real de antecipação (type/description/taxa/data) **em andamento**.
+
+**Conclusão preliminar (a validar com a sessão web da MP):**
+- A antecipação **não dá pra abater pela API per-payment** (o recebível não muda) nem
+  pelo saldo (403).
+- **Fonte da verdade = o que JÁ CAIU no banco** (Open Finance / extrato Itaú):
+  já caiu = recebido, **não** conta como "a cair"; só entra como recebível futuro o que
+  ainda não caiu. Espelha a reconciliação "caiu na conta?" já feita na Shopee.
+- O settlement report serve como **confirmação secundária** (mostra a antecipação
+  explícita), mas por ser manual/assíncrono não é a fonte primária.
+
+> ⏸️ **NÃO construir a lógica final** até o Rômulo confirmar a amostra real na sessão
+> web da MP. Esta entrada é só o levantamento (ETAPA 0).
+
 ## 2026-06-17
 
 ### Devoluções Shopee — aba "Recebidas" + fix do falso "precisa responder"
