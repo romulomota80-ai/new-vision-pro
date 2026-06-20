@@ -63,11 +63,25 @@ disponível do Open Finance já reflete todas essas saídas — é a foto real d
 fornecedores/custos automaticamente; separar "Pix pra fornecedor" de "saque pra conta
 própria".
 
-**Validação antes de programar:** comparar o saldo disponível lido via Open Finance
-com o que aparece no app do Mercado Pago do usuário (tem que bater).
+**Validação com o app + decisão (2026-06-20).** O usuário leu os 3 baldes do app do
+MP. Isso revelou um **terceiro balde** que o modelo de 2 baldes não tratava:
+- **Disponível** — dá pra sacar/Pix agora (hoje estava zerado).
+- **Retido / a liberar** — dinheiro que já caiu na carteira mas está preso por alguns
+  dias. Não é parcela futura, mas também não dá pra usar hoje.
+- **A receber** — agenda de parcelas futuras (vem da API do MP).
 
-**Onde fica na UI:** Fluxo de Caixa → conta Mercado Pago + aba Saques & Recebíveis
-(mesmo padrão "caiu na conta?" já usado na Shopee).
+**Regra final travada com o usuário:**
+- **Fluxo de Caixa → conta MP mostra APENAS o SALDO** (= saldo disponível real do Open
+  Finance). Retido e a-receber **não** entram no saldo da conta.
+- **Aba "Recebíveis"** concentra **tudo que ainda vai cair das plataformas** = retido +
+  a-receber (e, depois, o mesmo padrão pra Shopee/ML/TikTok). Cada item só vira saldo
+  quando **cair de verdade**. Encaixa na aba já existente "💸 Saques & Recebíveis"
+  (sub-abas por plataforma, lendo `recebiveis_programados`).
+
+**A validar ao programar (factual, precisa rodar o backend):** o "saldo disponível" que
+o Open Finance devolve para a carteira MP vem **só com o disponível** ou **disponível +
+retido**? Se vier só o disponível, o retido precisa ser somado à aba Recebíveis a partir
+dos eventos de "dinheiro retido" do extrato — não do saldo da conta.
 
 ## 2026-06-12/13
 
