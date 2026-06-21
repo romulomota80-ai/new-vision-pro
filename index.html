@@ -904,6 +904,7 @@ var CC = {}; // { nome: cor }
 var FORN = []; // fornecedores
 var PEDIDOS = []; // pedidos (agrupamento de PIX parcelados)
 var PED_LIVRE = []; // pedidos livres (saldo devedor)
+var ND_ROMANEIO = null; // File do romaneio anexado no form "nova dívida"
 var PED_PAG = []; // abatimentos dos pedidos livres
 
 var MESES = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO",
@@ -1120,7 +1121,8 @@ async function carregarTudo(){
  id:r.id, desc:r.descricao, fornId:r.fornecedor_id,
  fornNome:r.fornecedor_nome||"", cat:r.categoria||"",
  total:total, abatido:abatido, saldo:Math.round((total-abatido)*100)/100,
- data:r.data_pedido, obs:r.observacoes||"", status:r.status, criado:r.created_at
+ data:r.data_pedido, obs:r.observacoes||"", status:r.status, criado:r.created_at,
+ romaneio:r.romaneio_url||null
  };
  });
 
@@ -5505,6 +5507,33 @@ async function marcarPagoSemComp(id, comLanc){
 
 async function uploadCompEPagar(id, comLanc){ abrirModalPagto(id, comLanc); }
 
+// Anexa (ou troca) o comprovante de um pagamento JÁ feito, sem alterar o status.
+function anexarComprovantePago(id){
+  var inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'image/*,application/pdf';
+  inp.onchange = async function(){
+    var file = inp.files && inp.files[0];
+    if(!file) return;
+    if(file.size > 10*1024*1024){ toast('Arquivo muito grande (max 10MB)', false); return; }
+    try {
+      toast('Enviando comprovante...');
+      var ext = (file.name.split('.').pop()||'bin').toLowerCase();
+      var path = 'boleto_' + id + '_' + Date.now() + '.' + ext;
+      var up = await sb.storage.from('comprovantes').upload(path, file, { contentType:file.type, upsert:false });
+      if(up.error) throw up.error;
+      var url = sb.storage.from('comprovantes').getPublicUrl(path).data.publicUrl;
+      var u1 = await sb.from('boletos').update({ comprovante_url:url }).eq('id', id);
+      if(u1.error) throw u1.error;
+      BOL = BOL.map(function(bx){ return bx.id===id ? Object.assign({},bx,{comp:url}) : bx; });
+      toast('Comprovante anexado ✓', true);
+      if(typeof rBo === 'function') rBo();
+      if(typeof FO_DETALHE_ID !== 'undefined' && FO_DETALHE_ID !== null && typeof rFoDetalhe === 'function') rFoDetalhe();
+    } catch(e){ toast('Erro ao anexar comprovante: '+e.message, false); }
+  };
+  inp.click();
+}
+
 /*PATCH_MODAL_PAGTO*/
 function abrirModalPagto(id, comLanc){
   var b = BOL.find(function(bx){return bx.id===id;});
@@ -5780,6 +5809,10 @@ function rBo(){
  '<button class="btn pu sm" onclick="copCod('+b.id+')" style="width:100%;margin-top:7px;">Copiar código</button>'+
  '</div>':'')+
  (!isPix && b.link?'<button onclick="abrirViewer(\''+b.link+'\', \''+b.desc.replace(/'/g,"\\'")+'\', \'Boleto pago · '+fd(b.ven)+'\')" style="display:block;width:100%;text-align:center;margin-bottom:10px;padding:8px;border-radius:9px;background:rgba(42,82,99,.1);border:1px solid rgba(42,82,99,.3);color:#2a5263;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">Ver boleto / PDF</button>':'')+
+ (b.comp
+  ? '<button onclick="abrirViewer(\''+b.comp+'\', \''+b.desc.replace(/'/g,"\\'")+'\', \'Comprovante · '+fd(b.ven)+'\')" style="display:block;width:100%;text-align:center;margin-bottom:8px;padding:8px;border-radius:9px;background:rgba(90,138,58,.1);border:1px solid rgba(90,138,58,.3);color:#5a8a3a;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">📷 Ver comprovante</button>'+(U&&U.role!=="viewer"?'<button onclick="anexarComprovantePago('+b.id+')" style="display:block;width:100%;text-align:center;margin-bottom:10px;padding:6px;border-radius:9px;background:transparent;border:1px solid var(--BR2);color:var(--MU);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">Trocar comprovante</button>':'')
+  : (U&&U.role!=="viewer"?'<button onclick="anexarComprovantePago('+b.id+')" style="display:block;width:100%;text-align:center;margin-bottom:10px;padding:8px;border-radius:9px;background:rgba(90,138,58,.08);border:1px dashed rgba(90,138,58,.5);color:#5a8a3a;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">📎 Anexar comprovante</button>':'')
+ )+
  (U&&U.role!=="viewer"?'<button onclick="desfazerPagamento('+b.id+')" style="width:100%;background:none;border:1px solid var(--BR2);border-radius:8px;padding:6px;color:var(--MU);font-size:11px;cursor:pointer;font-family:inherit;">↩ Desfazer pagamento</button>':'')+
  '</div>';
  }).join("");
@@ -7255,6 +7288,9 @@ function foSaldoDevedorHTML(f){
    '<div style="display:flex;gap:8px;"><div style="flex:1;"><label>Valor total *</label><input type="number" step="0.01" id="nd-valor" placeholder="100000.00"></div>'+
    '<div style="flex:1;"><label>Data</label><input type="date" id="nd-data" value="'+foHoje()+'"></div></div>'+
    '<div><label>Categoria</label><select id="nd-cat">'+optsCat+'</select></div>'+
+   '<div><label>Romaneio (foto) <span style="color:var(--MU);font-weight:400;">(opcional)</span></label>'+
+   '<button type="button" class="btn g sm" onclick="ndRomaneioPick()" style="width:100%;">📎 Anexar foto do romaneio</button>'+
+   '<div id="nd-rom-nome" style="font-size:11px;color:#6b4e8a;font-weight:700;margin-top:6px;display:'+(ND_ROMANEIO?'block':'none')+';">'+(ND_ROMANEIO?('📷 '+coEsc(ND_ROMANEIO.name)+' (anexa ao salvar)'):'')+'</div></div>'+
    '<div style="display:flex;gap:8px;margin-top:4px;"><button class="btn" style="flex:1;" id="nd-btn" onclick="foSalvarDivida('+f.id+')">Criar dívida</button><button class="btn g" onclick="foCancelarDivida()">Cancelar</button></div>'+
    '</div></div>';
  }
@@ -7277,7 +7313,13 @@ function foSaldoDevedorHTML(f){
    '</div>'+
    '<div style="text-align:right;flex-shrink:0;"><div style="font-size:10px;color:var(--MU);text-transform:uppercase;">Saldo</div><div style="font-size:20px;font-weight:800;color:'+(quitado?'#5a8a3a':'var(--R)')+';">'+fv(p.saldo)+'</div></div>'+
    '</div>'+
-   '<div style="height:7px;background:var(--BR);border-radius:4px;overflow:hidden;margin-bottom:10px;"><div style="height:100%;width:'+pct+'%;background:'+(quitado?'#5a8a3a':'#b8860b')+';"></div></div>';
+   '<div style="height:7px;background:var(--BR);border-radius:4px;overflow:hidden;margin-bottom:10px;"><div style="height:100%;width:'+pct+'%;background:'+(quitado?'#5a8a3a':'#b8860b')+';"></div></div>'+
+   '<div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;">'+
+   (p.romaneio
+    ? '<button onclick="abrirViewer(\''+p.romaneio+'\',\'Romaneio\',\''+coEsc(p.desc||"").replace(/\'/g,"\\'")+'\')" style="padding:4px 10px;border-radius:6px;background:rgba(107,78,138,.12);border:1px solid rgba(107,78,138,.4);color:#6b4e8a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">📷 Ver romaneio</button>'+
+      '<button onclick="pedRomaneioUpload('+parseInt(p.id)+')" style="padding:4px 10px;border-radius:6px;background:transparent;border:1px solid var(--BR);color:var(--MU);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">Trocar foto</button>'
+    : '<button onclick="pedRomaneioUpload('+parseInt(p.id)+')" style="padding:4px 10px;border-radius:6px;background:rgba(107,78,138,.08);border:1px dashed rgba(107,78,138,.5);color:#6b4e8a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">📎 Anexar romaneio</button>'
+   )+'</div>';
 
   if(pags.length>0){
    h += '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px;">';
@@ -7309,8 +7351,8 @@ function foSaldoDevedorHTML(f){
  return h;
 }
 
-function foNovaDivida(){ FO_NOVA_DIVIDA=true; FO_ABATER_PED=null; rFoDetalhe(); }
-function foCancelarDivida(){ FO_NOVA_DIVIDA=false; rFoDetalhe(); }
+function foNovaDivida(){ FO_NOVA_DIVIDA=true; FO_ABATER_PED=null; ndRomaneioReset(); rFoDetalhe(); }
+function foCancelarDivida(){ FO_NOVA_DIVIDA=false; ndRomaneioReset(); rFoDetalhe(); }
 
 // Atalho: abre o form de PIX parcelado (aba Boletos/PIX) já com o fornecedor preenchido.
 function foNovoPedidoParcelado(fornId){
@@ -7348,6 +7390,8 @@ async function _pedRomaneioEnviar(pedidoId, file){
   var url = await _romaneioUploadFile(pedidoId, file);
   var ped = PEDIDOS.filter(function(p){ return p.id===pedidoId; })[0];
   if(ped) ped.romaneio = url;
+  var pedL = PED_LIVRE.filter(function(p){ return p.id===pedidoId; })[0];
+  if(pedL) pedL.romaneio = url;
   toast('Romaneio anexado ✓', true);
   rFoDetalhe();
  } catch(e){ toast('Erro ao enviar romaneio: '+e.message, false); }
@@ -7367,6 +7411,25 @@ function boRomaneioPick(){
   if(!f) return;
   BO_ROMANEIO = f;
   var n = ge('bo-rom-nome');
+  if(n){ n.textContent = '📷 '+f.name+' (anexa ao salvar)'; n.style.display='block'; }
+ };
+ inp.click();
+}
+
+// Romaneio no form "Nova dívida" (Fornecedores): guarda o File; sobe no foSalvarDivida.
+function ndRomaneioReset(){
+ ND_ROMANEIO = null;
+ var n = ge('nd-rom-nome'); if(n){ n.style.display='none'; n.textContent=''; }
+}
+function ndRomaneioPick(){
+ var inp = document.createElement('input');
+ inp.type = 'file';
+ inp.accept = 'image/*';
+ inp.onchange = function(){
+  var f = inp.files && inp.files[0];
+  if(!f) return;
+  ND_ROMANEIO = f;
+  var n = ge('nd-rom-nome');
   if(n){ n.textContent = '📷 '+f.name+' (anexa ao salvar)'; n.style.display='block'; }
  };
  inp.click();
@@ -7407,8 +7470,16 @@ async function foSalvarDivida(fornId){
   var j=await coFetch(coAPI()+'/api/pedidos-livre',{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fornecedor_id:f.id,fornecedor_nome:f.nome,descricao:desc.trim()||null,valor_total:valor,data_pedido:data,categoria:cat||f.cat||null})});
   if(!j.ok) throw new Error(j.erro||"falhou");
   var p=j.pedido;
-  PED_LIVRE.unshift({id:p.id,desc:p.descricao,fornId:p.fornecedor_id,fornNome:p.fornecedor_nome||"",cat:p.categoria||"",total:parseFloat(p.valor_total||0),abatido:0,saldo:parseFloat(p.valor_total||0),data:p.data_pedido,obs:p.observacoes||"",status:p.status,criado:p.created_at});
+  PED_LIVRE.unshift({id:p.id,desc:p.descricao,fornId:p.fornecedor_id,fornNome:p.fornecedor_nome||"",cat:p.categoria||"",total:parseFloat(p.valor_total||0),abatido:0,saldo:parseFloat(p.valor_total||0),data:p.data_pedido,obs:p.observacoes||"",status:p.status,criado:p.created_at,romaneio:null});
+  // Romaneio anexado na criação da dívida (opcional)
+  if(ND_ROMANEIO){
+   try {
+    var ndUrl = await _romaneioUploadFile(p.id, ND_ROMANEIO);
+    PED_LIVRE[0].romaneio = ndUrl;
+   } catch(ndErr){ toast('Dívida criada, mas o romaneio falhou: '+ndErr.message, false); }
+  }
   FO_NOVA_DIVIDA=false;
+  ndRomaneioReset();
   toast("Dívida registrada: "+fv(valor),true);
   rFoDetalhe();
  }catch(e){ toast("Erro: "+e.message,false); if(btn){btn.disabled=false;btn.textContent="Criar dívida";} }
@@ -7580,7 +7651,7 @@ function rFoDetalhe(){
  h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--C1);border-radius:6px;font-size:12px;">'+
  '<span><span style="font-weight:700;color:#6b4e8a;">'+(p.parc_at||'?')+'/'+(p.parc_tot||'?')+'</span> · '+(isPago?'✅':(isVencida?'⚠️':'⏳'))+' '+fd(p.ven)+'</span>'+
  '<div style="display:flex;align-items:center;gap:6px;">'+
- (p.comp?'<button onclick="event.stopPropagation();abrirViewer(\''+p.comp+'\', \''+p.desc.replace(/\'/g,"\\'")+'\', \'Comprovante de pagamento\')" style="padding:3px 8px;border-radius:5px;background:rgba(100,100,100,.12);border:1px solid rgba(100,100,100,.3);color:#555;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">Ver comprovante</button>':'')+
+ (p.comp?'<button onclick="event.stopPropagation();abrirViewer(\''+p.comp+'\', \''+p.desc.replace(/\'/g,"\\'")+'\', \'Comprovante de pagamento\')" style="padding:3px 8px;border-radius:5px;background:rgba(100,100,100,.12);border:1px solid rgba(100,100,100,.3);color:#555;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">Ver comprovante</button>':(isPago?'<button onclick="event.stopPropagation();anexarComprovantePago('+p.id+')" style="padding:3px 8px;border-radius:5px;background:rgba(90,138,58,.10);border:1px dashed rgba(90,138,58,.5);color:#5a8a3a;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">📎 Comprovante</button>':''))+
  (isPago?'<button onclick="event.stopPropagation();desfazerPagamento('+p.id+')" style="padding:3px 8px;border-radius:5px;background:rgba(201,33,39,.10);border:1px solid rgba(201,33,39,.4);color:#c92127;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;margin-right:6px;">Desfazer</button>':'')+'<span style="font-weight:700;color:'+(isPago?'#5a8a3a':'var(--R)')+';">'+fv(p.val)+'</span>'+
  '</div>'+
  '</div>';
@@ -7603,7 +7674,13 @@ function rFoDetalhe(){
  '<div style="font-size:12px;font-weight:700;">'+(isPix?'⚡ ':'📄 ')+b.desc+'</div>'+
  '<div style="font-size:10px;color:var(--MU);margin-top:2px;">'+(isPago?'✓ Pago':'⏳ Pendente')+' · '+fd(b.ven)+(b.cat?' · '+b.cat:'')+'</div>'+
  '</div>'+
+ '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">'+
+ (isPago?(b.comp
+   ? '<button onclick="event.stopPropagation();abrirViewer(\''+b.comp+'\', \''+(b.desc||"").replace(/\'/g,"\\'")+'\', \'Comprovante\')" style="padding:3px 8px;border-radius:5px;background:rgba(90,138,58,.10);border:1px solid rgba(90,138,58,.3);color:#5a8a3a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;" title="Ver comprovante">📷</button>'
+   : '<button onclick="event.stopPropagation();anexarComprovantePago('+b.id+')" style="padding:3px 8px;border-radius:5px;background:rgba(90,138,58,.08);border:1px dashed rgba(90,138,58,.5);color:#5a8a3a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;" title="Anexar comprovante">📎</button>'
+  ):'')+
  '<div style="font-size:14px;font-weight:700;color:'+(isPago?'#5a8a3a':'var(--R)')+';">'+fv(b.val)+'</div>'+
+ '</div>'+
  '</div>';
  });
  h += '</div>';
