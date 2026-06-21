@@ -50,6 +50,15 @@ canal** (bot — hoje Telegram, futuro WhatsApp).
 - Provisão automática do imposto sobre faturamento do mês; separa o dinheiro.
 - Vira Compromisso automático com alerta de vencimento do DAS.
 
+### Pró-labore (remuneração do sócio)
+- Registrar o pró-labore mensal (valor fixo que o sócio se paga) — **separado do lucro**.
+- Entra como **despesa** na DRE e como **saída recorrente** no Fluxo de Caixa.
+- Distinguir **pró-labore** (tem INSS/IRRF) de **distribuição de lucro** (isenta no
+  Simples) e de **tirada extra** — não misturar tudo em "saque".
+- Disciplina-chave: **separar PF do PJ** (parar de misturar dinheiro pessoal com o da
+  empresa). Casa com os saques pra conta PF no Fluxo de Caixa.
+- Acompanhar: definido vs realizado no mês; INSS sobre pró-labore vira Compromisso.
+
 ### Devoluções / Reembolsos
 - Lente própria: % de devolução por produto, custo das devoluções.
 - **[BACKLOG] Incluir o PREJUÍZO DE FRETE por devolução** — quando o produto volta,
