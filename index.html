@@ -1109,7 +1109,8 @@ async function carregarTudo(){
  // Pagamentos (abatimentos) dos pedidos livres
  PED_PAG = (rPedPag && rPedPag.data || []).map(function(r){ return {
  id:r.id, pedidoId:r.pedido_id, valor:parseFloat(r.valor||0),
- data:r.data, origem:r.origem||"manual", extratoId:r.extrato_id||null, obs:r.obs||""
+ data:r.data, origem:r.origem||"manual", extratoId:r.extrato_id||null, obs:r.obs||"",
+ comprovante:r.comprovante_url||null
  }; });
 
  // Pedidos livres (saldo devedor) — saldo = total - soma dos abatimentos
@@ -6971,7 +6972,7 @@ async function coAbaterPedido(extratoId, pedId){
  try{
   var j = await coFetch(coAPI()+'/api/pedidos/'+pedId+'/pagamento',{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({valor:valor,data:dia,origem:"conciliacao",extrato_id:extratoId,obs:r.descricao||null})});
   if(!j.ok) throw new Error(j.erro||"falhou");
-  PED_PAG.push({id:j.pagamento.id,pedidoId:pedId,valor:valor,data:dia,origem:"conciliacao",extratoId:extratoId,obs:r.descricao||""});
+  PED_PAG.push({id:j.pagamento.id,pedidoId:pedId,valor:valor,data:dia,origem:"conciliacao",extratoId:extratoId,obs:r.descricao||"",comprovante:null});
   if(typeof foRecalcDivida==="function") foRecalcDivida(pedId);
   coMsg("Abatido "+fv(valor)+" do saldo"+(j.status==="quitado"?" — dívida quitada! 🎉":". Saldo: "+fv(j.saldo)),"ok");
   coRenderLink();
@@ -7327,7 +7328,12 @@ function foSaldoDevedorHTML(f){
     var ob = pg.origem==='conciliacao' ? '<span style="font-size:9px;color:#3b6978;background:rgba(59,105,120,.12);padding:1px 6px;border-radius:3px;">conciliação</span>' : '<span style="font-size:9px;color:var(--MU);background:var(--BR);padding:1px 6px;border-radius:3px;">manual</span>';
     h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:5px 8px;background:var(--C2);border-radius:6px;">'+
      '<div style="display:flex;gap:8px;align-items:center;min-width:0;"><span style="color:var(--MU);">'+fd(pg.data)+'</span>'+ob+(pg.obs?'<span style="color:var(--MU);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+coEsc(pg.obs)+'</span>':'')+'</div>'+
-     '<div style="display:flex;gap:6px;align-items:center;flex-shrink:0;"><b style="color:#5a8a3a;">-'+fv(pg.valor)+'</b><button onclick="pedPagDel('+pg.id+')" style="background:none;border:none;cursor:pointer;color:var(--MU);font-size:12px;" title="Remover">✕</button></div>'+
+     '<div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">'+
+     (pg.comprovante
+       ? '<button onclick="abrirViewer(\''+pg.comprovante+'\',\'Comprovante\',\''+coEsc(pg.obs||"Abatimento").replace(/\'/g,"\\'")+'\')" style="background:none;border:1px solid rgba(90,138,58,.3);background:rgba(90,138,58,.1);border-radius:5px;cursor:pointer;color:#5a8a3a;font-size:11px;font-weight:700;padding:2px 7px;" title="Ver comprovante">📷</button>'
+       : '<button onclick="anexarComprovantePedPag('+pg.id+')" style="background:rgba(90,138,58,.06);border:1px dashed rgba(90,138,58,.5);border-radius:5px;cursor:pointer;color:#5a8a3a;font-size:11px;font-weight:700;padding:2px 7px;" title="Anexar comprovante">📎</button>'
+     )+
+     '<b style="color:#5a8a3a;">-'+fv(pg.valor)+'</b><button onclick="pedPagDel('+pg.id+')" style="background:none;border:none;cursor:pointer;color:var(--MU);font-size:12px;" title="Remover">✕</button></div>'+
      '</div>';
    });
    h += '</div>';
@@ -7412,6 +7418,33 @@ function boRomaneioPick(){
   BO_ROMANEIO = f;
   var n = ge('bo-rom-nome');
   if(n){ n.textContent = '📷 '+f.name+' (anexa ao salvar)'; n.style.display='block'; }
+ };
+ inp.click();
+}
+
+// Anexa (ou troca) o comprovante de um abatimento de pedido livre (dívida).
+function anexarComprovantePedPag(pagId){
+ var inp = document.createElement('input');
+ inp.type = 'file';
+ inp.accept = 'image/*,application/pdf';
+ inp.onchange = async function(){
+  var file = inp.files && inp.files[0];
+  if(!file) return;
+  if(file.size > 10*1024*1024){ toast('Arquivo muito grande (max 10MB)', false); return; }
+  try {
+   toast('Enviando comprovante...');
+   var ext = (file.name.split('.').pop()||'bin').toLowerCase();
+   var path = 'abatimento_' + pagId + '_' + Date.now() + '.' + ext;
+   var up = await sb.storage.from('comprovantes').upload(path, file, { contentType:file.type, upsert:false });
+   if(up.error) throw up.error;
+   var url = sb.storage.from('comprovantes').getPublicUrl(path).data.publicUrl;
+   var u1 = await sb.from('pedido_pagamentos').update({ comprovante_url:url }).eq('id', pagId);
+   if(u1.error) throw u1.error;
+   var pg = PED_PAG.filter(function(x){ return x.id===pagId; })[0];
+   if(pg) pg.comprovante = url;
+   toast('Comprovante anexado ✓', true);
+   rFoDetalhe();
+  } catch(e){ toast('Erro ao anexar comprovante: '+e.message, false); }
  };
  inp.click();
 }
@@ -7505,7 +7538,7 @@ async function pedAbaterSalvar(pedId){
  try{
   var j=await coFetch(coAPI()+'/api/pedidos/'+pedId+'/pagamento',{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({valor:valor,data:data,obs:obs.trim()||null,origem:"manual"})});
   if(!j.ok) throw new Error(j.erro||"falhou");
-  PED_PAG.push({id:j.pagamento.id,pedidoId:pedId,valor:valor,data:data,origem:"manual",extratoId:null,obs:obs.trim()||""});
+  PED_PAG.push({id:j.pagamento.id,pedidoId:pedId,valor:valor,data:data,origem:"manual",extratoId:null,obs:obs.trim()||"",comprovante:null});
   foRecalcDivida(pedId);
   FO_ABATER_PED=null;
   toast("Abatido "+fv(valor)+(j.status==="quitado"?" — dívida quitada! 🎉":". Saldo: "+fv(j.saldo)),true);
