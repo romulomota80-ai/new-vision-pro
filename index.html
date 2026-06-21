@@ -656,14 +656,7 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
  <div class="card" id="bo-form" style="display:none;">
  <div id="bo-form-title" style="padding:13px;border-bottom:1px solid var(--BR);font-size:14px;font-weight:700;">Novo Boleto</div>
  <div style="padding:14px;display:flex;flex-direction:column;gap:11px;">
- <!-- Toggle Único/Parcelado (só pra PIX) -->
- <div class="bo-campo-pix" style="display:none;">
- <label>Tipo de pagamento</label>
- <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
- <button type="button" class="btn" id="bo-mod-un" onclick="boModo('unico')">Único</button>
- <button type="button" class="btn g" id="bo-mod-pa" onclick="boModo('parcelado')">Parcelado</button>
- </div>
- </div>
+ <!-- Toggle Único/Parcelado removido: criar pedido (parcelado) agora vive só na aba Fornecedores (via foNovoPedidoParcelado). O modo parcelado segue acessível só programaticamente. -->
  <div><label>Descrição</label><input type="text" id="bo-de" placeholder="Ex: Aluguel galpão"></div>
  <!-- Valor e vencimento só aparecem no modo único -->
  <div class="bo-campo-unico"><label>Valor (R$)</label><input type="number" id="bo-vl"></div>
@@ -689,6 +682,12 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
  <button type="button" class="btn g sm" onclick="boParcelaAdd()" style="margin-top:8px;width:100%;">+ Adicionar parcela</button>
  <div id="bo-parcelas-total" style="margin-top:10px;padding:10px;background:var(--C2);border-radius:8px;display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;">
  <span>Total:</span><span id="bo-parcelas-soma" style="color:var(--R);">R$ 0,00</span>
+ </div>
+ <!-- Romaneio (foto) anexado já na criação do pedido -->
+ <div style="margin-top:12px;">
+ <label style="margin-bottom:6px;display:block;">Romaneio (foto) <span style="color:var(--MU);font-weight:400;">(opcional)</span></label>
+ <button type="button" class="btn g sm" onclick="boRomaneioPick()" style="width:100%;">📎 Anexar foto do romaneio</button>
+ <div id="bo-rom-nome" style="font-size:11px;color:#6b4e8a;font-weight:700;margin-top:6px;display:none;"></div>
  </div>
  </div>
  <div style="display:flex;gap:8px;"><button class="btn" onclick="boSalvar()" style="flex:1;" id="btn-bo-sv">Salvar</button><button class="btn g" onclick="boFechar()">Cancelar</button></div>
@@ -848,6 +847,7 @@ var BO_TIPO = "boleto"; // filtro de sub-aba: 'boleto' ou 'pix'
 var BO_FORN = "todos";
 var BO_MODO = "unico"; // modo do form PIX: 'unico' ou 'parcelado'
 var BO_PARCELAS = []; // array de {data, valor} para modo parcelado
+var BO_ROMANEIO = null; // File da foto do romaneio anexada na criação do pedido
 var evMeses = (function(){
   var hj=new Date(), atual=hj.getMonth(), MES_NOMES=["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"];
   // Se janeiro, retorna so janeiro (mes anterior eh dezembro do ano passado, nao faz sentido comparar)
@@ -5184,6 +5184,7 @@ function boNovo(){
  ge("bo-ct").value="";
  BO_MODO = "unico";
  BO_PARCELAS = [];
+ boRomaneioReset();
  boAjustarCamposForm();
  ge("bo-form").style.display="block";
  ge("bo-form").scrollIntoView({behavior:"smooth"});
@@ -5314,6 +5315,14 @@ async function _boSalvarReal(){
  numForn:rdPed.numero_fornecedor||null, romaneio:null
  });
 
+ // 1b. Romaneio anexado na criação (opcional) — sobe pro Storage e grava no pedido
+ if(BO_ROMANEIO){
+ try {
+ var romUrl = await _romaneioUploadFile(pedidoId, BO_ROMANEIO);
+ PEDIDOS[0].romaneio = romUrl;
+ } catch(romErr){ toast('Pedido criado, mas o romaneio falhou: '+romErr.message, false); }
+ }
+
  // 2. Cria as parcelas em boletos linkadas ao pedido
  var salvos = 0;
  for(var k=0; k<BO_PARCELAS.length; k++){
@@ -5348,6 +5357,7 @@ async function _boSalvarReal(){
  ge("bo-form").style.display="none"; CAL_D=null; rBo();
  toast("✅ Pedido criado com "+salvos+" parcelas!");
  BO_PARCELAS = [];
+ boRomaneioReset();
  } catch(e){ toast("Erro: "+e.message,false); console.error("Erro boSalvar parcelado:", e); }
  setBtn("btn-bo-sv",false);
  return;
@@ -7312,21 +7322,45 @@ function pedRomaneioUpload(pedidoId){
  inp.onchange = function(){ var f = inp.files && inp.files[0]; if(f) _pedRomaneioEnviar(pedidoId, f); };
  inp.click();
 }
+// Sobe a foto pro Storage e grava romaneio_url no pedido. Retorna a URL pública.
+async function _romaneioUploadFile(pedidoId, file){
+ var ext = (file.name.split('.').pop()||'jpg').toLowerCase();
+ var path = 'romaneios/pedido-'+pedidoId+'-'+Date.now()+'.'+ext;
+ var up = await sb.storage.from('comprovantes').upload(path, file, { contentType:file.type, upsert:false });
+ if(up.error) throw up.error;
+ var url = sb.storage.from('comprovantes').getPublicUrl(path).data.publicUrl;
+ var u = await sb.from('pedidos').update({ romaneio_url:url }).eq('id', pedidoId);
+ if(u.error) throw u.error;
+ return url;
+}
 async function _pedRomaneioEnviar(pedidoId, file){
  try {
   toast('Enviando romaneio...');
-  var ext = (file.name.split('.').pop()||'jpg').toLowerCase();
-  var path = 'romaneios/pedido-'+pedidoId+'-'+Date.now()+'.'+ext;
-  var up = await sb.storage.from('comprovantes').upload(path, file, { contentType:file.type, upsert:false });
-  if(up.error) throw up.error;
-  var url = sb.storage.from('comprovantes').getPublicUrl(path).data.publicUrl;
-  var u = await sb.from('pedidos').update({ romaneio_url:url }).eq('id', pedidoId);
-  if(u.error) throw u.error;
+  var url = await _romaneioUploadFile(pedidoId, file);
   var ped = PEDIDOS.filter(function(p){ return p.id===pedidoId; })[0];
   if(ped) ped.romaneio = url;
   toast('Romaneio anexado ✓', true);
   rFoDetalhe();
  } catch(e){ toast('Erro ao enviar romaneio: '+e.message, false); }
+}
+
+// Romaneio na CRIAÇÃO do pedido (form parcelado): só guarda o File; o upload acontece no boSalvar, após criar o pedido.
+function boRomaneioReset(){
+ BO_ROMANEIO = null;
+ var n = ge('bo-rom-nome'); if(n){ n.style.display='none'; n.textContent=''; }
+}
+function boRomaneioPick(){
+ var inp = document.createElement('input');
+ inp.type = 'file';
+ inp.accept = 'image/*';
+ inp.onchange = function(){
+  var f = inp.files && inp.files[0];
+  if(!f) return;
+  BO_ROMANEIO = f;
+  var n = ge('bo-rom-nome');
+  if(n){ n.textContent = '📷 '+f.name+' (anexa ao salvar)'; n.style.display='block'; }
+ };
+ inp.click();
 }
 
 // Pagamentos conciliados (débitos do extrato vinculados ao fornecedor) — pagos e finalizados.
