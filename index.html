@@ -683,12 +683,12 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
  <div id="bo-parcelas-total" style="margin-top:10px;padding:10px;background:var(--C2);border-radius:8px;display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;">
  <span>Total:</span><span id="bo-parcelas-soma" style="color:var(--R);">R$ 0,00</span>
  </div>
- <!-- Romaneio (foto) anexado já na criação do pedido -->
- <div style="margin-top:12px;">
- <label style="margin-bottom:6px;display:block;">Romaneio (foto) <span style="color:var(--MU);font-weight:400;">(opcional)</span></label>
+ </div>
+ <!-- Romaneio (foto) — vale p/ qualquer pedido PIX (único c/ fornecedor ou parcelado); anexado na criação -->
+ <div class="bo-campo-pix" style="display:none;margin-top:2px;">
+ <label style="margin-bottom:6px;display:block;">Romaneio (foto) <span style="color:var(--MU);font-weight:400;">(opcional — só vincula se houver fornecedor)</span></label>
  <button type="button" class="btn g sm" onclick="boRomaneioPick()" style="width:100%;">📎 Anexar foto do romaneio</button>
  <div id="bo-rom-nome" style="font-size:11px;color:#6b4e8a;font-weight:700;margin-top:6px;display:none;"></div>
- </div>
  </div>
  <div style="display:flex;gap:8px;"><button class="btn" onclick="boSalvar()" style="flex:1;" id="btn-bo-sv">Salvar</button><button class="btn g" onclick="boFechar()">Cancelar</button></div>
  </div>
@@ -5430,6 +5430,14 @@ async function _boSalvarReal(){
  numForn:rdPedU.numero_fornecedor||null, romaneio:null
  });
  payload.pedido_id = pedidoIdUnico;
+
+ // Romaneio anexado na criação (opcional) — só vincula no pedido único (PIX c/ fornecedor)
+ if(BO_ROMANEIO){
+ try {
+ var romUrlU = await _romaneioUploadFile(pedidoIdUnico, BO_ROMANEIO);
+ PEDIDOS[0].romaneio = romUrlU;
+ } catch(romErrU){ toast('Pedido criado, mas o romaneio falhou: '+romErrU.message, false); }
+ }
  }
 
  var {data,error}=await sb.from("boletos").insert(payload).select().single();
@@ -5448,6 +5456,7 @@ async function _boSalvarReal(){
  } else {
  toast((BO_TIPO==="pix"?"PIX":"Boleto")+" salvo no banco!");
  }
+ boRomaneioReset();
  } catch(e){ toast("Erro: "+e.message,false); console.error("Erro boSalvar:", e); }
  setBtn("btn-bo-sv",false);
 }
