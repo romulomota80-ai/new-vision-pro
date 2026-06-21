@@ -5331,10 +5331,9 @@ async function _boSalvarReal(){
  } catch(romErr){ toast('Pedido criado, mas o romaneio falhou: '+romErr.message, false); }
  }
 
- // 2. Cria as parcelas em boletos linkadas ao pedido
- var salvos = 0;
- for(var k=0; k<BO_PARCELAS.length; k++){
- var parc = BO_PARCELAS[k];
+ // 2. Cria as parcelas em boletos linkadas ao pedido — insert ÚNICO (atômico no request,
+ //    evita pedido com parcelas pela metade se uma falhar no meio)
+ var payloads = BO_PARCELAS.map(function(parc, k){
  var payload = {
  descricao: d,
  valor: parseFloat(parc.valor),
@@ -5349,9 +5348,11 @@ async function _boSalvarReal(){
  };
  if(fav) payload.favorecido = fav;
  if(pix) payload.chave_pix = pix;
-
- var {data:rd, error} = await sb.from("boletos").insert(payload).select().single();
+ return payload;
+ });
+ var {data:rdParcelas, error} = await sb.from("boletos").insert(payloads).select();
  if(error) throw error;
+ (rdParcelas||[]).forEach(function(rd){
  BOL.push({
  id:rd.id, desc:rd.descricao, val:parseFloat(rd.valor), ven:rd.vencimento, st:"p",
  cat:rd.categoria, rec:false,
@@ -5360,8 +5361,8 @@ async function _boSalvarReal(){
  parc_at:rd.parcela_atual, parc_tot:rd.parcela_total,
  pedidoId:rd.pedido_id
  });
- salvos++;
- }
+ });
+ var salvos = (rdParcelas||[]).length;
  ge("bo-form").style.display="none"; CAL_D=null; rBo();
  toast("✅ Pedido criado com "+salvos+" parcelas!");
  BO_PARCELAS = [];
@@ -5810,7 +5811,7 @@ function rBo(){
  '<button class="btn pu sm" onclick="copCod('+b.id+')" style="width:100%;margin-top:7px;">Copiar código</button>'+
  '</div>':'')+
  (!isPix && b.link?'<button onclick="abrirViewer(\''+b.link+'\', \''+b.desc.replace(/'/g,"\\'")+'\', \'Boleto pago · '+fd(b.ven)+'\')" style="display:block;width:100%;text-align:center;margin-bottom:10px;padding:8px;border-radius:9px;background:rgba(42,82,99,.1);border:1px solid rgba(42,82,99,.3);color:#2a5263;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">Ver boleto / PDF</button>':'')+
- anexosHTML(b.comps, 'Comprovante', 'anexarComprovantePago('+b.id+')', 'full', false, (U&&U.role!=="viewer"), b.desc.replace(/'/g,"\\'")+' · '+fd(b.ven))+
+ anexosHTML(b.comps, 'Comprovante', 'anexarComprovantePago('+b.id+')', 'full', false, (U&&U.role!=="viewer"), coEsc(b.desc||"").replace(/'/g,"\\'")+' · '+fd(b.ven))+
  (U&&U.role!=="viewer"?'<button onclick="desfazerPagamento('+b.id+')" style="width:100%;background:none;border:1px solid var(--BR2);border-radius:8px;padding:6px;color:var(--MU);font-size:11px;cursor:pointer;font-family:inherit;">↩ Desfazer pagamento</button>':'')+
  '</div>';
  }).join("");
@@ -7192,11 +7193,13 @@ function rFoRanking(){
 
 function foAbrirDetalhe(id){
  FO_DETALHE_ID = id;
+ FO_NOVA_DIVIDA = false; FO_ABATER_PED = null; ndRomaneioReset(); // não vazar form/anexos de outro fornecedor
  rFo();
 }
 
 function foVoltar(){
  FO_DETALHE_ID = null;
+ FO_NOVA_DIVIDA = false; FO_ABATER_PED = null; ndRomaneioReset();
  rFo();
 }
 
@@ -7367,7 +7370,14 @@ function foNovoPedidoParcelado(fornId){
 function _pickAnexos(cb){
  var inp = document.createElement('input');
  inp.type = 'file'; inp.accept = 'image/*,application/pdf'; inp.multiple = true;
- inp.onchange = function(){ var fs = inp.files ? Array.prototype.slice.call(inp.files) : []; if(fs.length) cb(fs); };
+ inp.onchange = function(){
+  var fs = inp.files ? Array.prototype.slice.call(inp.files) : [];
+  if(!fs.length) return;
+  // valida TODOS antes de subir qualquer um (senão parte sobe e o resto falha → órfãos no Storage)
+  var grandes = fs.filter(function(f){ return f.size > 10*1024*1024; });
+  if(grandes.length){ toast('Acima de 10MB: '+grandes.map(function(f){return f.name;}).join(', '), false); return; }
+  cb(fs);
+ };
  inp.click();
 }
 // Sobe 1 arquivo pro bucket; retorna a URL pública. `i` evita colisão de path no mesmo ms.
@@ -7657,7 +7667,7 @@ function rFoDetalhe(){
  var pagoVal = parcelas.filter(function(x){return x.st==="pago";}).reduce(function(sum,x){return sum+x.val;},0);
  var numPed = foNumeroPedido(parseInt(pid), f.nome);
  var badgeNum = numPed ? ' <span style="font-size:11px;color:#fff;background:#6b4e8a;padding:2px 8px;border-radius:4px;font-weight:700;margin-left:6px;">'+f.nome+' #'+numPed+'</span>' : '';
- var pedDescEsc = String(pedInfo?pedInfo.desc:(parcelas[0].desc||"")).replace(/'/g,"\\'");
+ var pedDescEsc = coEsc(pedInfo?pedInfo.desc:(parcelas[0].desc||"")).replace(/'/g,"\\'");
  var romHtml = '<div style="margin-bottom:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'+
   anexosHTML(pedInfo?pedInfo.romaneios:[], 'Romaneio', 'pedRomaneioAdd('+parseInt(pid)+')', 'inline', false, true, pedDescEsc)+
   '</div>';
@@ -7685,7 +7695,7 @@ function rFoDetalhe(){
  h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--C1);border-radius:6px;font-size:12px;">'+
  '<span><span style="font-weight:700;color:#6b4e8a;">'+(p.parc_at||'?')+'/'+(p.parc_tot||'?')+'</span> · '+(isPago?'✅':(isVencida?'⚠️':'⏳'))+' '+fd(p.ven)+'</span>'+
  '<div style="display:flex;align-items:center;gap:6px;">'+
- (isPago?anexosHTML(p.comps, 'Comprovante', 'anexarComprovantePago('+p.id+')', 'inline', true, true, p.desc.replace(/\'/g,"\\'")):'')+
+ (isPago?anexosHTML(p.comps, 'Comprovante', 'anexarComprovantePago('+p.id+')', 'inline', true, true, coEsc(p.desc||"").replace(/'/g,"\\'")):'')+
  (isPago?'<button onclick="event.stopPropagation();desfazerPagamento('+p.id+')" style="padding:3px 8px;border-radius:5px;background:rgba(201,33,39,.10);border:1px solid rgba(201,33,39,.4);color:#c92127;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;margin-right:6px;">Desfazer</button>':'')+'<span style="font-weight:700;color:'+(isPago?'#5a8a3a':'var(--R)')+';">'+fv(p.val)+'</span>'+
  '</div>'+
  '</div>';
@@ -7709,7 +7719,7 @@ function rFoDetalhe(){
  '<div style="font-size:10px;color:var(--MU);margin-top:2px;">'+(isPago?'✓ Pago':'⏳ Pendente')+' · '+fd(b.ven)+(b.cat?' · '+b.cat:'')+'</div>'+
  '</div>'+
  '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">'+
- (isPago?anexosHTML(b.comps, 'Comprovante', 'anexarComprovantePago('+b.id+')', 'inline', true, true, (b.desc||"").replace(/\'/g,"\\'")):'')+
+ (isPago?anexosHTML(b.comps, 'Comprovante', 'anexarComprovantePago('+b.id+')', 'inline', true, true, coEsc(b.desc||"").replace(/'/g,"\\'")):'')+
  '<div style="font-size:14px;font-weight:700;color:'+(isPago?'#5a8a3a':'var(--R)')+';">'+fv(b.val)+'</div>'+
  '</div>'+
  '</div>';
