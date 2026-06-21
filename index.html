@@ -7330,8 +7330,8 @@ function foSaldoDevedorHTML(f){
      '<div style="display:flex;gap:8px;align-items:center;min-width:0;"><span style="color:var(--MU);">'+fd(pg.data)+'</span>'+ob+(pg.obs?'<span style="color:var(--MU);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+coEsc(pg.obs)+'</span>':'')+'</div>'+
      '<div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">'+
      (pg.comprovante
-       ? '<button onclick="abrirViewer(\''+pg.comprovante+'\',\'Comprovante\',\''+coEsc(pg.obs||"Abatimento").replace(/\'/g,"\\'")+'\')" style="background:none;border:1px solid rgba(90,138,58,.3);background:rgba(90,138,58,.1);border-radius:5px;cursor:pointer;color:#5a8a3a;font-size:11px;font-weight:700;padding:2px 7px;" title="Ver comprovante">📷</button>'
-       : '<button onclick="anexarComprovantePedPag('+pg.id+')" style="background:rgba(90,138,58,.06);border:1px dashed rgba(90,138,58,.5);border-radius:5px;cursor:pointer;color:#5a8a3a;font-size:11px;font-weight:700;padding:2px 7px;" title="Anexar comprovante">📎</button>'
+       ? '<button onclick="abrirViewer(\''+pg.comprovante+'\',\'Comprovante\',\''+coEsc(pg.obs||"Abatimento").replace(/\'/g,"\\'")+'\')" style="border:1px solid rgba(90,138,58,.3);background:rgba(90,138,58,.1);border-radius:5px;cursor:pointer;color:#5a8a3a;font-size:10px;font-weight:700;padding:2px 7px;font-family:inherit;" title="Ver comprovante">📷 Ver comprovante</button>'
+       : '<button onclick="anexarComprovantePedPag('+pg.id+')" style="background:rgba(90,138,58,.06);border:1px dashed rgba(90,138,58,.5);border-radius:5px;cursor:pointer;color:#5a8a3a;font-size:10px;font-weight:700;padding:2px 7px;font-family:inherit;" title="Anexar comprovante">📎 Anexar comprovante</button>'
      )+
      '<b style="color:#5a8a3a;">-'+fv(pg.valor)+'</b><button onclick="pedPagDel('+pg.id+')" style="background:none;border:none;cursor:pointer;color:var(--MU);font-size:12px;" title="Remover">✕</button></div>'+
      '</div>';
@@ -7684,7 +7684,7 @@ function rFoDetalhe(){
  h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--C1);border-radius:6px;font-size:12px;">'+
  '<span><span style="font-weight:700;color:#6b4e8a;">'+(p.parc_at||'?')+'/'+(p.parc_tot||'?')+'</span> · '+(isPago?'✅':(isVencida?'⚠️':'⏳'))+' '+fd(p.ven)+'</span>'+
  '<div style="display:flex;align-items:center;gap:6px;">'+
- (p.comp?'<button onclick="event.stopPropagation();abrirViewer(\''+p.comp+'\', \''+p.desc.replace(/\'/g,"\\'")+'\', \'Comprovante de pagamento\')" style="padding:3px 8px;border-radius:5px;background:rgba(100,100,100,.12);border:1px solid rgba(100,100,100,.3);color:#555;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">Ver comprovante</button>':(isPago?'<button onclick="event.stopPropagation();anexarComprovantePago('+p.id+')" style="padding:3px 8px;border-radius:5px;background:rgba(90,138,58,.10);border:1px dashed rgba(90,138,58,.5);color:#5a8a3a;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">📎 Comprovante</button>':''))+
+ (p.comp?'<button onclick="event.stopPropagation();abrirViewer(\''+p.comp+'\', \''+p.desc.replace(/\'/g,"\\'")+'\', \'Comprovante de pagamento\')" style="padding:3px 8px;border-radius:5px;background:rgba(100,100,100,.12);border:1px solid rgba(100,100,100,.3);color:#555;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">Ver comprovante</button>':(isPago?'<button onclick="event.stopPropagation();anexarComprovantePago('+p.id+')" style="padding:3px 8px;border-radius:5px;background:rgba(90,138,58,.10);border:1px dashed rgba(90,138,58,.5);color:#5a8a3a;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">📎 Anexar comprovante</button>':''))+
  (isPago?'<button onclick="event.stopPropagation();desfazerPagamento('+p.id+')" style="padding:3px 8px;border-radius:5px;background:rgba(201,33,39,.10);border:1px solid rgba(201,33,39,.4);color:#c92127;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;margin-right:6px;">Desfazer</button>':'')+'<span style="font-weight:700;color:'+(isPago?'#5a8a3a':'var(--R)')+';">'+fv(p.val)+'</span>'+
  '</div>'+
  '</div>';
@@ -7709,8 +7709,8 @@ function rFoDetalhe(){
  '</div>'+
  '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">'+
  (isPago?(b.comp
-   ? '<button onclick="event.stopPropagation();abrirViewer(\''+b.comp+'\', \''+(b.desc||"").replace(/\'/g,"\\'")+'\', \'Comprovante\')" style="padding:3px 8px;border-radius:5px;background:rgba(90,138,58,.10);border:1px solid rgba(90,138,58,.3);color:#5a8a3a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;" title="Ver comprovante">📷</button>'
-   : '<button onclick="event.stopPropagation();anexarComprovantePago('+b.id+')" style="padding:3px 8px;border-radius:5px;background:rgba(90,138,58,.08);border:1px dashed rgba(90,138,58,.5);color:#5a8a3a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;" title="Anexar comprovante">📎</button>'
+   ? '<button onclick="event.stopPropagation();abrirViewer(\''+b.comp+'\', \''+(b.desc||"").replace(/\'/g,"\\'")+'\', \'Comprovante\')" style="padding:3px 8px;border-radius:5px;background:rgba(90,138,58,.10);border:1px solid rgba(90,138,58,.3);color:#5a8a3a;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;" title="Ver comprovante">📷 Ver comprovante</button>'
+   : '<button onclick="event.stopPropagation();anexarComprovantePago('+b.id+')" style="padding:3px 8px;border-radius:5px;background:rgba(90,138,58,.08);border:1px dashed rgba(90,138,58,.5);color:#5a8a3a;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;" title="Anexar comprovante">📎 Anexar comprovante</button>'
   ):'')+
  '<div style="font-size:14px;font-weight:700;color:'+(isPago?'#5a8a3a':'var(--R)')+';">'+fv(b.val)+'</div>'+
  '</div>'+
