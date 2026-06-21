@@ -2,6 +2,21 @@
 
 Log das mudanças e decisões. O mais recente em cima.
 
+## 2026-06-21
+
+### Romaneio por pedido (Fornecedores)
+- Cada **pedido** (card no detalhe do fornecedor, aba Fornecedores) ganhou botão
+  **📎 Anexar romaneio** / **📷 Ver romaneio** (foto). Upload pro Supabase Storage
+  (bucket `comprovantes`, prefixo `romaneios/`), grava a URL em `pedidos.romaneio_url`
+  e abre no viewer existente (`abrirViewer`). Funções: `pedRomaneioUpload` /
+  `_pedRomaneioEnviar`. `PEDIDOS` agora carrega `romaneio` de `romaneio_url`.
+- ⚠️ **Requer rodar no Supabase** (ALTER aditivo, não destrutivo):
+  `alter table pedidos add column if not exists romaneio_url text;`
+- **Adiado (a pedido do usuário):** tirar a criação de pedido da aba Boletos/PIX e
+  deixar só na aba Fornecedores. Mapeado mas não feito agora — hoje o form de pedido
+  parcelado mora na aba Boletos/PIX e Fornecedores só tem um atalho que redireciona
+  pra lá (`foNovoPedidoParcelado` → `goTab('bo')`).
+
 ## 2026-06-20
 
 ### Plano: Mercado Pago no Fluxo de Caixa (resolver o double-count da antecipação)
