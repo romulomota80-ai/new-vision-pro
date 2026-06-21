@@ -1102,7 +1102,7 @@ async function carregarTudo(){
  fornNome:r.fornecedor_nome||"", cat:r.categoria||"",
  total:parseFloat(r.valor_total||0), data:r.data_pedido,
  obs:r.observacoes||"", status:r.status, criado:r.created_at,
- numForn:r.numero_fornecedor||null
+ numForn:r.numero_fornecedor||null, romaneio:r.romaneio_url||null
  }; });
 
  // Pagamentos (abatimentos) dos pedidos livres
@@ -5311,7 +5311,7 @@ async function _boSalvarReal(){
  fornNome:rdPed.fornecedor_nome||"", cat:rdPed.categoria||"",
  total:parseFloat(rdPed.valor_total||0), data:rdPed.data_pedido,
  obs:rdPed.observacoes||"", status:rdPed.status, criado:rdPed.created_at,
- numForn:rdPed.numero_fornecedor||null
+ numForn:rdPed.numero_fornecedor||null, romaneio:null
  });
 
  // 2. Cria as parcelas em boletos linkadas ao pedido
@@ -5417,7 +5417,7 @@ async function _boSalvarReal(){
  fornNome:rdPedU.fornecedor_nome||"", cat:rdPedU.categoria||"",
  total:parseFloat(rdPedU.valor_total||0), data:rdPedU.data_pedido,
  obs:rdPedU.observacoes||"", status:rdPedU.status, criado:rdPedU.created_at,
- numForn:rdPedU.numero_fornecedor||null
+ numForn:rdPedU.numero_fornecedor||null, romaneio:null
  });
  payload.pedido_id = pedidoIdUnico;
  }
@@ -7304,6 +7304,31 @@ function foNovoPedidoParcelado(fornId){
  var de = ge('bo-de'); if(de && !de.value) de.value = 'Pedido — '+f.nome;
 }
 
+// Romaneio do pedido: abre seletor de foto e envia pro Storage.
+function pedRomaneioUpload(pedidoId){
+ var inp = document.createElement('input');
+ inp.type = 'file';
+ inp.accept = 'image/*';
+ inp.onchange = function(){ var f = inp.files && inp.files[0]; if(f) _pedRomaneioEnviar(pedidoId, f); };
+ inp.click();
+}
+async function _pedRomaneioEnviar(pedidoId, file){
+ try {
+  toast('Enviando romaneio...');
+  var ext = (file.name.split('.').pop()||'jpg').toLowerCase();
+  var path = 'romaneios/pedido-'+pedidoId+'-'+Date.now()+'.'+ext;
+  var up = await sb.storage.from('comprovantes').upload(path, file, { contentType:file.type, upsert:false });
+  if(up.error) throw up.error;
+  var url = sb.storage.from('comprovantes').getPublicUrl(path).data.publicUrl;
+  var u = await sb.from('pedidos').update({ romaneio_url:url }).eq('id', pedidoId);
+  if(u.error) throw u.error;
+  var ped = PEDIDOS.filter(function(p){ return p.id===pedidoId; })[0];
+  if(ped) ped.romaneio = url;
+  toast('Romaneio anexado ✓', true);
+  rFoDetalhe();
+ } catch(e){ toast('Erro ao enviar romaneio: '+e.message, false); }
+}
+
 // Pagamentos conciliados (débitos do extrato vinculados ao fornecedor) — pagos e finalizados.
 function foExtratoHTML(itens){
  var total = itens.reduce(function(s,x){return s+Math.abs(parseFloat(x.valor)||0);},0);
@@ -7480,6 +7505,14 @@ function rFoDetalhe(){
  var pagoVal = parcelas.filter(function(x){return x.st==="pago";}).reduce(function(sum,x){return sum+x.val;},0);
  var numPed = foNumeroPedido(parseInt(pid), f.nome);
  var badgeNum = numPed ? ' <span style="font-size:11px;color:#fff;background:#6b4e8a;padding:2px 8px;border-radius:4px;font-weight:700;margin-left:6px;">'+f.nome+' #'+numPed+'</span>' : '';
+ var romUrl = pedInfo && pedInfo.romaneio ? pedInfo.romaneio : null;
+ var pedDescEsc = String(pedInfo?pedInfo.desc:(parcelas[0].desc||"")).replace(/'/g,"\\'");
+ var romHtml = '<div style="margin-bottom:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'+
+  (romUrl
+   ? '<button onclick="abrirViewer(\''+romUrl+'\',\'Romaneio\',\''+pedDescEsc+'\')" style="padding:4px 10px;border-radius:6px;background:rgba(107,78,138,.12);border:1px solid rgba(107,78,138,.4);color:#6b4e8a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">📷 Ver romaneio</button>'+
+     '<button onclick="pedRomaneioUpload('+parseInt(pid)+')" style="padding:4px 10px;border-radius:6px;background:transparent;border:1px solid var(--BR);color:var(--MU);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">Trocar foto</button>'
+   : '<button onclick="pedRomaneioUpload('+parseInt(pid)+')" style="padding:4px 10px;border-radius:6px;background:rgba(107,78,138,.08);border:1px dashed rgba(107,78,138,.5);color:#6b4e8a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">📎 Anexar romaneio</button>'
+  )+'</div>';
 
  h += '<div class="card" style="padding:14px;border:2px solid rgba(107,78,138,.3);background:rgba(107,78,138,.03);">'+
  '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;">'+
@@ -7496,6 +7529,7 @@ function rFoDetalhe(){
  '<div style="font-size:10px;color:#5a8a3a;">Pago: '+fv(pagoVal)+'</div>'+
  '</div>'+
  '</div>'+
+ romHtml +
  '<div style="display:flex;flex-direction:column;gap:4px;padding-left:10px;border-left:3px solid rgba(107,78,138,.3);">';
  parcelas.forEach(function(p){
  var isPago = p.st === "pago";

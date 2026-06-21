@@ -2,6 +2,101 @@
 
 Log das mudanças e decisões. O mais recente em cima.
 
+## 2026-06-21
+
+### Romaneio por pedido (Fornecedores)
+- Cada **pedido** (card no detalhe do fornecedor, aba Fornecedores) ganhou botão
+  **📎 Anexar romaneio** / **📷 Ver romaneio** (foto). Upload pro Supabase Storage
+  (bucket `comprovantes`, prefixo `romaneios/`), grava a URL em `pedidos.romaneio_url`
+  e abre no viewer existente (`abrirViewer`). Funções: `pedRomaneioUpload` /
+  `_pedRomaneioEnviar`. `PEDIDOS` agora carrega `romaneio` de `romaneio_url`.
+- ⚠️ **Requer rodar no Supabase** (ALTER aditivo, não destrutivo):
+  `alter table pedidos add column if not exists romaneio_url text;`
+- **Adiado (a pedido do usuário):** tirar a criação de pedido da aba Boletos/PIX e
+  deixar só na aba Fornecedores. Mapeado mas não feito agora — hoje o form de pedido
+  parcelado mora na aba Boletos/PIX e Fornecedores só tem um atalho que redireciona
+  pra lá (`foNovoPedidoParcelado` → `goTab('bo')`).
+
+## 2026-06-20
+
+### Plano: Mercado Pago no Fluxo de Caixa (resolver o double-count da antecipação)
+
+**Contexto do problema.** A integração atual do MP puxa recebíveis da API
+(`/v1/payments/search` → `mp_releases` → `recebiveis_programados`). A antecipação no
+MP é **nível conta**, não nível pagamento: quando o lojista antecipa, o dinheiro vira
+"disponível" na carteira, mas o `money_release_date` de cada pagamento continua no
+futuro/pending. Resultado: o sistema conta **a mesma grana duas vezes** (no disponível
+real **e** como "a receber"). A API de saldo do MP está bloqueada (403/404).
+
+**Descoberta (2026-06-20).** Conectamos o **Mercado Pago Empresas via Open Finance**
+(conector mcp.ai/Pluggy id **665**). O que o Open Finance entrega:
+- A **conta carteira (pré-paga)** com o **saldo disponível real** — verdade lida da
+  fonte (resolve o 403 da API de saldo).
+- O **extrato detalhado** da carteira, incluindo eventos **"Liberação de dinheiro"**
+  (cada recebível que vira disponível — inclusive via antecipação), além de
+  reembolsos, "dinheiro retido", Pix de entrada/saída. Volume altíssimo (dezenas de
+  milhares de transações/mês, muito ruído de devolução do ML).
+- **NÃO entrega** uma linha separada de "a receber" (agenda de recebíveis futuros) —
+  esse número continua tendo que vir da API do MP.
+
+**Fluxo real do dinheiro (confirmado com o usuário):** venda cai no MP →
+(opcional) antecipa, movendo "a receber" → "disponível" dentro do MP → o lojista
+**paga fornecedores (Pix) e saca pra outras contas** a partir do MP. O saldo
+disponível do Open Finance já reflete todas essas saídas — é a foto real da carteira.
+
+**Modelo escolhido (mata o double-count, tudo dentro do MP — sem depender de banco):**
+- **"Quanto eu tenho" no MP = saldo disponível REAL do Open Finance**, não mais a soma
+  da API.
+- **"Quanto vou receber" = "a receber" da API**, porém só o que **ainda não virou
+  "Liberação de dinheiro"** no extrato. Antecipou → libera → sai da fila de "a receber".
+
+#### Escopo desta entrega (apenas 1 e 2; o 3 fica pra depois)
+
+**1) Mercado Pago como CONTA no Fluxo de Caixa**
+- Espelhar o MP como uma "conta" (igual Itaú/Nubank) usando a conexão Open Finance
+  já criada (conector 665). Usar o **saldo disponível da carteira (pré-paga)** como
+  `saldo_atual` real da conta MP.
+- O card mostra: saldo disponível (real, Open Finance) + "a receber" (API, ver item 2).
+- Backend: ler o saldo da conta carteira do MP via Open Finance (mesma camada que já
+  traz Itaú/Nubank) e gravar/atualizar a conta MP no Supabase. Pegar os ids reais da
+  conexão em runtime (`list_connections`/`list_accounts`) — **não hardcodar** ids.
+- ⚠️ Há **2 conexões duplicadas** do MP (o usuário conectou 2x). Manter **uma só** e
+  remover a duplicata antes de ligar a sync, pra não dobrar saldo.
+
+**2) "A receber" reconciliado pelas "Liberações de dinheiro" (anti-double-count)**
+- Continuar puxando `recebiveis_programados` da API do MP (previsão).
+- Cruzar com o extrato Open Finance da carteira: todo evento **"Liberação de dinheiro"**
+  (CREDIT, categoria Investments) = recebível que já caiu na carteira → **dar baixa**
+  no "a receber" correspondente (marcar como liberado/realizado).
+- Como casar (uma antecipação libera muitos pagamentos de uma vez): casar por
+  **agregado** (valor/bloco/data), não 1-a-1. Filtrar o ruído (reembolso, dinheiro
+  retido, débito por dívida de devolução) — só "Liberação de dinheiro" abate recebível.
+- Efeito no Fluxo de Caixa: o "a receber" exibido passa a ser só o que **realmente**
+  ainda não liberou. Disponível (real) + a-receber (líquido) deixam de se sobrepor.
+
+**Fora de escopo agora (item 3, depois):** saídas do MP (Pix) alimentando
+fornecedores/custos automaticamente; separar "Pix pra fornecedor" de "saque pra conta
+própria".
+
+**Validação com o app + decisão (2026-06-20).** O usuário leu os 3 baldes do app do
+MP. Isso revelou um **terceiro balde** que o modelo de 2 baldes não tratava:
+- **Disponível** — dá pra sacar/Pix agora (hoje estava zerado).
+- **Retido / a liberar** — dinheiro que já caiu na carteira mas está preso por alguns
+  dias. Não é parcela futura, mas também não dá pra usar hoje.
+- **A receber** — agenda de parcelas futuras (vem da API do MP).
+
+**Regra final travada com o usuário:**
+- **Fluxo de Caixa → conta MP mostra APENAS o SALDO** (= saldo disponível real do Open
+  Finance). Retido e a-receber **não** entram no saldo da conta.
+- **Aba "Recebíveis"** concentra **tudo que ainda vai cair das plataformas** = retido +
+  a-receber (e, depois, o mesmo padrão pra Shopee/ML/TikTok). Cada item só vira saldo
+  quando **cair de verdade**. Encaixa na aba já existente "💸 Saques & Recebíveis"
+  (sub-abas por plataforma, lendo `recebiveis_programados`).
+
+**A validar ao programar (factual, precisa rodar o backend):** o "saldo disponível" que
+o Open Finance devolve para a carteira MP vem **só com o disponível** ou **disponível +
+retido**? Se vier só o disponível, o retido precisa ser somado à aba Recebíveis a partir
+dos eventos de "dinheiro retido" do extrato — não do saldo da conta.
 ## 2026-06-18
 
 ### Mercado Pago — ANTECIPAÇÃO no Fluxo de Caixa (investigação / ETAPA 0)
