@@ -847,7 +847,7 @@ var BO_TIPO = "boleto"; // filtro de sub-aba: 'boleto' ou 'pix'
 var BO_FORN = "todos";
 var BO_MODO = "unico"; // modo do form PIX: 'unico' ou 'parcelado'
 var BO_PARCELAS = []; // array de {data, valor} para modo parcelado
-var BO_ROMANEIO = null; // File da foto do romaneio anexada na criação do pedido
+var BO_ROMANEIOS = []; // Files de romaneio anexados na criação do pedido (parcelado/único)
 var evMeses = (function(){
   var hj=new Date(), atual=hj.getMonth(), MES_NOMES=["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"];
   // Se janeiro, retorna so janeiro (mes anterior eh dezembro do ano passado, nao faz sentido comparar)
@@ -904,7 +904,7 @@ var CC = {}; // { nome: cor }
 var FORN = []; // fornecedores
 var PEDIDOS = []; // pedidos (agrupamento de PIX parcelados)
 var PED_LIVRE = []; // pedidos livres (saldo devedor)
-var ND_ROMANEIO = null; // File do romaneio anexado no form "nova dívida"
+var ND_ROMANEIOS = []; // Files de romaneio anexados no form "nova dívida"
 var PED_PAG = []; // abatimentos dos pedidos livres
 
 var MESES = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO",
@@ -1009,7 +1009,9 @@ async function carregarTudo(){
  id:r.id, desc:r.descricao, val:parseFloat(r.valor),
  ven:r.vencimento, st:r.status==="pago"?"pago":"p",
  cat:r.categoria, rec:r.recorrente, cod:r.codigo_barras||"", link:link,
- arq:r.arquivo_url?{url:r.arquivo_url,nome:r.arquivo_nome}:null, comp:r.comprovante_url||null,
+ arq:r.arquivo_url?{url:r.arquivo_url,nome:r.arquivo_nome}:null,
+ comps:(Array.isArray(r.comprovantes)&&r.comprovantes.length)?r.comprovantes:(r.comprovante_url?[r.comprovante_url]:[]),
+ comp:((Array.isArray(r.comprovantes)&&r.comprovantes.length)?r.comprovantes[0]:r.comprovante_url)||null,
  tipo:r.tipo||"boleto", chave:r.chave_pix||"", fav:r.favorecido||"",
  parc_at:r.parcela_atual||null, parc_tot:r.parcela_total||null,
  pedidoId:r.pedido_id||null
@@ -1103,14 +1105,17 @@ async function carregarTudo(){
  fornNome:r.fornecedor_nome||"", cat:r.categoria||"",
  total:parseFloat(r.valor_total||0), data:r.data_pedido,
  obs:r.observacoes||"", status:r.status, criado:r.created_at,
- numForn:r.numero_fornecedor||null, romaneio:r.romaneio_url||null
+ numForn:r.numero_fornecedor||null,
+ romaneios:(Array.isArray(r.romaneios)&&r.romaneios.length)?r.romaneios:(r.romaneio_url?[r.romaneio_url]:[]),
+ romaneio:((Array.isArray(r.romaneios)&&r.romaneios.length)?r.romaneios[0]:r.romaneio_url)||null
  }; });
 
  // Pagamentos (abatimentos) dos pedidos livres
  PED_PAG = (rPedPag && rPedPag.data || []).map(function(r){ return {
  id:r.id, pedidoId:r.pedido_id, valor:parseFloat(r.valor||0),
  data:r.data, origem:r.origem||"manual", extratoId:r.extrato_id||null, obs:r.obs||"",
- comprovante:r.comprovante_url||null
+ comps:(Array.isArray(r.comprovantes)&&r.comprovantes.length)?r.comprovantes:(r.comprovante_url?[r.comprovante_url]:[]),
+ comprovante:((Array.isArray(r.comprovantes)&&r.comprovantes.length)?r.comprovantes[0]:r.comprovante_url)||null
  }; });
 
  // Pedidos livres (saldo devedor) — saldo = total - soma dos abatimentos
@@ -1123,7 +1128,8 @@ async function carregarTudo(){
  fornNome:r.fornecedor_nome||"", cat:r.categoria||"",
  total:total, abatido:abatido, saldo:Math.round((total-abatido)*100)/100,
  data:r.data_pedido, obs:r.observacoes||"", status:r.status, criado:r.created_at,
- romaneio:r.romaneio_url||null
+ romaneios:(Array.isArray(r.romaneios)&&r.romaneios.length)?r.romaneios:(r.romaneio_url?[r.romaneio_url]:[]),
+ romaneio:((Array.isArray(r.romaneios)&&r.romaneios.length)?r.romaneios[0]:r.romaneio_url)||null
  };
  });
 
@@ -5315,14 +5321,13 @@ async function _boSalvarReal(){
  fornNome:rdPed.fornecedor_nome||"", cat:rdPed.categoria||"",
  total:parseFloat(rdPed.valor_total||0), data:rdPed.data_pedido,
  obs:rdPed.observacoes||"", status:rdPed.status, criado:rdPed.created_at,
- numForn:rdPed.numero_fornecedor||null, romaneio:null
+ numForn:rdPed.numero_fornecedor||null, romaneio:null, romaneios:[]
  });
 
- // 1b. Romaneio anexado na criação (opcional) — sobe pro Storage e grava no pedido
- if(BO_ROMANEIO){
+ // 1b. Romaneios anexados na criação (opcional) — sobem pro Storage e gravam no pedido
+ if(BO_ROMANEIOS.length){
  try {
- var romUrl = await _romaneioUploadFile(pedidoId, BO_ROMANEIO);
- PEDIDOS[0].romaneio = romUrl;
+ await _romaneioUploadFiles(pedidoId, BO_ROMANEIOS);
  } catch(romErr){ toast('Pedido criado, mas o romaneio falhou: '+romErr.message, false); }
  }
 
@@ -5430,15 +5435,14 @@ async function _boSalvarReal(){
  fornNome:rdPedU.fornecedor_nome||"", cat:rdPedU.categoria||"",
  total:parseFloat(rdPedU.valor_total||0), data:rdPedU.data_pedido,
  obs:rdPedU.observacoes||"", status:rdPedU.status, criado:rdPedU.created_at,
- numForn:rdPedU.numero_fornecedor||null, romaneio:null
+ numForn:rdPedU.numero_fornecedor||null, romaneio:null, romaneios:[]
  });
  payload.pedido_id = pedidoIdUnico;
 
- // Romaneio anexado na criação (opcional) — só vincula no pedido único (PIX c/ fornecedor)
- if(BO_ROMANEIO){
+ // Romaneios anexados na criação (opcional) — só vinculam no pedido único (PIX c/ fornecedor)
+ if(BO_ROMANEIOS.length){
  try {
- var romUrlU = await _romaneioUploadFile(pedidoIdUnico, BO_ROMANEIO);
- PEDIDOS[0].romaneio = romUrlU;
+ await _romaneioUploadFiles(pedidoIdUnico, BO_ROMANEIOS);
  } catch(romErrU){ toast('Pedido criado, mas o romaneio falhou: '+romErrU.message, false); }
  }
  }
@@ -5508,31 +5512,25 @@ async function marcarPagoSemComp(id, comLanc){
 
 async function uploadCompEPagar(id, comLanc){ abrirModalPagto(id, comLanc); }
 
-// Anexa (ou troca) o comprovante de um pagamento JÁ feito, sem alterar o status.
+// Anexa N comprovantes a um pagamento (boleto/PIX) JÁ feito, sem alterar o status.
+async function _compBolUploadFiles(id, files){
+  var x = BOL.filter(function(b){return b.id===id;})[0];
+  var arr = (x && x.comps) ? x.comps.slice() : [];
+  for(var i=0;i<files.length;i++){ arr.push(await _uploadAnexo('boleto_'+id, files[i], i)); }
+  var u1 = await sb.from('boletos').update({ comprovantes:arr, comprovante_url:arr[arr.length-1]||null }).eq('id', id);
+  if(u1.error) throw u1.error;
+  BOL = BOL.map(function(b){ return b.id===id ? Object.assign({},b,{comps:arr, comp:arr[0]||null}) : b; });
+  return arr;
+}
 function anexarComprovantePago(id){
-  var inp = document.createElement('input');
-  inp.type = 'file';
-  inp.accept = 'image/*,application/pdf';
-  inp.onchange = async function(){
-    var file = inp.files && inp.files[0];
-    if(!file) return;
-    if(file.size > 10*1024*1024){ toast('Arquivo muito grande (max 10MB)', false); return; }
-    try {
-      toast('Enviando comprovante...');
-      var ext = (file.name.split('.').pop()||'bin').toLowerCase();
-      var path = 'boleto_' + id + '_' + Date.now() + '.' + ext;
-      var up = await sb.storage.from('comprovantes').upload(path, file, { contentType:file.type, upsert:false });
-      if(up.error) throw up.error;
-      var url = sb.storage.from('comprovantes').getPublicUrl(path).data.publicUrl;
-      var u1 = await sb.from('boletos').update({ comprovante_url:url }).eq('id', id);
-      if(u1.error) throw u1.error;
-      BOL = BOL.map(function(bx){ return bx.id===id ? Object.assign({},bx,{comp:url}) : bx; });
+  _pickAnexos(function(files){
+    toast('Enviando comprovante...');
+    _compBolUploadFiles(id, files).then(function(){
       toast('Comprovante anexado ✓', true);
       if(typeof rBo === 'function') rBo();
       if(typeof FO_DETALHE_ID !== 'undefined' && FO_DETALHE_ID !== null && typeof rFoDetalhe === 'function') rFoDetalhe();
-    } catch(e){ toast('Erro ao anexar comprovante: '+e.message, false); }
-  };
-  inp.click();
+    }).catch(function(e){ toast('Erro ao anexar comprovante: '+e.message, false); });
+  });
 }
 
 /*PATCH_MODAL_PAGTO*/
@@ -5583,10 +5581,12 @@ async function abrirSeletorUpload(id, comLanc){
       var urlData = sb.storage.from('comprovantes').getPublicUrl(path);
       var url = urlData.data.publicUrl;
       
-      var u1 = await sb.from('boletos').update({status:'pago', comprovante_url: url}).eq('id', id);
+      var compArr0 = (BOL.filter(function(bx){return bx.id===id;})[0]||{}).comps || [];
+      var compArr = compArr0.concat([url]);
+      var u1 = await sb.from('boletos').update({status:'pago', comprovante_url: url, comprovantes: compArr}).eq('id', id);
       if(u1.error) throw u1.error;
-      
-      BOL = BOL.map(function(bx){return bx.id===id?Object.assign({},bx,{st:'pago',comp:url}):bx;});
+
+      BOL = BOL.map(function(bx){return bx.id===id?Object.assign({},bx,{st:'pago',comp:compArr[0]||url,comps:compArr}):bx;});
       
       if(comLanc){
         var hoje = new Date().toISOString().slice(0,10);
@@ -5810,10 +5810,7 @@ function rBo(){
  '<button class="btn pu sm" onclick="copCod('+b.id+')" style="width:100%;margin-top:7px;">Copiar código</button>'+
  '</div>':'')+
  (!isPix && b.link?'<button onclick="abrirViewer(\''+b.link+'\', \''+b.desc.replace(/'/g,"\\'")+'\', \'Boleto pago · '+fd(b.ven)+'\')" style="display:block;width:100%;text-align:center;margin-bottom:10px;padding:8px;border-radius:9px;background:rgba(42,82,99,.1);border:1px solid rgba(42,82,99,.3);color:#2a5263;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">Ver boleto / PDF</button>':'')+
- (b.comp
-  ? '<button onclick="abrirViewer(\''+b.comp+'\', \''+b.desc.replace(/'/g,"\\'")+'\', \'Comprovante · '+fd(b.ven)+'\')" style="display:block;width:100%;text-align:center;margin-bottom:8px;padding:8px;border-radius:9px;background:rgba(90,138,58,.1);border:1px solid rgba(90,138,58,.3);color:#5a8a3a;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">📷 Ver comprovante</button>'+(U&&U.role!=="viewer"?'<button onclick="anexarComprovantePago('+b.id+')" style="display:block;width:100%;text-align:center;margin-bottom:10px;padding:6px;border-radius:9px;background:transparent;border:1px solid var(--BR2);color:var(--MU);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">Trocar comprovante</button>':'')
-  : (U&&U.role!=="viewer"?'<button onclick="anexarComprovantePago('+b.id+')" style="display:block;width:100%;text-align:center;margin-bottom:10px;padding:8px;border-radius:9px;background:rgba(90,138,58,.08);border:1px dashed rgba(90,138,58,.5);color:#5a8a3a;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">📎 Anexar comprovante</button>':'')
- )+
+ anexosHTML(b.comps, 'Comprovante', 'anexarComprovantePago('+b.id+')', 'full', false, (U&&U.role!=="viewer"), b.desc.replace(/'/g,"\\'")+' · '+fd(b.ven))+
  (U&&U.role!=="viewer"?'<button onclick="desfazerPagamento('+b.id+')" style="width:100%;background:none;border:1px solid var(--BR2);border-radius:8px;padding:6px;color:var(--MU);font-size:11px;cursor:pointer;font-family:inherit;">↩ Desfazer pagamento</button>':'')+
  '</div>';
  }).join("");
@@ -6972,7 +6969,7 @@ async function coAbaterPedido(extratoId, pedId){
  try{
   var j = await coFetch(coAPI()+'/api/pedidos/'+pedId+'/pagamento',{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({valor:valor,data:dia,origem:"conciliacao",extrato_id:extratoId,obs:r.descricao||null})});
   if(!j.ok) throw new Error(j.erro||"falhou");
-  PED_PAG.push({id:j.pagamento.id,pedidoId:pedId,valor:valor,data:dia,origem:"conciliacao",extratoId:extratoId,obs:r.descricao||"",comprovante:null});
+  PED_PAG.push({id:j.pagamento.id,pedidoId:pedId,valor:valor,data:dia,origem:"conciliacao",extratoId:extratoId,obs:r.descricao||"",comprovante:null,comps:[]});
   if(typeof foRecalcDivida==="function") foRecalcDivida(pedId);
   coMsg("Abatido "+fv(valor)+" do saldo"+(j.status==="quitado"?" — dívida quitada! 🎉":". Saldo: "+fv(j.saldo)),"ok");
   coRenderLink();
@@ -7291,7 +7288,7 @@ function foSaldoDevedorHTML(f){
    '<div><label>Categoria</label><select id="nd-cat">'+optsCat+'</select></div>'+
    '<div><label>Romaneio (foto) <span style="color:var(--MU);font-weight:400;">(opcional)</span></label>'+
    '<button type="button" class="btn g sm" onclick="ndRomaneioPick()" style="width:100%;">📎 Anexar foto do romaneio</button>'+
-   '<div id="nd-rom-nome" style="font-size:11px;color:#6b4e8a;font-weight:700;margin-top:6px;display:'+(ND_ROMANEIO?'block':'none')+';">'+(ND_ROMANEIO?('📷 '+coEsc(ND_ROMANEIO.name)+' (anexa ao salvar)'):'')+'</div></div>'+
+   '<div id="nd-rom-nome" style="font-size:11px;color:#6b4e8a;font-weight:700;margin-top:6px;display:'+(ND_ROMANEIOS.length?'block':'none')+';">'+(ND_ROMANEIOS.length?('📷 '+ND_ROMANEIOS.length+' foto(s) — anexa ao salvar'):'')+'</div></div>'+
    '<div style="display:flex;gap:8px;margin-top:4px;"><button class="btn" style="flex:1;" id="nd-btn" onclick="foSalvarDivida('+f.id+')">Criar dívida</button><button class="btn g" onclick="foCancelarDivida()">Cancelar</button></div>'+
    '</div></div>';
  }
@@ -7316,11 +7313,8 @@ function foSaldoDevedorHTML(f){
    '</div>'+
    '<div style="height:7px;background:var(--BR);border-radius:4px;overflow:hidden;margin-bottom:10px;"><div style="height:100%;width:'+pct+'%;background:'+(quitado?'#5a8a3a':'#b8860b')+';"></div></div>'+
    '<div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;">'+
-   (p.romaneio
-    ? '<button onclick="abrirViewer(\''+p.romaneio+'\',\'Romaneio\',\''+coEsc(p.desc||"").replace(/\'/g,"\\'")+'\')" style="padding:4px 10px;border-radius:6px;background:rgba(107,78,138,.12);border:1px solid rgba(107,78,138,.4);color:#6b4e8a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">📷 Ver romaneio</button>'+
-      '<button onclick="pedRomaneioUpload('+parseInt(p.id)+')" style="padding:4px 10px;border-radius:6px;background:transparent;border:1px solid var(--BR);color:var(--MU);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">Trocar foto</button>'
-    : '<button onclick="pedRomaneioUpload('+parseInt(p.id)+')" style="padding:4px 10px;border-radius:6px;background:rgba(107,78,138,.08);border:1px dashed rgba(107,78,138,.5);color:#6b4e8a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">📎 Anexar romaneio</button>'
-   )+'</div>';
+   anexosHTML(p.romaneios, 'Romaneio', 'pedRomaneioAdd('+parseInt(p.id)+')', 'inline', false, true, coEsc(p.desc||"").replace(/\'/g,"\\'"))+
+   '</div>';
 
   if(pags.length>0){
    h += '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px;">';
@@ -7329,10 +7323,7 @@ function foSaldoDevedorHTML(f){
     h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:5px 8px;background:var(--C2);border-radius:6px;">'+
      '<div style="display:flex;gap:8px;align-items:center;min-width:0;"><span style="color:var(--MU);">'+fd(pg.data)+'</span>'+ob+(pg.obs?'<span style="color:var(--MU);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+coEsc(pg.obs)+'</span>':'')+'</div>'+
      '<div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">'+
-     (pg.comprovante
-       ? '<button onclick="abrirViewer(\''+pg.comprovante+'\',\'Comprovante\',\''+coEsc(pg.obs||"Abatimento").replace(/\'/g,"\\'")+'\')" style="border:1px solid rgba(90,138,58,.3);background:rgba(90,138,58,.1);border-radius:5px;cursor:pointer;color:#5a8a3a;font-size:10px;font-weight:700;padding:2px 7px;font-family:inherit;" title="Ver comprovante">📷 Ver comprovante</button>'
-       : '<button onclick="anexarComprovantePedPag('+pg.id+')" style="background:rgba(90,138,58,.06);border:1px dashed rgba(90,138,58,.5);border-radius:5px;cursor:pointer;color:#5a8a3a;font-size:10px;font-weight:700;padding:2px 7px;font-family:inherit;" title="Anexar comprovante">📎 Anexar comprovante</button>'
-     )+
+     anexosHTML(pg.comps, 'Comprovante', 'compPagAdd('+pg.id+')', 'inline', true, true, coEsc(pg.obs||"Abatimento").replace(/\'/g,"\\'"))+
      '<b style="color:#5a8a3a;">-'+fv(pg.valor)+'</b><button onclick="pedPagDel('+pg.id+')" style="background:none;border:none;cursor:pointer;color:var(--MU);font-size:12px;" title="Remover">✕</button></div>'+
      '</div>';
    });
@@ -7371,101 +7362,116 @@ function foNovoPedidoParcelado(fornId){
  var de = ge('bo-de'); if(de && !de.value) de.value = 'Pedido — '+f.nome;
 }
 
-// Romaneio do pedido: abre seletor de foto e envia pro Storage.
-function pedRomaneioUpload(pedidoId){
+// ═══ Anexos múltiplos (romaneios / comprovantes) — helpers genéricos ═══
+// Abre seletor permitindo VÁRIOS arquivos; chama cb(arrayDeFiles).
+function _pickAnexos(cb){
  var inp = document.createElement('input');
- inp.type = 'file';
- inp.accept = 'image/*';
- inp.onchange = function(){ var f = inp.files && inp.files[0]; if(f) _pedRomaneioEnviar(pedidoId, f); };
+ inp.type = 'file'; inp.accept = 'image/*,application/pdf'; inp.multiple = true;
+ inp.onchange = function(){ var fs = inp.files ? Array.prototype.slice.call(inp.files) : []; if(fs.length) cb(fs); };
  inp.click();
 }
-// Sobe a foto pro Storage e grava romaneio_url no pedido. Retorna a URL pública.
-async function _romaneioUploadFile(pedidoId, file){
- var ext = (file.name.split('.').pop()||'jpg').toLowerCase();
- var path = 'romaneios/pedido-'+pedidoId+'-'+Date.now()+'.'+ext;
+// Sobe 1 arquivo pro bucket; retorna a URL pública. `i` evita colisão de path no mesmo ms.
+async function _uploadAnexo(prefix, file, i){
+ if(file.size > 10*1024*1024){ throw new Error('Arquivo "'+file.name+'" muito grande (max 10MB)'); }
+ var ext = (file.name.split('.').pop()||'bin').toLowerCase();
+ var path = prefix + '-' + Date.now() + '-' + (i||0) + '.' + ext;
  var up = await sb.storage.from('comprovantes').upload(path, file, { contentType:file.type, upsert:false });
  if(up.error) throw up.error;
- var url = sb.storage.from('comprovantes').getPublicUrl(path).data.publicUrl;
- var u = await sb.from('pedidos').update({ romaneio_url:url }).eq('id', pedidoId);
- if(u.error) throw u.error;
- return url;
+ return sb.storage.from('comprovantes').getPublicUrl(path).data.publicUrl;
 }
-async function _pedRomaneioEnviar(pedidoId, file){
- try {
-  toast('Enviando romaneio...');
-  var url = await _romaneioUploadFile(pedidoId, file);
-  var ped = PEDIDOS.filter(function(p){ return p.id===pedidoId; })[0];
-  if(ped) ped.romaneio = url;
-  var pedL = PED_LIVRE.filter(function(p){ return p.id===pedidoId; })[0];
-  if(pedL) pedL.romaneio = url;
-  toast('Romaneio anexado ✓', true);
-  rFoDetalhe();
- } catch(e){ toast('Erro ao enviar romaneio: '+e.message, false); }
+// Renderiza N botões "Ver <tipo> [n]" + um botão "Anexar <tipo>". variant: 'full' | 'inline'.
+function anexosHTML(urls, tipo, addCall, variant, stop, podeEditar, descEsc){
+ urls = urls || []; descEsc = descEsc || '';
+ var s = stop ? 'event.stopPropagation();' : '';
+ var n = urls.length;
+ // tema de cor: romaneio = roxo; comprovante = verde
+ var roxo = (tipo === 'Romaneio');
+ var C = roxo ? '107,78,138' : '90,138,58';
+ var fg = roxo ? '#6b4e8a' : '#5a8a3a';
+ var out = '';
+ if(variant === 'full'){
+  urls.forEach(function(u,i){
+   out += '<button onclick="'+s+'abrirViewer(\''+u+'\',\''+tipo+'\',\''+descEsc+'\')" style="display:block;width:100%;text-align:center;margin-bottom:6px;padding:8px;border-radius:9px;background:rgba('+C+',.1);border:1px solid rgba('+C+',.35);color:'+fg+';font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">📷 Ver '+tipo.toLowerCase()+(n>1?' '+(i+1):'')+'</button>';
+  });
+  if(podeEditar) out += '<button onclick="'+s+addCall+'" style="display:block;width:100%;text-align:center;margin-bottom:10px;padding:'+(n?'6px':'8px')+';border-radius:9px;background:'+(n?'transparent':'rgba('+C+',.08)')+';border:1px dashed rgba('+C+',.5);color:'+fg+';font-size:'+(n?'11px':'12px')+';font-weight:'+(n?'600':'700')+';cursor:pointer;font-family:inherit;">📎 '+(n?'Anexar mais '+tipo.toLowerCase():'Anexar '+tipo.toLowerCase())+'</button>';
+ } else {
+  urls.forEach(function(u,i){
+   out += '<button onclick="'+s+'abrirViewer(\''+u+'\',\''+tipo+'\',\''+descEsc+'\')" style="padding:2px 7px;border-radius:5px;background:rgba('+C+',.1);border:1px solid rgba('+C+',.35);color:'+fg+';font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">📷 '+tipo+(n>1?' '+(i+1):'')+'</button>';
+  });
+  if(podeEditar) out += '<button onclick="'+s+addCall+'" style="padding:2px 7px;border-radius:5px;background:rgba('+C+',.06);border:1px dashed rgba('+C+',.5);color:'+fg+';font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">📎 Anexar '+tipo.toLowerCase()+'</button>';
+ }
+ return out;
 }
 
-// Romaneio na CRIAÇÃO do pedido (form parcelado): só guarda o File; o upload acontece no boSalvar, após criar o pedido.
+// ── Romaneios (pedidos: parcelado/único e livre/dívida) ──
+function _pedRomaneiosGet(pedidoId){
+ var x = PEDIDOS.filter(function(p){return p.id===pedidoId;})[0] || PED_LIVRE.filter(function(p){return p.id===pedidoId;})[0];
+ return (x && x.romaneios) ? x.romaneios : [];
+}
+function _pedRomaneiosSet(pedidoId, arr){
+ [PEDIDOS, PED_LIVRE].forEach(function(C){ var x=C.filter(function(p){return p.id===pedidoId;})[0]; if(x){ x.romaneios=arr; x.romaneio=arr[0]||null; } });
+}
+// Sobe N arquivos, mescla com os existentes e grava o array no pedido.
+async function _romaneioUploadFiles(pedidoId, files){
+ var arr = _pedRomaneiosGet(pedidoId).slice();
+ for(var i=0;i<files.length;i++){ arr.push(await _uploadAnexo('romaneios/pedido-'+pedidoId, files[i], i)); }
+ var u = await sb.from('pedidos').update({ romaneios:arr, romaneio_url:arr[arr.length-1]||null }).eq('id', pedidoId);
+ if(u.error) throw u.error;
+ _pedRomaneiosSet(pedidoId, arr);
+ return arr;
+}
+function pedRomaneioAdd(pedidoId){
+ _pickAnexos(function(files){
+  toast('Enviando romaneio...');
+  _romaneioUploadFiles(pedidoId, files).then(function(){ toast('Romaneio anexado ✓', true); rFoDetalhe(); })
+   .catch(function(e){ toast('Erro ao enviar romaneio: '+e.message, false); });
+ });
+}
+
+// Romaneio na CRIAÇÃO do pedido (form parcelado/único): guarda os Files; o upload acontece no boSalvar, após criar o pedido.
 function boRomaneioReset(){
- BO_ROMANEIO = null;
+ BO_ROMANEIOS = [];
  var n = ge('bo-rom-nome'); if(n){ n.style.display='none'; n.textContent=''; }
 }
+function _boRomaneioLabel(){
+ var n = ge('bo-rom-nome'); if(!n) return;
+ if(BO_ROMANEIOS.length){ n.textContent = '📷 '+BO_ROMANEIOS.length+' foto(s) — anexa ao salvar'; n.style.display='block'; }
+ else { n.textContent=''; n.style.display='none'; }
+}
 function boRomaneioPick(){
- var inp = document.createElement('input');
- inp.type = 'file';
- inp.accept = 'image/*';
- inp.onchange = function(){
-  var f = inp.files && inp.files[0];
-  if(!f) return;
-  BO_ROMANEIO = f;
-  var n = ge('bo-rom-nome');
-  if(n){ n.textContent = '📷 '+f.name+' (anexa ao salvar)'; n.style.display='block'; }
- };
- inp.click();
+ _pickAnexos(function(files){ BO_ROMANEIOS = BO_ROMANEIOS.concat(files); _boRomaneioLabel(); });
 }
 
-// Anexa (ou troca) o comprovante de um abatimento de pedido livre (dívida).
-function anexarComprovantePedPag(pagId){
- var inp = document.createElement('input');
- inp.type = 'file';
- inp.accept = 'image/*,application/pdf';
- inp.onchange = async function(){
-  var file = inp.files && inp.files[0];
-  if(!file) return;
-  if(file.size > 10*1024*1024){ toast('Arquivo muito grande (max 10MB)', false); return; }
-  try {
-   toast('Enviando comprovante...');
-   var ext = (file.name.split('.').pop()||'bin').toLowerCase();
-   var path = 'abatimento_' + pagId + '_' + Date.now() + '.' + ext;
-   var up = await sb.storage.from('comprovantes').upload(path, file, { contentType:file.type, upsert:false });
-   if(up.error) throw up.error;
-   var url = sb.storage.from('comprovantes').getPublicUrl(path).data.publicUrl;
-   var u1 = await sb.from('pedido_pagamentos').update({ comprovante_url:url }).eq('id', pagId);
-   if(u1.error) throw u1.error;
-   var pg = PED_PAG.filter(function(x){ return x.id===pagId; })[0];
-   if(pg) pg.comprovante = url;
-   toast('Comprovante anexado ✓', true);
-   rFoDetalhe();
-  } catch(e){ toast('Erro ao anexar comprovante: '+e.message, false); }
- };
- inp.click();
+// Anexa N comprovantes a um abatimento de pedido livre (dívida).
+async function _compPagUploadFiles(pagId, files){
+ var x = PED_PAG.filter(function(p){return p.id===pagId;})[0];
+ var arr = (x && x.comps) ? x.comps.slice() : [];
+ for(var i=0;i<files.length;i++){ arr.push(await _uploadAnexo('abatimento_'+pagId, files[i], i)); }
+ var u1 = await sb.from('pedido_pagamentos').update({ comprovantes:arr, comprovante_url:arr[arr.length-1]||null }).eq('id', pagId);
+ if(u1.error) throw u1.error;
+ if(x){ x.comps=arr; x.comprovante=arr[0]||null; }
+ return arr;
+}
+function compPagAdd(pagId){
+ _pickAnexos(function(files){
+  toast('Enviando comprovante...');
+  _compPagUploadFiles(pagId, files).then(function(){ toast('Comprovante anexado ✓', true); rFoDetalhe(); })
+   .catch(function(e){ toast('Erro ao anexar comprovante: '+e.message, false); });
+ });
 }
 
-// Romaneio no form "Nova dívida" (Fornecedores): guarda o File; sobe no foSalvarDivida.
+// Romaneio no form "Nova dívida" (Fornecedores): guarda os Files; sobe no foSalvarDivida.
 function ndRomaneioReset(){
- ND_ROMANEIO = null;
+ ND_ROMANEIOS = [];
  var n = ge('nd-rom-nome'); if(n){ n.style.display='none'; n.textContent=''; }
 }
+function _ndRomaneioLabel(){
+ var n = ge('nd-rom-nome'); if(!n) return;
+ if(ND_ROMANEIOS.length){ n.textContent = '📷 '+ND_ROMANEIOS.length+' foto(s) — anexa ao salvar'; n.style.display='block'; }
+ else { n.textContent=''; n.style.display='none'; }
+}
 function ndRomaneioPick(){
- var inp = document.createElement('input');
- inp.type = 'file';
- inp.accept = 'image/*';
- inp.onchange = function(){
-  var f = inp.files && inp.files[0];
-  if(!f) return;
-  ND_ROMANEIO = f;
-  var n = ge('nd-rom-nome');
-  if(n){ n.textContent = '📷 '+f.name+' (anexa ao salvar)'; n.style.display='block'; }
- };
- inp.click();
+ _pickAnexos(function(files){ ND_ROMANEIOS = ND_ROMANEIOS.concat(files); _ndRomaneioLabel(); });
 }
 
 // Pagamentos conciliados (débitos do extrato vinculados ao fornecedor) — pagos e finalizados.
@@ -7503,12 +7509,11 @@ async function foSalvarDivida(fornId){
   var j=await coFetch(coAPI()+'/api/pedidos-livre',{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fornecedor_id:f.id,fornecedor_nome:f.nome,descricao:desc.trim()||null,valor_total:valor,data_pedido:data,categoria:cat||f.cat||null})});
   if(!j.ok) throw new Error(j.erro||"falhou");
   var p=j.pedido;
-  PED_LIVRE.unshift({id:p.id,desc:p.descricao,fornId:p.fornecedor_id,fornNome:p.fornecedor_nome||"",cat:p.categoria||"",total:parseFloat(p.valor_total||0),abatido:0,saldo:parseFloat(p.valor_total||0),data:p.data_pedido,obs:p.observacoes||"",status:p.status,criado:p.created_at,romaneio:null});
-  // Romaneio anexado na criação da dívida (opcional)
-  if(ND_ROMANEIO){
+  PED_LIVRE.unshift({id:p.id,desc:p.descricao,fornId:p.fornecedor_id,fornNome:p.fornecedor_nome||"",cat:p.categoria||"",total:parseFloat(p.valor_total||0),abatido:0,saldo:parseFloat(p.valor_total||0),data:p.data_pedido,obs:p.observacoes||"",status:p.status,criado:p.created_at,romaneio:null,romaneios:[]});
+  // Romaneios anexados na criação da dívida (opcional)
+  if(ND_ROMANEIOS.length){
    try {
-    var ndUrl = await _romaneioUploadFile(p.id, ND_ROMANEIO);
-    PED_LIVRE[0].romaneio = ndUrl;
+    await _romaneioUploadFiles(p.id, ND_ROMANEIOS);
    } catch(ndErr){ toast('Dívida criada, mas o romaneio falhou: '+ndErr.message, false); }
   }
   FO_NOVA_DIVIDA=false;
@@ -7538,7 +7543,7 @@ async function pedAbaterSalvar(pedId){
  try{
   var j=await coFetch(coAPI()+'/api/pedidos/'+pedId+'/pagamento',{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({valor:valor,data:data,obs:obs.trim()||null,origem:"manual"})});
   if(!j.ok) throw new Error(j.erro||"falhou");
-  PED_PAG.push({id:j.pagamento.id,pedidoId:pedId,valor:valor,data:data,origem:"manual",extratoId:null,obs:obs.trim()||"",comprovante:null});
+  PED_PAG.push({id:j.pagamento.id,pedidoId:pedId,valor:valor,data:data,origem:"manual",extratoId:null,obs:obs.trim()||"",comprovante:null,comps:[]});
   foRecalcDivida(pedId);
   FO_ABATER_PED=null;
   toast("Abatido "+fv(valor)+(j.status==="quitado"?" — dívida quitada! 🎉":". Saldo: "+fv(j.saldo)),true);
@@ -7652,14 +7657,10 @@ function rFoDetalhe(){
  var pagoVal = parcelas.filter(function(x){return x.st==="pago";}).reduce(function(sum,x){return sum+x.val;},0);
  var numPed = foNumeroPedido(parseInt(pid), f.nome);
  var badgeNum = numPed ? ' <span style="font-size:11px;color:#fff;background:#6b4e8a;padding:2px 8px;border-radius:4px;font-weight:700;margin-left:6px;">'+f.nome+' #'+numPed+'</span>' : '';
- var romUrl = pedInfo && pedInfo.romaneio ? pedInfo.romaneio : null;
  var pedDescEsc = String(pedInfo?pedInfo.desc:(parcelas[0].desc||"")).replace(/'/g,"\\'");
  var romHtml = '<div style="margin-bottom:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'+
-  (romUrl
-   ? '<button onclick="abrirViewer(\''+romUrl+'\',\'Romaneio\',\''+pedDescEsc+'\')" style="padding:4px 10px;border-radius:6px;background:rgba(107,78,138,.12);border:1px solid rgba(107,78,138,.4);color:#6b4e8a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">📷 Ver romaneio</button>'+
-     '<button onclick="pedRomaneioUpload('+parseInt(pid)+')" style="padding:4px 10px;border-radius:6px;background:transparent;border:1px solid var(--BR);color:var(--MU);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">Trocar foto</button>'
-   : '<button onclick="pedRomaneioUpload('+parseInt(pid)+')" style="padding:4px 10px;border-radius:6px;background:rgba(107,78,138,.08);border:1px dashed rgba(107,78,138,.5);color:#6b4e8a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">📎 Anexar romaneio</button>'
-  )+'</div>';
+  anexosHTML(pedInfo?pedInfo.romaneios:[], 'Romaneio', 'pedRomaneioAdd('+parseInt(pid)+')', 'inline', false, true, pedDescEsc)+
+  '</div>';
 
  h += '<div class="card" style="padding:14px;border:2px solid rgba(107,78,138,.3);background:rgba(107,78,138,.03);">'+
  '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;">'+
@@ -7684,7 +7685,7 @@ function rFoDetalhe(){
  h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--C1);border-radius:6px;font-size:12px;">'+
  '<span><span style="font-weight:700;color:#6b4e8a;">'+(p.parc_at||'?')+'/'+(p.parc_tot||'?')+'</span> · '+(isPago?'✅':(isVencida?'⚠️':'⏳'))+' '+fd(p.ven)+'</span>'+
  '<div style="display:flex;align-items:center;gap:6px;">'+
- (p.comp?'<button onclick="event.stopPropagation();abrirViewer(\''+p.comp+'\', \''+p.desc.replace(/\'/g,"\\'")+'\', \'Comprovante de pagamento\')" style="padding:3px 8px;border-radius:5px;background:rgba(100,100,100,.12);border:1px solid rgba(100,100,100,.3);color:#555;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">Ver comprovante</button>':(isPago?'<button onclick="event.stopPropagation();anexarComprovantePago('+p.id+')" style="padding:3px 8px;border-radius:5px;background:rgba(90,138,58,.10);border:1px dashed rgba(90,138,58,.5);color:#5a8a3a;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">📎 Anexar comprovante</button>':''))+
+ (isPago?anexosHTML(p.comps, 'Comprovante', 'anexarComprovantePago('+p.id+')', 'inline', true, true, p.desc.replace(/\'/g,"\\'")):'')+
  (isPago?'<button onclick="event.stopPropagation();desfazerPagamento('+p.id+')" style="padding:3px 8px;border-radius:5px;background:rgba(201,33,39,.10);border:1px solid rgba(201,33,39,.4);color:#c92127;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;margin-right:6px;">Desfazer</button>':'')+'<span style="font-weight:700;color:'+(isPago?'#5a8a3a':'var(--R)')+';">'+fv(p.val)+'</span>'+
  '</div>'+
  '</div>';
@@ -7708,10 +7709,7 @@ function rFoDetalhe(){
  '<div style="font-size:10px;color:var(--MU);margin-top:2px;">'+(isPago?'✓ Pago':'⏳ Pendente')+' · '+fd(b.ven)+(b.cat?' · '+b.cat:'')+'</div>'+
  '</div>'+
  '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">'+
- (isPago?(b.comp
-   ? '<button onclick="event.stopPropagation();abrirViewer(\''+b.comp+'\', \''+(b.desc||"").replace(/\'/g,"\\'")+'\', \'Comprovante\')" style="padding:3px 8px;border-radius:5px;background:rgba(90,138,58,.10);border:1px solid rgba(90,138,58,.3);color:#5a8a3a;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;" title="Ver comprovante">📷 Ver comprovante</button>'
-   : '<button onclick="event.stopPropagation();anexarComprovantePago('+b.id+')" style="padding:3px 8px;border-radius:5px;background:rgba(90,138,58,.08);border:1px dashed rgba(90,138,58,.5);color:#5a8a3a;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;" title="Anexar comprovante">📎 Anexar comprovante</button>'
-  ):'')+
+ (isPago?anexosHTML(b.comps, 'Comprovante', 'anexarComprovantePago('+b.id+')', 'inline', true, true, (b.desc||"").replace(/\'/g,"\\'")):'')+
  '<div style="font-size:14px;font-weight:700;color:'+(isPago?'#5a8a3a':'var(--R)')+';">'+fv(b.val)+'</div>'+
  '</div>'+
  '</div>';
