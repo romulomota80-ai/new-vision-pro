@@ -458,6 +458,11 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
  <span>Conciliação</span>
  <div class="sb-badge" id="sb-badge-co" style="display:none;"></div>
  </button>
+ <button class="sb-item" data-t="al" onclick="goTab('al')">
+ <div class="sb-icon"><svg class="ico" viewBox="0 0 24 24"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg></div>
+ <span>Alertas</span>
+ <div class="sb-badge" id="sb-badge-al" style="display:none;"></div>
+ </button>
  <button class="sb-item" data-t="ia" onclick="goTab('ia')">
  <div class="sb-icon"><svg class="ico" viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect x="5" y="8" width="14" height="12" rx="2"/><line x1="9" y1="14" x2="9" y2="14"/><line x1="15" y1="14" x2="15" y2="14"/></svg></div>
  <span>IA Analista</span>
@@ -720,6 +725,7 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
  <div id="ml-ca" style="display:none;"></div>
 </div>
 <div id="s-ads" class="scr"></div>
+<div id="s-al" class="scr"></div>
 <div id="s-fc" class="scr">
  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
   <div style="font-family:var(--FONT-H);font-size:22px;font-weight:800;letter-spacing:-.5px;">🏦 Fluxo de Caixa</div>
@@ -3277,6 +3283,82 @@ async function rMlCaminho(force){
  s.innerHTML=h;
 }
 
+// ═══ ALERTAS (central dos agentes — le agente_insights) ════════
+var AL_RAW=null, AL_VER='aberto';
+var AL_SEV={critico:{lbl:'Critico',cor:'#d9534f',bg:'rgba(217,83,79,.14)',o:0},alerta:{lbl:'Alerta',cor:'#d6912b',bg:'rgba(214,145,43,.14)',o:1},info:{lbl:'Info',cor:'#5a8ca8',bg:'rgba(90,140,168,.14)',o:2}};
+function alVer(v){ AL_VER=v; rAl(); }
+async function alAtualizaBadge(){
+ try{ var r=await sb.from('agente_insights').select('id',{count:'exact',head:true}).eq('status','aberto');
+  var n=r.count||0, b=ge('sb-badge-al'); if(b){ b.textContent=n; b.style.display=n>0?'':'none'; }
+ }catch(e){}
+}
+async function rAl(force){
+ var s=ge('s-al'); if(!s) return;
+ if(force||!AL_RAW){
+  s.innerHTML='<div style="padding:40px;text-align:center;color:var(--MU);">Carregando alertas...</div>';
+  try{ var r=await sb.from('agente_insights').select('*').order('criado_em',{ascending:false}).limit(2000); if(r.error) throw r.error; AL_RAW=r.data||[]; }
+  catch(e){ s.innerHTML='<div class="card" style="padding:40px;text-align:center;color:var(--MU);"><div style="font-size:34px;margin-bottom:8px;">&#129302;</div><div style="font-size:13px;font-weight:700;color:var(--TX);">Central de alertas indispon&iacute;vel</div><div style="font-size:11px;margin-top:6px;">Aguardando os agentes (tabela agente_insights).</div></div>'; return; }
+ }
+ var todos=AL_RAW||[];
+ var abertos=todos.filter(function(r){return (r.status||'aberto')==='aberto';});
+ var dados=AL_VER==='aberto'?abertos:todos;
+ var cnt={critico:0,alerta:0,info:0}; abertos.forEach(function(r){ var sv=r.severidade||'info'; if(cnt[sv]!=null)cnt[sv]++; });
+ dados=dados.slice().sort(function(a,b){ var sa=(AL_SEV[a.severidade]||AL_SEV.info).o, sb2=(AL_SEV[b.severidade]||AL_SEV.info).o; if(sa!==sb2)return sa-sb2; return String(b.criado_em||'').localeCompare(String(a.criado_em||'')); });
+ var h='';
+ h+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px;">';
+ h+='<div style="font-family:var(--FONT-H);font-size:22px;font-weight:800;letter-spacing:-.5px;">&#129302; Alertas</div>';
+ h+='<button class="btn" onclick="rAl(true)">&#8635; Atualizar</button></div>';
+ h+='<div style="font-size:11px;color:var(--MU);margin-bottom:14px;">Recomenda&ccedil;&otilde;es dos agentes que vigiam os dados &mdash; erros, inconsist&ecirc;ncias e oportunidades.</div>';
+ h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;">';
+ h+=efKpi('Cr&iacute;ticos', fmtNum(cnt.critico), 'precisam de a&ccedil;&atilde;o', cnt.critico>0?'#d9534f':'var(--TX)');
+ h+=efKpi('Alertas', fmtNum(cnt.alerta), 'pra revisar', cnt.alerta>0?'#d6912b':'var(--TX)');
+ h+=efKpi('Infos', fmtNum(cnt.info), 'observa&ccedil;&otilde;es', 'var(--TX)');
+ h+='</div>';
+ h+='<div class="chips" style="margin-bottom:14px;">';
+ h+='<button class="chip'+(AL_VER==='aberto'?' on':'')+'" onclick="alVer(\'aberto\')">Em aberto</button>';
+ h+='<button class="chip'+(AL_VER==='todos'?' on':'')+'" onclick="alVer(\'todos\')">Todos</button>';
+ h+='</div>';
+ if(!dados.length){ h+='<div class="card" style="padding:40px;text-align:center;color:var(--MU);">'+(AL_VER==='aberto'?'Nenhum alerta em aberto. Tudo certo por aqui. &#9989;':'Nenhum alerta.')+'</div>'; s.innerHTML=h; alAtualizaBadge(); return; }
+ h+='<div style="display:flex;flex-direction:column;gap:8px;">';
+ dados.forEach(function(r){
+  var i=todos.indexOf(r);
+  var sv=AL_SEV[r.severidade]||AL_SEV.info;
+  var resolvido=(r.status&&r.status!=='aberto');
+  h+='<div class="card" style="padding:12px 14px;opacity:'+(resolvido?'.6':'1')+';">';
+  h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">';
+  h+='<span style="background:'+sv.bg+';color:'+sv.cor+';padding:1px 8px;border-radius:10px;font-size:9px;font-weight:700;text-transform:uppercase;">'+sv.lbl+'</span>';
+  h+='<span style="font-size:10px;color:var(--MU);">'+(r.agente||'')+(r.criado_em?(' &middot; '+String(r.criado_em).slice(0,10).split('-').reverse().join('/')):'')+'</span>';
+  if(resolvido) h+='<span style="font-size:9px;color:var(--MU);">('+r.status+')</span>';
+  h+='</div>';
+  h+='<div style="font-size:13px;font-weight:700;color:var(--TX);">'+(r.titulo||'')+'</div>';
+  if(r.descricao) h+='<div style="font-size:11px;color:var(--MU);margin-top:3px;line-height:1.5;">'+r.descricao+'</div>';
+  if(r.acao_sugerida) h+='<div style="font-size:11px;color:#5a8ca8;margin-top:5px;">&#128161; '+r.acao_sugerida+'</div>';
+  if(!resolvido){
+   h+='<div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px;">';
+   h+='<button onclick="alIgnorar('+i+')" style="padding:4px 10px;border-radius:6px;background:transparent;border:1px solid var(--BR);color:var(--MU);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">Ignorar</button>';
+   h+='<button onclick="alResolver('+i+')" style="padding:4px 10px;border-radius:6px;background:rgba(58,138,74,.12);border:1px solid rgba(58,138,74,.4);color:#3a8a4a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Resolver</button>';
+   h+='</div>';
+  }
+  h+='</div>';
+ });
+ h+='</div>';
+ s.innerHTML=h;
+ alAtualizaBadge();
+}
+async function _alSet(i,novo){
+ var r=(AL_RAW||[])[i]; if(!r) return;
+ try{
+  var kf=(r.chave!=null)?'chave':'id', kv=(r.chave!=null)?r.chave:r.id;
+  var u=await sb.from('agente_insights').update({status:novo}).eq(kf,kv);
+  if(u.error) throw u.error;
+  r.status=novo;
+  toast(novo==='resolvido'?'Resolvido ✓':'Ignorado', true);
+  rAl();
+ }catch(e){ toast('Erro: '+e.message, false); }
+}
+function alResolver(i){ _alSet(i,'resolvido'); }
+function alIgnorar(i){ _alSet(i,'ignorado'); }
+
 function goTab(t){
  if(t==='ef'){ ML_SUBABA='ef'; t='ml'; } // Estoque Full virou sub-aba do hub Mercado Livre
  // Mobile tabs
@@ -3287,7 +3369,7 @@ function goTab(t){
  document.querySelectorAll(".scr").forEach(function(s){s.classList.remove("on");});
  ge("s-"+t).classList.add("on");
  try{localStorage.setItem("nv_tab",t);}catch(e){}
- var fn={db:rDB,ex:rEx,lu:rLu,bo:rBo,ia:rIA,cf:rCf,fo:rFo,co:rCo,fc:rContas,prod:rPROD,vd:rVd,ml:rMl,sh:rShopee,dv:rDvScreen,ads:rAds};
+ var fn={db:rDB,ex:rEx,lu:rLu,bo:rBo,ia:rIA,cf:rCf,fo:rFo,co:rCo,fc:rContas,prod:rPROD,vd:rVd,ml:rMl,sh:rShopee,dv:rDvScreen,ads:rAds,al:rAl};
  if(fn[t])fn[t]();
  var mc=document.querySelector(".main-content");
  if(mc)mc.scrollTop=0;
