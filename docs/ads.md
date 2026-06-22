@@ -117,6 +117,17 @@ Com o `receitas.ads` que já existe:
 - **Simulador de economia:** "cortando estes N anúncios, economia ~R$ M/mês com perda
   de venda estimada baixa".
 
+### Alvo de ACOS / ROAS — **varia pela margem do produto** (regra do usuário)
+- O alvo **não é um número fixo**. O **ACOS de equilíbrio = a margem do produto**:
+  margem alta → pode gastar mais em Ads (ACOS/ROAS mais folgado); margem baixa → tem que
+  gastar menos. ROAS = 1 ÷ ACOS (mesma lógica, invertida).
+- Hoje o front usa um limiar provisório (`ADS_ACOS_ALVO = 0.20`) só pra acender os casos
+  óbvios. **A definir com o usuário** o alvo real.
+- Evolução: como já temos **margem por venda** (`mc_pct`/CMV em `ml_orders`), o alvo de
+  ACOS pode ser **calculado automático por produto/SKU** a partir da margem — em vez de um
+  número manual. Saúde "bom/ruim" passa a comparar ACOS da campanha vs. margem do que ela
+  vende.
+
 ### Camada IA (casa com "agentes por setor" do roadmap)
 - **Agente de Ads:** revisa periodicamente e entrega recomendações acionáveis —
   o que pausar, onde baixar lance, o que reforçar (ACOS bom + escala).
