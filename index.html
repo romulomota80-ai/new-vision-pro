@@ -1956,7 +1956,7 @@ async function vdSkuEditar(sku){
   EDIT_SKU = sku;
   var hist = [];
   try{ var rh = await sb.from('ml_skus_cmv_historico').select('custo,imposto_pct,vigente_desde,vigente_ate').eq('sku',sku).order('vigente_desde'); hist = rh.data||[]; }catch(e){}
-  var hoje = new Date().toISOString().slice(0,10);
+  var hoje = cmHoje();
   var histHtml = hist.length ? hist.map(function(h){
     var ini = (h.vigente_desde && String(h.vigente_desde).slice(0,10) > '2020-01-01') ? 'de '+vdSkuFmtData(h.vigente_desde) : 'desde sempre';
     var fim = h.vigente_ate ? ' até '+vdSkuFmtData(h.vigente_ate) : '';
@@ -1991,7 +1991,7 @@ function vdSkuSetVig(mode){
     el.style.borderColor = on ? '#dc2626' : '#e5e7eb';
     el.style.background = on ? 'rgba(220,38,38,.05)' : '#fff';
   });
-  var hoje = new Date().toISOString().slice(0,10);
+  var hoje = cmHoje();
   var a = ge('sku-vig-area'); if(!a) return;
   if(mode==='hoje') a.innerHTML='<span style="color:#3a8a4a;font-weight:600;">✓</span> Só as vendas <b>a partir de hoje</b> usam o novo custo. As anteriores mantêm o atual.';
   else if(mode==='desde') a.innerHTML='Vale a partir de: <input type="date" id="sku-m-de" value="'+hoje+'" style="padding:5px;border:1px solid #ddd;border-radius:5px;"><div style="color:#6b7280;margin-top:6px;font-size:11px;">Vendas antes dessa data mantêm o custo anterior.</div>';
@@ -4743,7 +4743,7 @@ function rDB(){
  all.forEach(function(c){ var d=dAnt[c.id]||{}; tF+=(d.f||0); tL+=(d.l||0); tA+=(d.a||0); });
  var rl=tL-tA, sob=rl-tgR, mg=tF>0?((sob/tF)*100).toFixed(1):0;
  var pend=BOL.filter(function(b){ return b.st==="p"; });
- var hoje=new Date().toISOString().slice(0,10);
+ var hoje=cmHoje();
  var semComp=EXT.filter(function(e){ return !e.comp; });
  var urg=BOL.filter(function(b){ return b.st==="p"&&Math.ceil((new Date(b.ven)-new Date(hoje))/86400000)<=7; });
  var venceHoje=BOL.filter(function(b){ return b.st==="p"&&b.ven===hoje; });
@@ -5492,7 +5492,7 @@ async function marcarPagoSemComp(id, comLanc){
     if(u1.error) throw u1.error;
     BOL = BOL.map(function(bx){return bx.id===id?Object.assign({},bx,{st:'pago'}):bx;});
     if(comLanc){
-      var hoje = new Date().toISOString().slice(0,10);
+      var hoje = cmHoje();
       var m = MESES[new Date().getMonth()];
       var payload = {data:hoje, mes:m, categoria:b.cat||'IMPOSTOS', descricao:b.desc+' (boleto pago)', valor:b.val, comprovante:false};
       var ins = await sb.from('lancamentos').insert(payload).select().single();
@@ -5590,7 +5590,7 @@ async function abrirSeletorUpload(id, comLanc){
       BOL = BOL.map(function(bx){return bx.id===id?Object.assign({},bx,{st:'pago',comp:compArr[0]||url,comps:compArr}):bx;});
       
       if(comLanc){
-        var hoje = new Date().toISOString().slice(0,10);
+        var hoje = cmHoje();
         var m = MESES[new Date().getMonth()];
         var payload = {data:hoje, mes:m, categoria:b.cat||'IMPOSTOS', descricao:b.desc+' (boleto pago)', valor:b.val, comprovante:false};
         var ins = await sb.from('lancamentos').insert(payload).select().single();
@@ -5656,7 +5656,7 @@ var BO_BUSCA = "";
 function boFiltroForn(v){ BO_FORN = v; rBo(); }
 function boBuscaInput(v){ BO_BUSCA = (v||"").toLowerCase().trim(); rBo(); }
 function rBo(){
- var hoje=new Date().toISOString().slice(0,10);
+ var hoje=cmHoje();
  // Filtra só do tipo atual (boleto ou pix)
  var BOL_TIPO = BOL.filter(function(b){ return (b.tipo||"boleto") === BO_TIPO; });
  function _bofn(b){
@@ -5830,7 +5830,7 @@ async function _pagarBolComLancamentoReal(id){
  if(e1)throw e1;
  BOL=BOL.map(function(bx){return bx.id===id?Object.assign({},bx,{st:"pago"}):bx;});
  // 2. Gerar lançamento automático no extrato
- var hoje=new Date().toISOString().slice(0,10);
+ var hoje=cmHoje();
  var m=MESES[new Date().getMonth()];
  var payload={data:hoje,mes:m,categoria:b.cat||"IMPOSTOS",descricao:b.desc+" (boleto pago)",valor:b.val,comprovante:false};
  var {data:lancData,error:e2}=await sb.from("lancamentos").insert(payload).select().single();
@@ -5843,7 +5843,7 @@ async function _pagarBolComLancamentoReal(id){
 }
 // ═══ CALENDÁRIO ═════════════════════════════════════════════════
 function rCal(){
- var hoje=new Date().toISOString().slice(0,10);
+ var hoje=cmHoje();
  var ano=new Date().getFullYear(),m=CAL_M,nd=new Date(ano,m+1,0).getDate(),pd=new Date(ano,m,1).getDay();
  var bm=BOL.filter(function(b){var d=new Date(b.ven+"T12:00:00");return d.getMonth()===m&&d.getFullYear()===ano;});
  var bpd={};bm.forEach(function(b){var d=new Date(b.ven+"T12:00:00").getDate();if(!bpd[d])bpd[d]=[];bpd[d].push(b);});
@@ -7255,7 +7255,7 @@ async function foMigrarNumeros(){
 var FO_NOVA_DIVIDA = false;   // form "nova dívida" aberto no detalhe
 var FO_ABATER_PED = null;     // id do pedido livre com form "abater" aberto
 
-function foHoje(){ return new Date().toISOString().slice(0,10); }
+function foHoje(){ return cmHoje(); }
 
 function foDividasDoForn(f){
  return PED_LIVRE.filter(function(p){
