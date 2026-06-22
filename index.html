@@ -3335,7 +3335,10 @@ async function rMlFatura(force){
    var venc=f.data_vencimento?String(f.data_vencimento).slice(0,10):null;
    var dias=venc?Math.ceil((new Date(venc+'T00:00:00')-hoje)/86400000):null;
    var cor=(dias!=null&&dias<=3)?'#d9534f':((dias!=null&&dias<=7)?'#d6912b':'#6b4e8a');
-   var itens=(ML_FAT_IT||[]).filter(function(i){return i.documento_id===f.documento_id;});
+   var itens=(ML_FAT_IT||[]).filter(function(i){
+    if(String(i.conta_interna_id)!==String(f.conta_interna_id)) return false;
+    return f.documento_id ? (i.documento_id===f.documento_id) : !i.documento_id;
+   });
    var porTipo={}; itens.forEach(function(i){ porTipo[i.tipo]=(porTipo[i.tipo]||0)+(parseFloat(i.valor)||0); });
    h+='<div class="card" style="padding:16px;border:1px solid '+cor+'44;">';
    h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">';
