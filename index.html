@@ -431,9 +431,9 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
  <div class="sb-icon"><svg class="ico" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg></div>
  <span>Produtos</span>
  </button>
- <button class="sb-item" data-t="ef" onclick="goTab('ef')">
+ <button class="sb-item" data-t="ml" onclick="goTab('ml')">
  <div class="sb-icon"><svg class="ico" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></div>
- <span>Estoque Full</span>
+ <span>Mercado Livre</span>
  </button>
  <button class="sb-item" data-t="ads" onclick="goTab('ads')">
  <div class="sb-icon"><svg class="ico" viewBox="0 0 24 24"><path d="M3 11l15-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 11-5.8-1.6"/></svg></div>
@@ -707,7 +707,18 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
  <!-- FORNECEDORES (tela principal) -->
  <!-- FLUXO DE CAIXA -->
 <div id="s-prod" class="scr"></div>
-<div id="s-ef" class="scr"></div>
+<div id="s-ml" class="scr">
+ <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+  <div style="font-family:var(--FONT-H);font-size:22px;font-weight:800;letter-spacing:-.5px;">Mercado Livre</div>
+ </div>
+ <div style="font-size:11px;color:var(--MU);margin-bottom:12px;">Operação do Mercado Livre — estoque Full e o que está a caminho.</div>
+ <div class="chips" style="margin-bottom:14px;">
+  <button class="chip on" data-ml="ef" onclick="mlAba('ef')">📦 Estoque Full</button>
+  <button class="chip" data-ml="ca" onclick="mlAba('ca')">🚚 A caminho</button>
+ </div>
+ <div id="ml-ef" style="display:block;"></div>
+ <div id="ml-ca" style="display:none;"></div>
+</div>
 <div id="s-ads" class="scr"></div>
 <div id="s-fc" class="scr">
  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
@@ -2697,7 +2708,7 @@ function efToggle(id){ EF_EXP[id]=!EF_EXP[id]; rEF(); }
 function efTodos(){ EF_TODOS=!EF_TODOS; rEF(); }
 
 async function rEF(force){
- var s=ge("s-ef"); if(!s) return;
+ var s=ge("s-ef")||ge("ml-ef"); if(!s) return;
  if(force || !EF_RAW){
   s.innerHTML='<div style="padding:40px;text-align:center;color:var(--MU);">Carregando estoque Full...</div>';
   try{
@@ -3193,7 +3204,66 @@ async function rAds(force){
  s.innerHTML=h;
 }
 
+// ═══ HUB MERCADO LIVRE (Estoque Full + A caminho) ══════════════
+var ML_SUBABA='ef', ML_INBOUND=null;
+function rMl(){ mlAba(ML_SUBABA); }
+function mlAba(t){
+ ML_SUBABA=t;
+ ['ef','ca'].forEach(function(x){
+  var bt=document.querySelector('[data-ml="'+x+'"]'); if(bt) bt.classList.toggle('on', x===t);
+  var pn=ge('ml-'+x); if(pn) pn.style.display=(x===t)?'block':'none';
+ });
+ if(t==='ef') rEF();
+ if(t==='ca') rMlCaminho();
+}
+async function rMlCaminho(force){
+ var s=ge('ml-ca'); if(!s) return;
+ if(force || !ML_INBOUND){
+  s.innerHTML='<div style="padding:40px;text-align:center;color:var(--MU);">Carregando o que est&aacute; a caminho...</div>';
+  try{
+   var tt=[],ps=1000,off=0;
+   while(true){
+    var r=await sb.from('ml_full_inbound').select('*').range(off,off+ps-1);
+    if(r.error) throw r.error;
+    if(!r.data||r.data.length===0) break;
+    tt=tt.concat(r.data); if(r.data.length<ps) break; off+=ps; if(off>100000) break;
+   }
+   ML_INBOUND=tt;
+  }catch(e){
+   s.innerHTML='<div class="card" style="padding:40px;text-align:center;color:var(--MU);"><div style="font-size:34px;margin-bottom:8px;">&#128666;</div><div style="font-size:13px;font-weight:700;color:var(--TX);">"A caminho" ainda n&atilde;o dispon&iacute;vel</div><div style="font-size:11px;margin-top:6px;">Aguardando o sync do backend (tabela ml_full_inbound).</div></div>';
+   return;
+  }
+ }
+ var dados=ML_INBOUND||[];
+ var h='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px;">';
+ h+='<div style="font-family:var(--FONT-H);font-size:18px;font-weight:800;">&#128666; A caminho do Full</div>';
+ h+='<button class="btn" onclick="rMlCaminho(true)">&#8635; Atualizar</button></div>';
+ h+='<div style="font-size:11px;color:var(--MU);margin-bottom:14px;">Estoque enviado pro Full que ainda n&atilde;o est&aacute; dispon&iacute;vel (em tr&acirc;nsito / recebendo).</div>';
+ if(!dados.length){ h+='<div class="card" style="padding:40px;text-align:center;color:var(--MU);">Nenhum envio a caminho no momento.</div>'; s.innerHTML=h; return; }
+ var tEnv=0,tRec=0;
+ dados.forEach(function(r){ tEnv+=parseInt(r.qtd_enviada,10)||0; tRec+=parseInt(r.qtd_recebida,10)||0; });
+ h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;">';
+ h+=efKpi('Itens a caminho', fmtNum(dados.length), 'envios/linhas', 'var(--TX)');
+ h+=efKpi('Unidades enviadas', fmtNum(tEnv), 'pro Full', 'var(--TX)');
+ h+=efKpi('J&aacute; recebidas', fmtNum(tRec), 'dispon&iacute;veis', '#3a8a4a');
+ h+='</div>';
+ dados.sort(function(a,b){ return String(b.previsao_chegada||'').localeCompare(String(a.previsao_chegada||'')); });
+ h+='<div style="display:flex;flex-direction:column;gap:8px;">';
+ dados.forEach(function(r){
+  var env=parseInt(r.qtd_enviada,10)||0, rec=parseInt(r.qtd_recebida,10)||0, falta=Math.max(0,env-rec);
+  h+='<div class="card" style="padding:12px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
+  h+='<div style="flex:1;min-width:200px;"><div style="font-size:13px;font-weight:700;color:var(--TX);">'+(r.titulo||r.item_id||'(item)')+'</div>';
+  h+='<div style="font-size:10px;color:var(--MU);margin-top:3px;">'+(r.sku||'')+(r.status?' &middot; '+r.status:'')+(r.previsao_chegada?' &middot; chega ~'+String(r.previsao_chegada).slice(0,10).split('-').reverse().join('/'):'')+'</div></div>';
+  h+='<div style="text-align:right;flex-shrink:0;"><div style="font-size:9px;color:var(--MU);text-transform:uppercase;">Enviadas</div><div style="font-size:14px;font-weight:800;font-family:var(--FONT-M);">'+fmtNum(env)+'</div></div>';
+  h+='<div style="text-align:right;flex-shrink:0;min-width:72px;"><div style="font-size:9px;color:var(--MU);text-transform:uppercase;">Faltam chegar</div><div style="font-size:14px;font-weight:800;font-family:var(--FONT-M);color:'+(falta>0?'#d6912b':'#3a8a4a')+';">'+fmtNum(falta)+'</div></div>';
+  h+='</div>';
+ });
+ h+='</div>';
+ s.innerHTML=h;
+}
+
 function goTab(t){
+ if(t==='ef'){ ML_SUBABA='ef'; t='ml'; } // Estoque Full virou sub-aba do hub Mercado Livre
  // Mobile tabs
  document.querySelectorAll(".tab").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-t")===t);});
  // Sidebar items
@@ -3202,7 +3272,7 @@ function goTab(t){
  document.querySelectorAll(".scr").forEach(function(s){s.classList.remove("on");});
  ge("s-"+t).classList.add("on");
  try{localStorage.setItem("nv_tab",t);}catch(e){}
- var fn={db:rDB,ex:rEx,lu:rLu,bo:rBo,ia:rIA,cf:rCf,fo:rFo,co:rCo,fc:rContas,prod:rPROD,vd:rVd,ef:rEF,sh:rShopee,dv:rDvScreen,ads:rAds};
+ var fn={db:rDB,ex:rEx,lu:rLu,bo:rBo,ia:rIA,cf:rCf,fo:rFo,co:rCo,fc:rContas,prod:rPROD,vd:rVd,ml:rMl,sh:rShopee,dv:rDvScreen,ads:rAds};
  if(fn[t])fn[t]();
  var mc=document.querySelector(".main-content");
  if(mc)mc.scrollTop=0;
