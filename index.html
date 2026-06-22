@@ -995,6 +995,7 @@ async function initSupabase(){
  var { createClient } = window.supabase;
  sb = createClient(SUPABASE_URL, SUPABASE_KEY);
  await carregarTudo();
+ try{ await mlFatSyncBoletos(); }catch(eSync){ /* silencioso */ }
  } catch(e) {
  console.error("Supabase error:", e);
  } finally {
@@ -3249,21 +3250,39 @@ function mlFatTipoLabel(t){
  var m={ads:'📣 Publicidade (Ads)', publicidade:'📣 Publicidade (Ads)', tarifa_venda:'Tarifa de venda', full_armazenagem:'📦 Envios / Full', envios_full:'📦 Envios / Full', estoque_antigo:'Estoque antigo', frete:'Frete', impostos:'Impostos', imposto:'Impostos', minha_pagina:'Minha página', outros:'Outros'};
  return m[t]||String(t).replace(/_/g,' ');
 }
+// Mantem os boletos das faturas ML sincronizados com o valor atual da fatura (ate marcar pago).
+async function mlFatSyncBoletos(){
+ if(!FATURAS_ML||!FATURAS_ML.length||!Array.isArray(BOL)) return;
+ for(var k=0;k<FATURAS_ML.length;k++){
+  var f=FATURAS_ML[k]; if(!f.documento_id) continue;
+  var b=BOL.filter(function(x){return x.cod==='MLFAT:'+f.documento_id;})[0];
+  if(!b || b.st!=='p') continue; // sem boleto, ou ja pago -> nao mexe
+  var novoVal=parseFloat(f.valor_total)||0;
+  var novoVen=f.data_vencimento?String(f.data_vencimento).slice(0,10):b.ven;
+  if(b.val===novoVal && b.ven===novoVen) continue;
+  try{
+   var u=await sb.from('boletos').update({valor:novoVal, vencimento:novoVen}).eq('id',b.id);
+   if(!u.error){ b.val=novoVal; b.ven=novoVen; }
+  }catch(e){ /* silencioso */ }
+ }
+}
 async function mlFatCriarPagamento(i){
  var f=(ML_FAT||[])[i]; if(!f) return;
  if(!f.data_vencimento){ toast('Essa fatura ainda não tem vencimento',false); return; }
+ if(!f.documento_id){ toast('Fatura sem identificador',false); return; }
  var label=EF_CONTAS_LABEL[f.conta_interna_id]||f.conta_interna_id||'';
  var desc='Fatura Mercado Livre — '+label;
+ var marca='MLFAT:'+f.documento_id;
  var ven=String(f.data_vencimento).slice(0,10);
  var val=parseFloat(f.valor_total)||0;
- if(BOL.filter(function(b){return b.desc===desc && b.ven===ven;})[0]){ toast('Já existe um pagamento dessa fatura no calendário',false); return; }
- if(!confirm('Criar pagamento de '+fv(val)+' (Fatura ML '+label+') com vencimento '+ven.split('-').reverse().join('/')+'?')) return;
+ if(BOL.filter(function(b){return b.cod===marca;})[0]){ toast('Já existe um pagamento dessa fatura no calendário',false); return; }
+ if(!confirm('Criar pagamento de '+fv(val)+' (Fatura ML '+label+') com vencimento '+ven.split('-').reverse().join('/')+'?\n\nO valor vai se atualizar sozinho conforme a fatura acumular, até ela fechar.')) return;
  try{
-  var payload={descricao:desc, valor:val, vencimento:ven, status:'pendente', categoria:'Tarifas ML', recorrente:false, tipo:'boleto', favorecido:'Mercado Livre'};
+  var payload={descricao:desc, valor:val, vencimento:ven, status:'pendente', categoria:'Tarifas ML', recorrente:false, tipo:'boleto', favorecido:'Mercado Livre', codigo_barras:marca};
   var {data,error}=await sb.from('boletos').insert(payload).select().single();
   if(error) throw error;
-  BOL.push({id:data.id, desc:desc, val:val, ven:ven, st:'p', cat:data.categoria, rec:false, cod:'', link:'', arq:null, tipo:'boleto', chave:'', fav:'Mercado Livre', parc_at:null, parc_tot:null});
-  toast('Pagamento criado no calendário ✓',true);
+  BOL.push({id:data.id, desc:desc, val:val, ven:ven, st:'p', cat:data.categoria, rec:false, cod:marca, link:'', arq:null, tipo:'boleto', chave:'', fav:'Mercado Livre', parc_at:null, parc_tot:null});
+  toast('Pagamento criado no calendário ✓ (atualiza junto com a fatura)',true);
   rMlFatura();
  }catch(e){ toast('Erro: '+e.message,false); }
 }
@@ -3316,11 +3335,9 @@ async function rMlFatura(force){
     tipos.sort(function(a,b){return porTipo[b]-porTipo[a];}).forEach(function(t){ h+='<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid var(--BR);"><span style="color:var(--TX);">'+mlFatTipoLabel(t)+'</span><span style="font-weight:700;font-family:var(--FONT-M);">'+fv(porTipo[t])+'</span></div>'; });
     h+='</div>';
    } else { h+='<div style="font-size:10px;color:var(--MU);margin-top:10px;">O detalhamento por tipo entra ap&oacute;s o pr&oacute;ximo sync (cron 04:20).</div>'; }
-   var fDesc='Fatura Mercado Livre — '+(EF_CONTAS_LABEL[f.conta_interna_id]||f.conta_interna_id||'');
-   var fVen=f.data_vencimento?String(f.data_vencimento).slice(0,10):'';
-   var jaPg=BOL.filter(function(b){return b.desc===fDesc && b.ven===fVen;})[0];
+   var jaPg=f.documento_id?BOL.filter(function(b){return b.cod==='MLFAT:'+f.documento_id;})[0]:null;
    h+='<div style="display:flex;justify-content:flex-end;align-items:center;margin-top:12px;">';
-   if(jaPg){ h+='<span style="font-size:11px;color:#3a8a4a;font-weight:700;">&#10003; Pagamento j&aacute; no calend&aacute;rio</span>'; }
+   if(jaPg){ h+='<span style="font-size:11px;color:#3a8a4a;font-weight:700;">&#10003; No calend&aacute;rio &middot; atualiza junto com a fatura</span>'; }
    else { h+='<button onclick="mlFatCriarPagamento('+ML_FAT.indexOf(f)+')" style="padding:6px 13px;border-radius:7px;background:rgba(107,78,138,.12);border:1px solid rgba(107,78,138,.4);color:#6b4e8a;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">&#10133; Criar pagamento no calend&aacute;rio</button>'; }
    h+='</div>';
    h+='</div>';
@@ -6340,7 +6357,7 @@ function boCalItemHTML(b, hoje){
  '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;margin-bottom:4px;">'+coEsc(b.desc||"")+'</div>'+bdg(b.cat,true)+(b.fav||b.numForn?'<div style="font-size:11px;color:#fff;margin-top:6px;font-weight:700;background:#6b4e8a;border-radius:6px;padding:3px 9px;display:inline-block;letter-spacing:.5px;text-transform:uppercase;">'+(b.fav?coEsc(b.fav):'')+(b.numForn?' #'+b.numForn:'')+(b.parc_at&&b.parc_tot?' · '+b.parc_at+'/'+b.parc_tot:'')+'</div>':'')+
  (b.st==="p"&&d2<=3?'<div style="margin-top:4px;font-size:11px;color:'+(d2<=0?"var(--R)":"var(--O)")+';font-weight:700;background:'+(d2<=0?"rgba(201,33,39,.1)":"rgba(160,82,45,.1)")+';padding:2px 7px;border-radius:5px;display:inline-block;">'+(d2<0?"Vencido há "+Math.abs(d2)+"d":d2===0?"Vence HOJE":"Vence em "+d2+"d")+'</div>':'')+
  '</div><div style="font-size:17px;font-weight:800;color:'+(b.st==="pago"?"#5a8a3a":"#C92127")+';margin-left:12px;flex-shrink:0;">'+fv(b.val)+'</div></div>'+
- (b.cod?'<div style="background:rgba(107,78,138,.08);border:1px solid rgba(107,78,138,.25);border-radius:9px;padding:9px 12px;margin-bottom:8px;"><div style="font-size:10px;color:#6b4e8a;font-weight:700;margin-bottom:4px;">CÓDIGO</div><div style="font-size:11px;word-break:break-all;font-family:monospace;margin-bottom:7px;">'+coEsc(b.cod)+'</div><button class="btn pu sm" onclick="copCod('+b.id+')" style="width:100%;">Copiar código</button></div>':'')+
+ (b.cod&&String(b.cod).indexOf('MLFAT:')!==0?'<div style="background:rgba(107,78,138,.08);border:1px solid rgba(107,78,138,.25);border-radius:9px;padding:9px 12px;margin-bottom:8px;"><div style="font-size:10px;color:#6b4e8a;font-weight:700;margin-bottom:4px;">CÓDIGO</div><div style="font-size:11px;word-break:break-all;font-family:monospace;margin-bottom:7px;">'+coEsc(b.cod)+'</div><button class="btn pu sm" onclick="copCod('+b.id+')" style="width:100%;">Copiar código</button></div>':'')+
  '<div style="display:flex;gap:5px;flex-wrap:wrap;">'+
  (b.link?'<button onclick="abrirViewer(\''+b.link+'\', \''+coEsc(b.desc||"").replace(/'/g,"\\'")+'\', \'Boleto · vence '+fd(b.ven)+'\')" style="display:flex;align-items:center;gap:4px;padding:5px 9px;border-radius:7px;background:rgba(42,82,99,.1);border:1px solid rgba(42,82,99,.3);color:#2a5263;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Ver boleto</button>':'')+
  (b.st==="p"&&!b._faturaML&&U&&U.role!=="viewer"?'<button class="btn ok sm" onclick="pagarBolComLancamento('+b.id+')">Marcar pago</button>':'')+
