@@ -36,8 +36,13 @@
   [headers.values]
     Cache-Control = "public, max-age=2592000, immutable"
 
-# Cache curto para HTML — 5 minutos (pra mudanças propagarem rápido)
+# HTML sempre revalidado — pra todo deploy aparecer NA HORA (sem cache velho)
 [[headers]]
   for = "/index.html"
   [headers.values]
-    Cache-Control = "public, max-age=300, must-revalidate"
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-cache"
