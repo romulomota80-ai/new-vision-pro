@@ -5696,8 +5696,16 @@ function rBo(){
  var pend=BOL_TIPO.filter(function(b){ return b.st==="p"; }).sort(function(a,b){return new Date(a.ven)-new Date(b.ven);});
  var venceHojeCount=pend.filter(function(b){return b.ven===hoje;}).length;
  var venceSemana=pend.filter(function(b){var d=Math.ceil((new Date(b.ven)-new Date(hoje))/86400000);return d<=7;}).length;
- ge("bo-t").textContent=fv(pend.reduce(function(s,b){return s+b.val;},0));
- ge("bo-i").textContent=pend.length+" pendentes"+(venceHojeCount>0?" · "+venceHojeCount+" vencem hoje":"");
+ // Lista filtrada pelo chip (Hoje/Semana/Mês) — afeta tanto a lista quanto o resumo do topo
+ var fl=pend;
+ if(boFiltroAtual==="hoje") fl=pend.filter(function(b){return b.ven===hoje;});
+ else if(boFiltroAtual==="semana") fl=pend.filter(function(b){var d=Math.ceil((new Date(b.ven)-new Date(hoje))/86400000);return d<=7;});
+ else if(boFiltroAtual==="mes") fl=pend.filter(function(b){var d=Math.ceil((new Date(b.ven)-new Date(hoje))/86400000);return d<=31;});
+ // Na visão Pendentes o resumo reflete o filtro; nas outras (calendário/pagos) mostra todos os pendentes
+ var resumoBo=(boA==="pe")?fl:pend;
+ var filtroLabel={hoje:"hoje",semana:"esta semana",mes:"este mês"}[boFiltroAtual];
+ ge("bo-t").textContent=fv(resumoBo.reduce(function(s,b){return s+b.val;},0));
+ ge("bo-i").textContent=resumoBo.length+" pendentes"+(boA==="pe"&&filtroLabel?" · "+filtroLabel:"")+(venceHojeCount>0?" · "+venceHojeCount+" vencem hoje":"");
 
  // Badge sidebar (considera TODOS os tipos, não só o filtrado)
  var todosPendentes = BOL.filter(function(b){ return b.st==="p"; });
@@ -5712,12 +5720,7 @@ function rBo(){
  }
 
  if(boA==="pe"){
- // Aplicar filtro
- var fl=pend;
- if(boFiltroAtual==="hoje") fl=pend.filter(function(b){return b.ven===hoje;});
- else if(boFiltroAtual==="semana") fl=pend.filter(function(b){var d=Math.ceil((new Date(b.ven)-new Date(hoje))/86400000);return d<=7;});
- else if(boFiltroAtual==="mes") fl=pend.filter(function(b){var d=Math.ceil((new Date(b.ven)-new Date(hoje))/86400000);return d<=31;});
-
+ // fl (filtro Hoje/Semana/Mês) já calculado acima — o resumo do topo reflete o mesmo
  if(!fl.length){ge("bo-list").innerHTML='<div class="card cp" style="text-align:center;color:var(--MU);padding:36px;">'+( boFiltroAtual==="hoje"?"Nenhum "+(BO_TIPO==="pix"?"PIX":"boleto")+" vence hoje!":"Nenhum "+(BO_TIPO==="pix"?"PIX":"boleto")+" neste filtro.")+'</div>';return;}
  ge("bo-list").innerHTML=fl.map(function(b){
  var d=Math.ceil((new Date(b.ven)-new Date(hoje))/86400000),ug=d<=3,mu=d<=0;
