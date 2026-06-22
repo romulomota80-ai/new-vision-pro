@@ -2163,186 +2163,6 @@ function vdSkuImportCSV(){
 }
 
 
-async function rVdVisao(){
-  var pane = ge('vd-content');
-  if(!pane) return;
-  
-  if(!VD_DATA_INI){
-    var hj = new Date();
-    VD_DATA_INI = new Date(hj.getFullYear(), hj.getMonth(), 1).toISOString().split('T')[0];
-    VD_DATA_FIM = hj.toISOString().split('T')[0];
-  }
-  
-  pane.innerHTML = '<div style="padding:40px;text-align:center;color:#888;">⏳ Carregando vendas...</div>';
-  
-  try {
-    /* VD_COLS_SELECT: elimina raw_json (select * trazia 167MB/mes e estourava o statement_timeout) */
-    var _COLS = 'id,sku,item_id,item_title,qty,preco_unit,preco_total,comissao_ml,frete_seller,net_amount,cmv_unit_snap,cmv_total_snap,imposto_pct_snap,imposto_valor,mc_valor,mc_pct,modalidade,data_venda,status,shipping_id,pack_id,conta_interna_id,eh_troca_devolucao,data_estorno';
-    /* PAGINACAO: o mes ja passa de 40k vendas; limit unico truncava o faturamento.
-       Pagina em blocos de 1000 (ordem por id p/ ser deterministico, evita pular/duplicar). */
-    VD_DADOS = [];
-    var _off = 0, _ps = 1000;
-    while(true){
-      var qry = sb.from('ml_orders').select(_COLS)
-        .gte('data_venda', VD_DATA_INI + 'T00:00:00-03:00')
-        .lte('data_venda', VD_DATA_FIM + 'T23:59:59-03:00')
-        .order('id', { ascending: true })
-        .range(_off, _off + _ps - 1);
-      if(VD_CONTA !== 'todas') qry = qry.eq('conta_interna_id', VD_CONTA);
-      var resp = await qry;
-      if(resp.error) throw resp.error;
-      if(!resp.data || resp.data.length === 0) break;
-      VD_DADOS = VD_DADOS.concat(resp.data);
-      pane.innerHTML = '<div style="padding:40px;text-align:center;color:#888;">⏳ Carregando ' + VD_DADOS.length + ' vendas...</div>';
-      if(resp.data.length < _ps) break;
-      _off += _ps;
-      if(_off > 200000) break;
-    }
-    // pagina por id (deterministico), mas a tabela exibe por data desc
-    VD_DADOS.sort(function(a,b){ return new Date(b.data_venda) - new Date(a.data_venda); });
-    // COMPETENCIA: estornos que OCORRERAM no periodo (saidas), por data_estorno em BRT
-    VD_ESTORNOS = [];
-    var _offE = 0;
-    while(true){
-      var qest = sb.from('ml_orders').select('id,preco_total,mc_valor,conta_interna_id,data_estorno')
-        .gte('data_estorno', VD_DATA_INI + 'T00:00:00-03:00')
-        .lte('data_estorno', VD_DATA_FIM + 'T23:59:59-03:00')
-        .order('id', { ascending: true })
-        .range(_offE, _offE + _ps - 1);
-      if(VD_CONTA !== 'todas') qest = qest.eq('conta_interna_id', VD_CONTA);
-      var respE = await qest;
-      if(respE.error || !respE.data || respE.data.length === 0) break;
-      VD_ESTORNOS = VD_ESTORNOS.concat(respE.data);
-      if(respE.data.length < _ps) break;
-      _offE += _ps;
-      if(_offE > 200000) break;
-    }
-  } catch(e) {
-    pane.innerHTML = '<div style="padding:20px;color:#c92127;background:#fef2f2;border-radius:8px;">❌ Erro carregando vendas: ' + (e.message||e) + '</div>';
-    return;
-  }
-
-  // COMPETENCIA: venda conta no mes em que vendeu se estava ativa no fechamento do periodo
-  // (paga, OU estornada DEPOIS do fim do periodo). Estorno dentro do periodo nao conta como venda.
-  var _fimMs = new Date(VD_DATA_FIM + 'T23:59:59-03:00').getTime();
-  function _ehVendaComp(v){ return v.status==='paid' || (v.data_estorno && new Date(v.data_estorno).getTime() > _fimMs); }
-  var aprov = VD_DADOS.filter(_ehVendaComp);
-  var canc = VD_DADOS.filter(function(v){ return !_ehVendaComp(v); });
-  var estFat = (VD_ESTORNOS||[]).reduce(function(s,v){ return s+(parseFloat(v.preco_total)||0); }, 0);
-  var estMc = (VD_ESTORNOS||[]).reduce(function(s,v){ return s+(parseFloat(v.mc_valor)||0); }, 0);
-  var qtdEst = (VD_ESTORNOS||[]).length;
-  var fat = aprov.reduce(function(s,v){ return s+(parseFloat(v.preco_total)||0); }, 0);
-  var com = aprov.reduce(function(s,v){ return s+(parseFloat(v.comissao_ml)||0); }, 0);
-  var fre = aprov.reduce(function(s,v){ return s+(parseFloat(v.frete_seller)||0); }, 0);
-  var cmv = aprov.reduce(function(s,v){ return s+(parseFloat(v.cmv_total_snap)||0); }, 0);
-  var imp = aprov.reduce(function(s,v){ return s+(parseFloat(v.imposto_valor)||0); }, 0);
-  var mcv = aprov.reduce(function(s,v){ return s+(parseFloat(v.mc_valor)||0); }, 0);
-  var mcPct = fat > 0 ? (mcv/fat*100) : 0;
-  var qtdAprov = aprov.length;
-  var qtdTotal = aprov.length;
-  var ticket = qtdAprov > 0 ? fat/qtdAprov : 0;
-  
-  var custoImp = cmv + imp;
-  var pComp = fat > 0 ? {
-    cmv: (cmv/fat*100),
-    mc: (mcv/fat*100),
-    fre: (fre/fat*100),
-    com: (com/fat*100),
-    imp: (imp/fat*100)
-  } : {cmv:0,mc:0,fre:0,com:0,imp:0};
-  
-  var cContas = {};
-  VD_DADOS.forEach(function(v){
-    if(!_ehVendaComp(v)) return;
-    var c = v.conta_interna_id || 'sem';
-    if(!cContas[c]) cContas[c] = {q:0, fat:0};
-    cContas[c].q++;
-    cContas[c].fat += parseFloat(v.preco_total)||0;
-  });
-  
-  var html = '';
-  
-  html += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">';
-  html += '<div><div style="font-size:22px;font-weight:600;">🛒 Vendas Mercado Livre</div>';
-  html += '<div style="font-size:12px;color:#888;margin-top:2px;">' + VD_DATA_INI.split('-').reverse().join('/') + ' a ' + VD_DATA_FIM.split('-').reverse().join('/') + ' · ' + qtdTotal + ' vendas</div></div>';
-  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
-  html += '<button onclick="vdSyncManual()" style="padding:8px 14px;background:#dc2626;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">🔄 Sincronizar agora</button>';
-  html += '<button onclick="vdExportCSV()" style="padding:8px 14px;background:#fff;color:#333;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:12px;">📥 Excel</button>';
-  html += '<button onclick="vdAnaliseIA()" style="padding:8px 14px;background:#fff;color:#333;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:12px;">🤖 Análise IA</button>';
-  html += '</div></div>';
-  
-  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">';
-  var sel0 = VD_CONTA==='todas';
-  html += '<div onclick="vdSetConta(\'todas\')" style="cursor:pointer;padding:10px 16px;border-radius:8px;border:2px solid '+(sel0?'#374151':'#e5e7eb')+';background:'+(sel0?'#1f2937':'#fff')+';color:'+(sel0?'#fff':'#333')+';min-width:140px;">';
-  html += '<div style="font-size:11px;opacity:.8;">TODAS</div>';
-  html += '<div style="font-size:18px;font-weight:600;">' + qtdTotal + ' vendas</div>';
-  html += '<div style="font-size:11px;opacity:.8;">' + vdFmt(fat) + '</div></div>';
-  
-  ['look_store','moda_mix'].forEach(function(c){
-    var info = cContas[c] || {q:0, fat:0};
-    var sel = VD_CONTA===c;
-    var cor = c==='look_store' ? '#fbbf24' : '#ec4899';
-    var corDark = c==='look_store' ? '#854F0B' : '#72243E';
-    var nome = c==='look_store' ? 'LOOK_STORE' : 'MODA_MIX';
-    html += '<div onclick="vdSetConta(\''+c+'\')" style="cursor:pointer;padding:10px 16px;border-radius:8px;border:2px solid '+(sel?corDark:'#e5e7eb')+';background:'+(sel?cor:'#fff')+';color:'+(sel?corDark:'#333')+';min-width:140px;">';
-    html += '<div style="font-size:11px;opacity:.8;">'+nome+'</div>';
-    html += '<div style="font-size:18px;font-weight:600;">'+info.q+' vendas</div>';
-    html += '<div style="font-size:11px;opacity:.8;">'+vdFmt(info.fat)+'</div></div>';
-  });
-  html += '</div>';
-  
-  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;">';
-  html += '<div style="background:#f9fafb;padding:12px 14px;border-radius:8px;"><div style="font-size:11px;color:#6b7280;">💰 Vendas aprovadas</div><div style="font-size:20px;font-weight:600;margin-top:4px;">'+vdFmt(fat)+'</div><div style="font-size:11px;color:#9ca3af;">'+qtdAprov+' vendas</div></div>';
-  html += '<div style="background:#FCEBEB;padding:12px 14px;border-radius:8px;"><div style="font-size:11px;color:#A32D2D;">➖ Custo + Imposto</div><div style="font-size:20px;font-weight:600;margin-top:4px;color:#791F1F;">'+vdFmt(custoImp)+'</div><div style="font-size:11px;color:#A32D2D;">CMV '+vdFmt(cmv).replace('R$ ','')+' + Imp '+vdFmt(imp).replace('R$ ','')+'</div></div>';
-  html += '<div style="background:#FAEEDA;padding:12px 14px;border-radius:8px;"><div style="font-size:11px;color:#854F0B;">➖ Tarifa ML</div><div style="font-size:20px;font-weight:600;margin-top:4px;color:#633806;">'+vdFmt(com)+'</div><div style="font-size:11px;color:#854F0B;">'+(fat>0?(com/fat*100).toFixed(2).replace('.',','):'0,00')+'% médio</div></div>';
-  html += '<div style="background:#E6F1FB;padding:12px 14px;border-radius:8px;"><div style="font-size:11px;color:#185FA5;">🚚 Frete vendedor</div><div style="font-size:20px;font-weight:600;margin-top:4px;color:#0C447C;">'+vdFmt(fre)+'</div><div style="font-size:11px;color:#185FA5;">'+(fat>0?(fre/fat*100).toFixed(2).replace('.',','):'0,00')+'% médio</div></div>';
-  html += '<div style="background:#EAF3DE;padding:12px 14px;border-radius:8px;border:2px solid #97C459;"><div style="font-size:11px;color:#3B6D11;">📈 Margem Contrib.</div><div style="font-size:20px;font-weight:600;margin-top:4px;color:#27500A;">'+vdFmt(mcv)+'</div><div style="font-size:11px;color:#3B6D11;">'+vdFmtPct(mcPct)+'</div></div>';
-  html += '<div style="background:#FCEBEB;padding:12px 14px;border-radius:8px;"><div style="font-size:11px;color:#A32D2D;">↩️ Estornos no período</div><div style="font-size:20px;font-weight:600;margin-top:4px;color:#791F1F;">-'+vdFmt(estFat)+'</div><div style="font-size:11px;color:#A32D2D;">'+qtdEst+' estornos · MC -'+vdFmt(estMc).replace('R$ ','')+'</div></div>';
-  html += '</div>';
-  
-  if(fat > 0){
-    html += '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;">';
-    html += '<div style="font-size:13px;color:#6b7280;margin-bottom:8px;">Composição do faturamento ('+vdFmt(fat)+')</div>';
-    html += '<div style="display:flex;width:100%;height:22px;border-radius:6px;overflow:hidden;background:#f3f4f6;">';
-    html += '<div style="background:#E24B4A;width:'+pComp.cmv.toFixed(1)+'%;" title="CMV"></div>';
-    html += '<div style="background:#D4537E;width:'+pComp.imp.toFixed(1)+'%;" title="Imposto"></div>';
-    html += '<div style="background:#EF9F27;width:'+pComp.com.toFixed(1)+'%;" title="Tarifa"></div>';
-    html += '<div style="background:#378ADD;width:'+pComp.fre.toFixed(1)+'%;" title="Frete"></div>';
-    html += '<div style="background:#97C459;width:'+pComp.mc.toFixed(1)+'%;" title="MC"></div>';
-    html += '</div>';
-    html += '<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:12px;color:#6b7280;">';
-    html += '<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#E24B4A;"></span>CMV '+pComp.cmv.toFixed(1)+'%</span>';
-    html += '<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#D4537E;"></span>Imposto '+pComp.imp.toFixed(1)+'%</span>';
-    html += '<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#EF9F27;"></span>Tarifa '+pComp.com.toFixed(1)+'%</span>';
-    html += '<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#378ADD;"></span>Frete '+pComp.fre.toFixed(1)+'%</span>';
-    html += '<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#97C459;"></span>MC '+pComp.mc.toFixed(1)+'%</span>';
-    html += '</div></div>';
-  }
-  
-  html += '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;display:flex;gap:10px;flex-wrap:wrap;align-items:end;">';
-  html += '<div><label style="font-size:11px;color:#6b7280;">Data início</label><br><input id="vd-dt-ini" type="date" value="'+VD_DATA_INI+'" onchange="VD_DATA_INI=this.value;rVd()" style="padding:6px;border:1px solid #ddd;border-radius:6px;"></div>';
-  html += '<div><label style="font-size:11px;color:#6b7280;">Data fim</label><br><input id="vd-dt-fim" type="date" value="'+VD_DATA_FIM+'" onchange="VD_DATA_FIM=this.value;rVd()" style="padding:6px;border:1px solid #ddd;border-radius:6px;"></div>';
-  html += '<div><label style="font-size:11px;color:#6b7280;">Status</label><br><select id="vd-stat" onchange="VD_STATUS=this.value;VD_PAGINA=1;rVd()" style="padding:6px;border:1px solid #ddd;border-radius:6px;">';
-  html += '<option value="todos"'+(VD_STATUS==='todos'?' selected':'')+'>Todos</option>';
-  html += '<option value="paid"'+(VD_STATUS==='paid'?' selected':'')+'>Aprovadas</option>';
-  html += '<option value="cancelled"'+(VD_STATUS==='cancelled'?' selected':'')+'>Canceladas</option>';
-  html += '</select></div>';
-  /* PATCH_FILTRO_MODALIDADE - dropdown Modalidade */
-  html += '<div><label style="font-size:11px;color:#6b7280;">Modalidade</label><br><select id="vd-mod" onchange="VD_MODALIDADE=this.value;VD_PAGINA=1;rVd()" style="padding:6px;border:1px solid #ddd;border-radius:6px;">';
-  html += '<option value="todas"'+(VD_MODALIDADE==='todas'?' selected':'')+'>Todas</option>';
-  html += '<option value="flex"'+(VD_MODALIDADE==='flex'?' selected':'')+'>Flex</option>';
-  html += '<option value="full"'+(VD_MODALIDADE==='full'?' selected':'')+'>Full</option>';
-  html += '<option value="agencia"'+(VD_MODALIDADE==='agencia'?' selected':'')+'>Agencia</option>';
-  html += '</select></div>';
-  html += '<div style="flex:1;min-width:180px;"><label style="font-size:11px;color:#6b7280;">Buscar (SKU ou anúncio)</label><br><input id="vd-busca" placeholder="ex: KIT-12-P-M" value="'+(VD_BUSCA||'')+'" oninput="VD_BUSCA=this.value;VD_PAGINA=1;vdRenderTabela()" style="padding:6px;border:1px solid #ddd;border-radius:6px;width:100%;"></div>';
-  html += '</div>';
-  
-  html += '<div id="vd-tabela-wrap" style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;"></div>';
-  
-  pane.innerHTML = html;
-  vdRenderTabela();
-}
-
 function vdSetConta(c){ VD_CONTA=c; VD_PAGINA=1; rVd(); }
 
 function vdRenderTabela(){
@@ -8809,25 +8629,24 @@ async function rVdVisao(){
     var iniUTC = vdBRTtoUTC(VD_DATA_INI + ' 00:00:00');
     var fimUTC = vdBRTtoUTC(VD_DATA_FIM + ' 23:59:59');
     var todos = [];
-    var pageSize = 1000;
-    var offset = 0;
     // contas ML selecionadas (look_store/moda_mix). Se nenhuma marcada, nao consulta o ML.
     var _mlSel = (VD_CONTAS_SEL || []).filter(function(c){ return c==='look_store' || c==='moda_mix'; });
-    while(_mlSel.length > 0){
-      /* VD_COLS_SELECT: elimina raw_json (era 157MB/30d) */
-      var _COLS = 'id,sku,item_id,item_title,qty,preco_unit,preco_total,comissao_ml,frete_seller,net_amount,cmv_unit_snap,cmv_total_snap,imposto_pct_snap,imposto_valor,mc_valor,mc_pct,modalidade,data_venda,status,shipping_id,pack_id,conta_interna_id,eh_troca_devolucao,data_estorno';
-      /* PATCH_PAGINACAO_ORDER - ordem deterministica evita duplicatas/puladas */
-      var q = sb.from('ml_orders').select(_COLS).gte('data_venda', iniUTC).lte('data_venda', fimUTC).order('id', { ascending: true }).range(offset, offset + pageSize - 1);
-      if(_mlSel.length === 1) q = q.eq('conta_interna_id', _mlSel[0]); // 2 contas marcadas = todas as do ML, sem filtro
-      if(VD_BUSCA) q = q.or('sku.ilike.%'+VD_BUSCA+'%,item_title.ilike.%'+VD_BUSCA+'%');
-      var r = await q;
-      if(r.error) throw r.error;
-      if(!r.data || r.data.length === 0) break;
-      todos = todos.concat(r.data);
-      cont.innerHTML = '<div style="padding:40px;text-align:center;color:#888;">Carregando ' + todos.length + ' vendas...</div>';
-      if(r.data.length < pageSize) break;
-      offset += pageSize;
-      if(offset > 50000) break;
+    if(_mlSel.length > 0){
+      // KEYSET via backend /api/ml/vendas (service_role, sem statement_timeout do anon;
+      // cursor em (data_venda,id) -> custo constante por pagina, nao estoura em mes cheio).
+      var _contaQS = (_mlSel.length === 1) ? ('&conta=' + _mlSel[0]) : ''; // 2 marcadas = todas do ML
+      var _buscaQS = VD_BUSCA ? ('&busca=' + encodeURIComponent(VD_BUSCA)) : '';
+      var _cd = '', _ci = '', _guard = 0;
+      while(_guard++ < 1000){
+        var _url = '/api/ml/vendas?de=' + VD_DATA_INI + '&ate=' + VD_DATA_FIM + _contaQS + _buscaQS + '&limit=2000'
+          + (_cd ? ('&cursor_data=' + encodeURIComponent(_cd) + '&cursor_id=' + encodeURIComponent(_ci)) : '');
+        var j = await fetch(_url).then(function(r){ return r.json(); });
+        if(j && j.erro) throw new Error(j.erro);
+        if(j && j.itens && j.itens.length){ todos = todos.concat(j.itens); }
+        cont.innerHTML = '<div style="padding:40px;text-align:center;color:#888;">Carregando ' + todos.length + ' vendas...</div>';
+        if(!j || !j.proximo_cursor) break;
+        _cd = j.proximo_cursor.cursor_data; _ci = j.proximo_cursor.cursor_id;
+      }
     }
     
     /* PATCH_FRETE_OVERRIDE */
