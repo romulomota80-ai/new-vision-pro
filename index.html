@@ -1005,6 +1005,7 @@ async function initSupabase(){
 // ═══ CARREGAR TODOS OS DADOS ════════════════════════════════════
 // Pagina o extrato_bancario (PostgREST corta em 1000) e ignora linhas orfas (sem conta_id,
 // que nao aparecem em conta nenhuma). Sem isso, 1 conta enchia o limite e as outras sumiam.
+var FATURAS_ML=[]; // faturas ML (cabecalho) p/ avisar no calendario de pagamentos
 async function carregarExtratoBanc(){
  var todos=[], ps=1000, off=0;
  while(true){
@@ -1039,6 +1040,7 @@ async function carregarTudo(){
  carregarExtratoBanc()
  ]);
  EXTRATO_BANC = (rExtrato && rExtrato.data) || [];
+ try{ var rFatML = await sb.from("ml_faturas").select("*"); FATURAS_ML = (rFatML && rFatML.data) || []; }catch(eF){ FATURAS_ML = []; }
 
  // Lançamentos
  EXT = (rLanc.data||[]).map(function(r){ return {
@@ -6311,7 +6313,7 @@ function boCalItemHTML(b, hoje){
  (b.cod?'<div style="background:rgba(107,78,138,.08);border:1px solid rgba(107,78,138,.25);border-radius:9px;padding:9px 12px;margin-bottom:8px;"><div style="font-size:10px;color:#6b4e8a;font-weight:700;margin-bottom:4px;">CÓDIGO</div><div style="font-size:11px;word-break:break-all;font-family:monospace;margin-bottom:7px;">'+coEsc(b.cod)+'</div><button class="btn pu sm" onclick="copCod('+b.id+')" style="width:100%;">Copiar código</button></div>':'')+
  '<div style="display:flex;gap:5px;flex-wrap:wrap;">'+
  (b.link?'<button onclick="abrirViewer(\''+b.link+'\', \''+coEsc(b.desc||"").replace(/'/g,"\\'")+'\', \'Boleto · vence '+fd(b.ven)+'\')" style="display:flex;align-items:center;gap:4px;padding:5px 9px;border-radius:7px;background:rgba(42,82,99,.1);border:1px solid rgba(42,82,99,.3);color:#2a5263;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Ver boleto</button>':'')+
- (b.st==="p"&&U&&U.role!=="viewer"?'<button class="btn ok sm" onclick="pagarBolComLancamento('+b.id+')">Marcar pago</button>':'')+
+ (b.st==="p"&&!b._faturaML&&U&&U.role!=="viewer"?'<button class="btn ok sm" onclick="pagarBolComLancamento('+b.id+')">Marcar pago</button>':'')+
  '</div></div>';
 }
 function rCal(){
@@ -6319,6 +6321,14 @@ function rCal(){
  var ano=new Date().getFullYear(),m=CAL_M,nd=new Date(ano,m+1,0).getDate(),pd=new Date(ano,m,1).getDay();
  var bm=BOL.filter(function(b){var d=new Date(b.ven+"T12:00:00");return d.getMonth()===m&&d.getFullYear()===ano;});
  var bpd={};bm.forEach(function(b){var d=new Date(b.ven+"T12:00:00").getDate();if(!bpd[d])bpd[d]=[];bpd[d].push(b);});
+ // Avisa a Fatura ML (aberta) no dia do vencimento, como pagamento a vir
+ (FATURAS_ML||[]).filter(mlFatAberta).forEach(function(f){
+  if(!f.data_vencimento) return;
+  var fdv=new Date(String(f.data_vencimento).slice(0,10)+"T12:00:00");
+  if(fdv.getMonth()!==m||fdv.getFullYear()!==ano) return;
+  var it={ven:String(f.data_vencimento).slice(0,10), val:parseFloat(f.valor_total)||0, desc:'💳 Fatura Mercado Livre — '+(EF_CONTAS_LABEL[f.conta_interna_id]||f.conta_interna_id||''), fav:'Fatura ML', st:'p', _faturaML:true};
+  bm.push(it); var dd=fdv.getDate(); if(!bpd[dd])bpd[dd]=[]; bpd[dd].push(it);
+ });
  var bds=CAL_D&&bpd[CAL_D]?bpd[CAL_D]:[];
  var totalPend=bm.filter(function(b){return b.st==="p";}).reduce(function(s,b){return s+b.val;},0);
  var totalPago=bm.filter(function(b){return b.st==="pago";}).reduce(function(s,b){return s+b.val;},0);
