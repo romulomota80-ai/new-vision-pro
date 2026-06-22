@@ -433,6 +433,10 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
  <div class="sb-icon"><svg class="ico" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></div>
  <span>Estoque Full</span>
  </button>
+ <button class="sb-item" data-t="ads" onclick="goTab('ads')">
+ <div class="sb-icon"><svg class="ico" viewBox="0 0 24 24"><path d="M3 11l15-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 11-5.8-1.6"/></svg></div>
+ <span>Ads</span>
+ </button>
  <div class="sb-section" style="margin-top:6px;">Ferramentas</div>
  <button class="sb-item" data-t="fo" onclick="goTab('fo')">
  <div class="sb-icon"><svg class="ico" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
@@ -689,6 +693,7 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
  <!-- FLUXO DE CAIXA -->
 <div id="s-prod" class="scr"></div>
 <div id="s-ef" class="scr"></div>
+<div id="s-ads" class="scr"></div>
 <div id="s-fc" class="scr">
  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
   <div style="font-family:var(--FONT-H);font-size:22px;font-weight:800;letter-spacing:-.5px;">🏦 Fluxo de Caixa</div>
@@ -2951,6 +2956,134 @@ async function varDel(id){
 }
 
 
+// ═══ ADS (Mercado Livre + Shopee) ══════════════════════════════
+var ADS_RAW=null, ADS_MKT='todos', ADS_CONTA='todas', ADS_PER=30;
+var ADS_ACOS_ALVO=0.20; // ACOS alvo (ajustavel). Acima disso = campanha "ruim".
+function adsMktLabel(m){ return m==='ml'?'Mercado Livre':(m==='shopee'?'Shopee':(m||'—')); }
+function adsContaLabel(c){ return EF_CONTAS_LABEL[c]||c||'—'; }
+function adsSaude(inv,ven){
+ if(inv<=0) return {k:'sem',lbl:'sem gasto',cor:'var(--MU)',bg:'rgba(150,150,150,.12)'};
+ if(ven<=0) return {k:'ruim',lbl:'gastou sem vender',cor:'#d9534f',bg:'rgba(217,83,79,.16)'};
+ var a=inv/ven;
+ if(a>ADS_ACOS_ALVO) return {k:'ruim',lbl:'ACOS alto',cor:'#d9534f',bg:'rgba(217,83,79,.16)'};
+ if(a>ADS_ACOS_ALVO*0.6) return {k:'aten',lbl:'atencao',cor:'#d6912b',bg:'rgba(214,145,43,.16)'};
+ return {k:'bom',lbl:'saudavel',cor:'#3a8a4a',bg:'rgba(58,138,74,.16)'};
+}
+function adsMkt(m){ ADS_MKT=m; ADS_CONTA='todas'; rAds(); }
+function adsConta(c){ ADS_CONTA=c; rAds(); }
+function adsPer(n){ ADS_PER=n; rAds(); }
+
+async function rAds(force){
+ var s=ge("s-ads"); if(!s) return;
+ if(force || !ADS_RAW){
+  s.innerHTML='<div style="padding:40px;text-align:center;color:var(--MU);">Carregando Ads...</div>';
+  try{
+   var todos=[], pageSize=1000, offset=0;
+   while(true){
+    var r=await sb.from('ads_metrics').select('*').order('data',{ascending:false}).range(offset,offset+pageSize-1);
+    if(r.error) throw r.error;
+    if(!r.data||r.data.length===0) break;
+    todos=todos.concat(r.data);
+    if(r.data.length<pageSize) break;
+    offset+=pageSize; if(offset>200000) break;
+   }
+   ADS_RAW=todos;
+  }catch(e){
+   s.innerHTML='<div class="card" style="padding:30px;text-align:center;color:#d9534f;">Erro ao carregar Ads: '+(e.message||e)+'</div>'; return;
+  }
+ }
+ var h='';
+ h+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px;">';
+ h+='<div style="font-family:var(--FONT-H);font-size:22px;font-weight:800;letter-spacing:-.5px;">&#128226; Ads</div>';
+ h+='<button class="btn" onclick="rAds(true)">&#8635; Atualizar</button>';
+ h+='</div>';
+ h+='<div style="font-size:11px;color:var(--MU);margin-bottom:14px;">Investimento e retorno de an&uacute;ncios &mdash; Mercado Livre e Shopee. Dados por campanha/dia.</div>';
+
+ if(!ADS_RAW||ADS_RAW.length===0){
+  h+='<div class="card" style="padding:40px;text-align:center;color:var(--MU);"><div style="font-size:36px;margin-bottom:10px;">&#128226;</div><div style="font-size:13px;font-weight:700;color:var(--TX);">Sem dados de Ads ainda</div><div style="font-size:11px;margin-top:6px;">Rode o sync no backend: POST /api/ads/sync</div></div>';
+  s.innerHTML=h; return;
+ }
+
+ var corte=null;
+ if(ADS_PER>0){ var dc=new Date(); dc.setDate(dc.getDate()-ADS_PER); corte=dc.toISOString().slice(0,10); }
+ var dados=ADS_RAW.filter(function(r){
+  if(ADS_MKT!=='todos' && r.marketplace!==ADS_MKT) return false;
+  if(ADS_CONTA!=='todas' && r.conta_interna_id!==ADS_CONTA) return false;
+  if(corte && String(r.data).slice(0,10) < corte) return false;
+  return true;
+ });
+
+ var mkts={}, contas={};
+ ADS_RAW.forEach(function(r){ mkts[r.marketplace]=true; if(ADS_MKT==='todos'||r.marketplace===ADS_MKT) contas[r.conta_interna_id]=true; });
+
+ var grupos={}, tInv=0,tVen=0,tQtd=0,tClk=0;
+ dados.forEach(function(r){
+  var inv=parseFloat(r.investimento)||0, ven=parseFloat(r.vendas_valor)||0;
+  tInv+=inv; tVen+=ven; tQtd+=parseFloat(r.vendas_qtd)||0; tClk+=parseInt(r.cliques,10)||0;
+  var k=r.marketplace+'|'+(r.conta_interna_id||'')+'|'+(r.campaign_id||'');
+  if(!grupos[k]) grupos[k]={mkt:r.marketplace,conta:r.conta_interna_id,nome:r.campaign_nome||r.campaign_id||'(campanha)',inv:0,ven:0,qtd:0,clk:0};
+  var g=grupos[k]; g.inv+=inv; g.ven+=ven; g.qtd+=parseFloat(r.vendas_qtd)||0; g.clk+=parseInt(r.cliques,10)||0;
+  if(r.campaign_nome) g.nome=r.campaign_nome;
+ });
+ var lista=Object.keys(grupos).map(function(k){return grupos[k];});
+ lista.forEach(function(g){ g.acos=g.ven>0?g.inv/g.ven:0; });
+ lista.sort(function(a,b){
+  var wa=a.ven>0?a.acos:(a.inv>0?9999:-1), wb=b.ven>0?b.acos:(b.inv>0?9999:-1);
+  if(wb!==wa) return wb-wa;
+  return b.inv-a.inv;
+ });
+ var ralos=lista.filter(function(g){ return adsSaude(g.inv,g.ven).k==='ruim'; }).length;
+ var acosTot=tVen>0?tInv/tVen:0;
+
+ h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;">';
+ h+=efKpi('Investimento', fv(tInv), 'em Ads no per&iacute;odo', 'var(--R)');
+ h+=efKpi('Vendas Ads', fv(tVen), fmtNum(tQtd)+' un atribu&iacute;das', 'var(--G)');
+ h+=efKpi('ACOS', tVen>0?(acosTot*100).toFixed(1)+'%':'&#8212;', 'gasto &divide; venda Ads', acosTot>ADS_ACOS_ALVO?'#d9534f':'var(--TX)');
+ h+=efKpi('Ralos', fmtNum(ralos), 'campanhas no vermelho', ralos>0?'#d9534f':'var(--TX)');
+ h+='</div>';
+
+ h+='<div class="chips" style="margin-bottom:8px;">';
+ h+='<button class="chip'+(ADS_MKT==='todos'?' on':'')+'" onclick="adsMkt(\'todos\')">Todos</button>';
+ Object.keys(mkts).sort().forEach(function(m){ h+='<button class="chip'+(ADS_MKT===m?' on':'')+'" onclick="adsMkt(\''+m+'\')">'+adsMktLabel(m)+'</button>'; });
+ h+='</div>';
+
+ var contasArr=Object.keys(contas).filter(function(c){return c&&c!=='';});
+ if(contasArr.length>1){
+  h+='<div class="chips" style="margin-bottom:8px;">';
+  h+='<button class="chip'+(ADS_CONTA==='todas'?' on':'')+'" onclick="adsConta(\'todas\')">Todas contas</button>';
+  contasArr.sort().forEach(function(c){ h+='<button class="chip'+(ADS_CONTA===c?' on':'')+'" onclick="adsConta(\''+c.replace(/'/g,'')+'\')">'+adsContaLabel(c)+'</button>'; });
+  h+='</div>';
+ }
+
+ h+='<div class="chips" style="margin-bottom:14px;">';
+ [[7,'7d'],[15,'15d'],[30,'30d'],[90,'90d'],[0,'Tudo']].forEach(function(p){ h+='<button class="chip'+(ADS_PER===p[0]?' on':'')+'" onclick="adsPer('+p[0]+')">'+p[1]+'</button>'; });
+ h+='</div>';
+
+ if(lista.length===0){
+  h+='<div class="card" style="padding:30px;text-align:center;color:var(--MU);">Nenhuma campanha no per&iacute;odo/filtro selecionado.</div>';
+  s.innerHTML=h; return;
+ }
+
+ h+='<div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--TX);">Campanhas &mdash; piores primeiro (onde o dinheiro vaza) &middot; '+lista.length+'</div>';
+ h+='<div style="display:flex;flex-direction:column;gap:8px;">';
+ lista.forEach(function(g){
+  var sd=adsSaude(g.inv,g.ven);
+  var acosTxt=g.ven>0?(g.acos*100).toFixed(1)+'%':(g.inv>0?'&#8734;':'&#8212;');
+  var cpc=g.clk>0?g.inv/g.clk:0;
+  h+='<div class="card" style="padding:12px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
+  h+='<div style="flex:1;min-width:200px;">';
+  h+='<div style="font-size:13px;font-weight:700;color:var(--TX);">'+g.nome+' <span style="background:'+sd.bg+';color:'+sd.cor+';padding:1px 7px;border-radius:10px;font-size:9px;font-weight:700;white-space:nowrap;">'+sd.lbl+'</span></div>';
+  h+='<div style="font-size:10px;color:var(--MU);margin-top:3px;">'+adsMktLabel(g.mkt)+(g.conta?' &middot; '+adsContaLabel(g.conta):'')+' &middot; '+fmtNum(g.clk)+' cliques &middot; CPC '+fv(cpc)+'</div>';
+  h+='</div>';
+  h+='<div style="text-align:right;flex-shrink:0;min-width:78px;"><div style="font-size:9px;color:var(--MU);text-transform:uppercase;letter-spacing:.6px;">Investido</div><div style="font-size:14px;font-weight:800;color:var(--R);font-family:var(--FONT-M);">'+fv(g.inv)+'</div></div>';
+  h+='<div style="text-align:right;flex-shrink:0;min-width:78px;"><div style="font-size:9px;color:var(--MU);text-transform:uppercase;letter-spacing:.6px;">Vendas</div><div style="font-size:14px;font-weight:800;color:var(--G);font-family:var(--FONT-M);">'+fv(g.ven)+'</div></div>';
+  h+='<div style="text-align:right;flex-shrink:0;min-width:60px;"><div style="font-size:9px;color:var(--MU);text-transform:uppercase;letter-spacing:.6px;">ACOS</div><div style="font-size:14px;font-weight:800;color:'+sd.cor+';font-family:var(--FONT-M);">'+acosTxt+'</div></div>';
+  h+='</div>';
+ });
+ h+='</div>';
+ s.innerHTML=h;
+}
+
 function goTab(t){
  // Mobile tabs
  document.querySelectorAll(".tab").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-t")===t);});
@@ -2960,7 +3093,7 @@ function goTab(t){
  document.querySelectorAll(".scr").forEach(function(s){s.classList.remove("on");});
  ge("s-"+t).classList.add("on");
  try{localStorage.setItem("nv_tab",t);}catch(e){}
- var fn={db:rDB,ex:rEx,lu:rLu,bo:rBo,ia:rIA,cf:rCf,fo:rFo,co:rCo,fc:rContas,prod:rPROD,vd:rVd,ef:rEF};
+ var fn={db:rDB,ex:rEx,lu:rLu,bo:rBo,ia:rIA,cf:rCf,fo:rFo,co:rCo,fc:rContas,prod:rPROD,vd:rVd,ef:rEF,ads:rAds};
  if(fn[t])fn[t]();
  var mc=document.querySelector(".main-content");
  if(mc)mc.scrollTop=0;
