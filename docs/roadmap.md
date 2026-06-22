@@ -154,3 +154,17 @@ canal** (bot — hoje Telegram, futuro WhatsApp).
 ## Backlog de correções/detalhes (itens soltos pra resolver depois)
 
 - [ ] **Devoluções:** somar o **prejuízo de frete** por devolução no custo da devolução.
+- [ ] **Aba Vendas lenta + erro ao carregar o mês** (relato do usuário: demora e "na
+      maioria das vezes dá erro").
+      - Carregador ativo: `rVdVisao` em `index.html:8104` — puxa TODA venda do mês do
+        `ml_orders` paginando 1000/vez **em série** e agrega tudo no navegador.
+      - Causa provável da **lentidão:** muitas idas/voltas sequenciais + soma client-side.
+      - Causa provável do **erro:** **timeout do Supabase** na varredura por `data_venda`
+        (provável falta de índice) e/ou a busca `ilike`. Confirmar pegando o texto do
+        `Erro: <mensagem>` que aparece na tela (esperado algo como "statement timeout"/57014).
+      - Candidatos de correção: (a) **índice no banco** em `ml_orders(data_venda)` e/ou
+        `(conta_interna_id, data_venda)`; (b) **agregar no servidor** — RPC/view no Postgres
+        que devolve os totais do mês (payload pequeno) em vez de baixar linha a linha — é o
+        fix que resolve lentidão **e** timeout; (c) paginação por keyset / paralela.
+      - Limpeza: existe um **`rVdVisao` duplicado e morto** em `index.html:2077` (usa
+        `select('*')`, foi substituído pelo de 8104) — remover pra não confundir.
