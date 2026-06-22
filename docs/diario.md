@@ -15,6 +15,9 @@ Log das mudanças e decisões. O mais recente em cima.
   kill switch). Roadmap aponta pro doc.
 - **Adiado:** a ideia de transformar a aba Produtos em "Anúncios" — usuário decidiu
   focar em Ads primeiro.
+- **Anotado como PRÓXIMA (depois do Ads):** previsão da **Fatura/Custos do Mercado Livre**
+  (Ads + tarifa + Full + estoque antigo + frete) pra acabar com a surpresa no caixa — vira
+  Compromisso no Fluxo de Caixa. Detalhes no `roadmap.md`. **Não fazer agora.**
 - Próximo passo executável **sem backend**: Fase 0 (painel macro de TACOS + alerta de
   teto) usando `receitas.ads` que já existe. Backend (ML/Shopee Ads API) precisa do repo
   `new-vision-backend` na sessão.

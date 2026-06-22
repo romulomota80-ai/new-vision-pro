@@ -33,6 +33,18 @@ canal** (bot — hoje Telegram, futuro WhatsApp).
   extra). Fallback inicial: **import CSV**. Fase 0 dá pra fazer **só no front** (TACOS
   + alerta de teto) com o `receitas.ads` que já existe.
 
+### Fatura / Custos do Mercado Livre — 🔜 PRÓXIMA (depois de fechar o Ads)
+- Dor: a fatura do ML (Ads + tarifa de venda + Full/armazenagem + estoque antigo + frete)
+  **acumula e vem de uma vez com vencimento** → sempre pega o usuário de surpresa no caixa.
+- Objetivo: **antecipar** o valor. Mostrar o acumulado do período **em aberto** + previsão
+  de fechamento + vencimento; **quebra por tipo** (quanto é Ads/Full/tarifa).
+- Vira **Compromisso automático** no Fluxo de Caixa (provisão) + **alerta** antes de vencer.
+  Histórico de faturas pra ver tendência.
+- Fonte: backend puxa a **API de Billing/"custos e faturas" do ML** → tabelas `ml_faturas`
+  (cabeçalho: período, vencimento, valor_total, status, documento_id) e `ml_fatura_itens`
+  (detalhe por tipo). Esquema/brief de backend já rascunhado — incluir junto do Ads.
+- Sinergia: o Ads que vamos puxar é **um pedaço dessa fatura** → dá pra conferir se bate.
+
 ### Fechamento / DRE mensal
 - Resultado consolidado do mês em **regime de competência** (não caixa).
 - Estrutura: Receita bruta → (−) deduções (impostos s/ venda, devoluções, taxas
