@@ -3031,6 +3031,7 @@ async function varDel(id){
 
 // ═══ ADS (Mercado Livre + Shopee) ══════════════════════════════
 var ADS_RAW=null, ADS_MKT='todos', ADS_CONTA='todas', ADS_PER=30;
+var FAT_RAW=null; // faturamento_diario (total de vendas) p/ TACOS e organico
 var ADS_ACOS_BOM=0.05;  // ACOS <= 5% = saudavel (no alvo: mantem os ~10% finais)
 var ADS_ACOS_RUIM=0.10; // ACOS > 10% = ruim. Entre 5% e 10% = atencao.
 function adsMktLabel(m){ return m==='ml'?'Mercado Livre':(m==='shopee'?'Shopee':(m||'—')); }
@@ -3065,6 +3066,20 @@ async function rAds(force){
   }catch(e){
    s.innerHTML='<div class="card" style="padding:30px;text-align:center;color:#d9534f;">Erro ao carregar Ads: '+(e.message||e)+'</div>'; return;
   }
+ }
+ if(force || !FAT_RAW){
+  try{
+   var ftodos=[], fps=1000, foff=0;
+   while(true){
+    var fr=await sb.from('faturamento_diario').select('*').range(foff,foff+fps-1);
+    if(fr.error) throw fr.error;
+    if(!fr.data||fr.data.length===0) break;
+    ftodos=ftodos.concat(fr.data);
+    if(fr.data.length<fps) break;
+    foff+=fps; if(foff>100000) break;
+   }
+   FAT_RAW=ftodos;
+  }catch(e){ FAT_RAW=[]; } // se faturamento_diario ainda nao existir, TACOS fica oculto
  }
  var h='';
  h+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px;">';
@@ -3108,10 +3123,30 @@ async function rAds(force){
  });
  var ralos=lista.filter(function(g){ return adsSaude(g.inv,g.ven).k==='ruim'; }).length;
  var acosTot=tVen>0?tInv/tVen:0;
+ // faturamento total do periodo (mesmos filtros) -> TACOS + organico
+ var tFat=0;
+ (FAT_RAW||[]).forEach(function(r){
+  if(ADS_MKT!=='todos' && r.marketplace!==ADS_MKT) return;
+  if(ADS_CONTA!=='todas' && r.conta_interna_id!==ADS_CONTA) return;
+  if(corte && String(r.data).slice(0,10) < corte) return;
+  tFat += parseFloat(r.faturamento!=null?r.faturamento:(r.valor!=null?r.valor:r.receita))||0;
+ });
+ var tacos=tFat>0?tInv/tFat:0;
+ var organico=Math.max(0, tFat-tVen);
+ var pctAds=tFat>0?(tVen/tFat*100):0;
+ var pctOrg=tFat>0?(organico/tFat*100):0;
 
+ if(tFat>0){
+  h+='<div style="font-size:11px;font-weight:700;color:var(--MU);margin-bottom:6px;text-transform:uppercase;letter-spacing:.6px;">De onde v&ecirc;m as vendas</div>';
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;">';
+  h+=efKpi('Faturamento total', fv(tFat), 'todas as vendas', 'var(--TX)');
+  h+=efKpi('Vendas por Ads', fv(tVen), pctAds.toFixed(1)+'% do total', 'var(--TX)');
+  h+=efKpi('Vendas org&acirc;nicas', fv(organico), pctOrg.toFixed(1)+'% sem Ads', '#3a8a4a');
+  h+=efKpi('TACOS', (tacos*100).toFixed(1)+'%', 'Ads &divide; faturamento total', tacos>ADS_ACOS_RUIM?'#d9534f':(tacos>ADS_ACOS_BOM?'#d6912b':'#3a8a4a'));
+  h+='</div>';
+ }
  h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;">';
  h+=efKpi('Investimento', fv(tInv), 'em Ads no per&iacute;odo', 'var(--R)');
- h+=efKpi('Vendas Ads', fv(tVen), fmtNum(tQtd)+' un atribu&iacute;das', 'var(--G)');
  h+=efKpi('ACOS', tVen>0?(acosTot*100).toFixed(1)+'%':'&#8212;', 'gasto &divide; venda Ads', acosTot>ADS_ACOS_RUIM?'#d9534f':'var(--TX)');
  h+=efKpi('Ralos', fmtNum(ralos), 'campanhas no vermelho', ralos>0?'#d9534f':'var(--TX)');
  h+='</div>';
