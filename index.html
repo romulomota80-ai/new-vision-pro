@@ -1085,6 +1085,7 @@ async function carregarTudo(){
   CONTAS_BANC = rContasBanc.data.map(function(c){ return {
    id:c.id, nome:c.nome, banco:c.banco, tipo:c.tipo,
    saldo:parseFloat(c.saldo_atual)||0,
+   cheque:parseFloat(c.cheque_especial_limite)||0,
    cnpj:c.cnpj||"", agencia:c.agencia||"", numero:c.numero_conta||"",
    ativa:c.ativa!==false, obs:c.observacao||"",
    titular:c.titular||"", palavras_chave:c.palavras_chave||"",
@@ -3778,6 +3779,7 @@ function rContas(){
    h+='<div style="font-size:11px;color:var(--MU);margin-bottom:3px;">'+c.nome+'</div>';
    if(c.titular) h+='<div style="font-size:11px;font-weight:700;color:var(--TX);margin:-1px 0 4px;">👤 '+c.titular+'</div>';
    h+='<div style="font-size:22px;font-weight:800;color:'+(c.saldo>=0?"#5a8a3a":"#a04040")+';font-family:var(--FONT-M);">'+fv(c.saldo)+'</div>';
+   h+='<div onclick="contaSetCheque('+c.id+')" style="font-size:10px;color:var(--MU);margin-top:4px;cursor:pointer;" title="Clique para definir o limite do cheque especial">💳 Cheque especial: <b style="color:'+(c.cheque>0?'#6b4e8a':'var(--MU)')+';">'+(c.cheque>0?fv(c.cheque):'definir')+'</b></div>';
    if(c.of||c.ultima_sync){
     h+='<div id="csync-'+c.id+'" style="font-size:10px;color:var(--MU);margin-top:5px;">'+(c.ultima_sync?('🕐 Atualizado '+tempoAtras(c.ultima_sync)):'🕐 nunca atualizado')+'</div>';
    }
@@ -3815,6 +3817,18 @@ function rContas(){
  h+='</div></div></div>';
 
  el.innerHTML=h;
+}
+
+async function contaSetCheque(id){
+ var c=CONTAS_BANC.filter(function(x){return x.id===id;})[0]; if(!c) return;
+ var v=prompt('Limite do cheque especial de '+c.nome+' (R$):', c.cheque||0);
+ if(v===null) return;
+ var num=parseFloat(String(v).replace(/\./g,'').replace(',','.'))||0;
+ try{
+  var u=await sb.from('contas_bancarias').update({cheque_especial_limite:num}).eq('id',id);
+  if(u.error) throw u.error;
+  c.cheque=num; toast('Cheque especial atualizado ✓',true); rContas();
+ }catch(e){ toast('Erro: '+e.message,false); }
 }
 
 // Busca a cota de dados restante por conta (Open Finance) e preenche os cards.
