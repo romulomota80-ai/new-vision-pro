@@ -89,6 +89,11 @@ canal** (bot — hoje Telegram, futuro WhatsApp).
 - **Boletos/PIX → recorrência** + lembrete antes de vencer.
 - **Estoque Full → previsão de ruptura** (dias até acabar no giro) + capital parado.
 - **Conciliação → fila de pendências** no topo + auto-match (evoluir `ebMatch`).
+- **Fluxo de Caixa / Contas → cheque especial por conta:** registrar o **limite de cheque
+  especial** de cada conta (campo novo em `contas_bancarias`, ex.: `cheque_especial_limite`)
+  e mostrar no card. Liquidez real = **saldo + cheque especial**. ⚠️ Mostrar como **fôlego
+  (dívida cara)**, separado do saldo — não somar como "dinheiro disponível". Alimenta
+  GAP/Projeção 90d (alerta "entraria no cheque especial em dd/mm").
 
 ---
 
