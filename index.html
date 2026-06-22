@@ -3257,7 +3257,7 @@ function mlFatKey(f){
 // Data real do campo; se vazia (fatura aberta), projeta do mesmo dia da ultima fatura da conta.
 function mlFatProjData(f, campo){
  if(f[campo]) return String(f[campo]).slice(0,10);
- var ant=(ML_FAT||[]).filter(function(x){return String(x.conta_interna_id)===String(f.conta_interna_id) && x!==f && x[campo];})
+ var ant=(ML_FAT||[]).filter(function(x){return String(x.conta_interna_id)===String(f.conta_interna_id) && x!==f && x[campo] && !mlFatAberta(x);})
                      .sort(function(a,b){return String(b[campo]).localeCompare(String(a[campo]));})[0];
  if(!ant) return '';
  var dia=new Date(String(ant[campo]).slice(0,10)+'T12:00:00').getDate();
