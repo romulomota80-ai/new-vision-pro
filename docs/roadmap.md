@@ -55,6 +55,20 @@ canal** (bot — hoje Telegram, futuro WhatsApp).
   provisões) e **travar o mês** 🔒 + snapshot congelado pra histórico.
 - Insight-chave a comunicar: **Lucro ≠ Caixa**.
 - ⚠️ Pré-requisito crítico: **CMV por SKU no momento da venda**.
+- **Visão do usuário — DRE se monta sozinha:** puxar tudo automático em vez de digitar.
+  Cada linha tem fonte: faturamento/taxas/frete/CMV → `ml_orders`; Ads (ML+Shopee) →
+  `ads_metrics`; tarifa/Full → `ml_faturas`; custos op./fixos → `gastos_fixos`+
+  `lancamentos`; impostos/pró-labore → itens do roadmap. O "Preencher resultados" manual
+  vira **fallback**; o normal é puxado e o usuário só **confere e trava** 🔒.
+  (Obs.: lucro não se "puxa", se **calcula** — o agente confere se bate com o caixa.)
+- **Agentes de auditoria (ideia do usuário — mais de um, cada um com 1 função):**
+  1. **Reconciliador** — vendas×repasses×banco; Ads da fatura ML × `ads_metrics`; lucro
+     da DRE × variação de caixa (Lucro ≠ Caixa).
+  2. **Auditor de dados (caça-bug)** — venda sem CMV, Ads sem venda, fatura sem categoria,
+     lançamento duplicado, conciliação pendente, mês com dado faltando.
+  3. **Revisor de fechamento** — só libera travar o mês quando tudo bate; senão lista
+     pendências.
+  Trava: agente **aponta e explica**, quem **fecha/congela o snapshot é o usuário**.
 - (Definir nível: só DRE+lock, ou pacote completo com Balanço + DFC.)
 
 ### Precificação / Calculadora de preço por canal
