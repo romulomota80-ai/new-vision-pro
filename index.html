@@ -647,8 +647,13 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
  <div style="display:flex;gap:6px;flex-wrap:wrap;" id="bo-filtros">
  <button class="chip on" data-bf="todos" onclick="boFiltro('todos')">Todos</button>
  <button class="chip" data-bf="hoje" onclick="boFiltro('hoje')">Hoje</button>
- <button class="chip" data-bf="semana" onclick="boFiltro('semana')">Esta semana</button>
- <button class="chip" data-bf="mes" onclick="boFiltro('mes')">Este mês</button>
+ <button class="chip" data-bf="semana" onclick="boFiltro('semana')">7 dias</button>
+ <button class="chip" data-bf="mes" onclick="boFiltro('mes')">30 dias</button>
+ <button class="chip" data-bf="custom" onclick="boFiltro('custom')">Personalizado</button>
+ <div id="bo-custom-range" style="display:none;gap:6px;align-items:center;flex-wrap:wrap;width:100%;margin-top:4px;">
+ <span style="font-size:11px;color:var(--MU);">De</span><input type="date" id="bo-cust-ini" onchange="boCustomChange()" style="padding:5px 8px;border:1px solid var(--BR);border-radius:8px;background:var(--C2);color:var(--TX);font-size:12px;font-family:inherit;">
+ <span style="font-size:11px;color:var(--MU);">até</span><input type="date" id="bo-cust-fim" onchange="boCustomChange()" style="padding:5px 8px;border:1px solid var(--BR);border-radius:8px;background:var(--C2);color:var(--TX);font-size:12px;font-family:inherit;">
+ </div>
  <input id="bo-busca" type="text" placeholder="Pesquisar boletos (descricao, valor, data, codigo...)" oninput="boBuscaInput(this.value)" style="display:none;padding:9px 14px;border:3px solid var(--R);border-radius:10px;background:var(--C2);color:var(--TX);font-size:13px;font-family:inherit;box-shadow:0 2px 10px rgba(201,33,39,.18);margin-left:auto;min-width:280px;outline:none;"><select id="bo-forn-filtro" onchange="boFiltroForn(this.value)" style="display:none;padding:6px 10px;border:1px solid var(--BR);border-radius:8px;background:var(--C2);color:var(--TX);font-size:12px;font-family:inherit;cursor:pointer;margin-left:auto;"><option value="todos">Todos os fornecedores</option></select>
  </div>
  </div>
@@ -5639,6 +5644,7 @@ function copCod(id){ var b=BOL.filter(function(x){return x.id===id;})[0]; if(!b|
 function copChavePix(id){ var b=BOL.filter(function(x){return x.id===id;})[0]; if(!b||!b.chave)return; navigator.clipboard.writeText(b.chave).then(function(){toast("Chave PIX copiada! Cole no app do banco.");}).catch(function(){prompt("Copie:",b.chave); }); }
 
 var boFiltroAtual="todos";
+var BO_CUST_INI="", BO_CUST_FIM=""; // intervalo do filtro "Personalizado"
 function boFiltro(f){
  boFiltroAtual=f;
  document.querySelectorAll("#bo-filtros .chip").forEach(function(b){
@@ -5649,7 +5655,29 @@ function boFiltro(f){
  b.style.color="";
  b.style.borderColor="";
  });
+ var range=ge("bo-custom-range");
+ if(range) range.style.display = (f==="custom") ? "flex" : "none";
  rBo();
+}
+function boCustomChange(){
+ BO_CUST_INI=(ge("bo-cust-ini")||{}).value||"";
+ BO_CUST_FIM=(ge("bo-cust-fim")||{}).value||"";
+ boFiltroAtual="custom";
+ rBo();
+}
+// Aplica o chip ativo (hoje/7d/30d/personalizado) a uma lista de boletos. `hoje` = data BRT.
+function boAplicaFiltro(lista, hoje){
+ if(boFiltroAtual==="hoje") return lista.filter(function(b){return b.ven===hoje;});
+ if(boFiltroAtual==="semana") return lista.filter(function(b){var d=Math.ceil((new Date(b.ven)-new Date(hoje))/86400000);return d<=7;});
+ if(boFiltroAtual==="mes") return lista.filter(function(b){var d=Math.ceil((new Date(b.ven)-new Date(hoje))/86400000);return d<=30;});
+ if(boFiltroAtual==="custom"){
+  if(!BO_CUST_INI&&!BO_CUST_FIM) return lista;
+  return lista.filter(function(b){ return (!BO_CUST_INI||b.ven>=BO_CUST_INI) && (!BO_CUST_FIM||b.ven<=BO_CUST_FIM); });
+ }
+ return lista; // todos
+}
+function boFiltroLabel(){
+ return {hoje:"hoje",semana:"próximos 7 dias",mes:"próximos 30 dias",custom:(BO_CUST_INI||BO_CUST_FIM)?("período "+(BO_CUST_INI?fd(BO_CUST_INI):"…")+" a "+(BO_CUST_FIM?fd(BO_CUST_FIM):"…")):"período"}[boFiltroAtual];
 }
 
 var BO_BUSCA = "";
@@ -5696,14 +5724,11 @@ function rBo(){
  var pend=BOL_TIPO.filter(function(b){ return b.st==="p"; }).sort(function(a,b){return new Date(a.ven)-new Date(b.ven);});
  var venceHojeCount=pend.filter(function(b){return b.ven===hoje;}).length;
  var venceSemana=pend.filter(function(b){var d=Math.ceil((new Date(b.ven)-new Date(hoje))/86400000);return d<=7;}).length;
- // Lista filtrada pelo chip (Hoje/Semana/Mês) — afeta tanto a lista quanto o resumo do topo
- var fl=pend;
- if(boFiltroAtual==="hoje") fl=pend.filter(function(b){return b.ven===hoje;});
- else if(boFiltroAtual==="semana") fl=pend.filter(function(b){var d=Math.ceil((new Date(b.ven)-new Date(hoje))/86400000);return d<=7;});
- else if(boFiltroAtual==="mes") fl=pend.filter(function(b){var d=Math.ceil((new Date(b.ven)-new Date(hoje))/86400000);return d<=31;});
+ // Lista filtrada pelo chip (Hoje/7d/30d/Personalizado) — afeta tanto a lista quanto o resumo do topo
+ var fl=boAplicaFiltro(pend, hoje);
  // Na visão Pendentes o resumo reflete o filtro; nas outras (calendário/pagos) mostra todos os pendentes
  var resumoBo=(boA==="pe")?fl:pend;
- var filtroLabel={hoje:"hoje",semana:"esta semana",mes:"este mês"}[boFiltroAtual];
+ var filtroLabel=boFiltroLabel();
  ge("bo-t").textContent=fv(resumoBo.reduce(function(s,b){return s+b.val;},0));
  ge("bo-i").textContent=resumoBo.length+" pendentes"+(boA==="pe"&&filtroLabel?" · "+filtroLabel:"")+(venceHojeCount>0?" · "+venceHojeCount+" vencem hoje":"");
 
@@ -5845,6 +5870,20 @@ async function _pagarBolComLancamentoReal(id){
  } catch(e){ toast("Erro: "+e.message,false); }
 }
 // ═══ CALENDÁRIO ═════════════════════════════════════════════════
+// Card de um boleto/PIX no calendário (detalhe do dia ou lista filtrada). hoje = data BRT.
+function boCalItemHTML(b, hoje){
+ var d2=Math.ceil((new Date(b.ven)-new Date(hoje))/86400000);
+ return '<div style="padding:13px;border-bottom:1px solid var(--BR);">'+
+ '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:9px;">'+
+ '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;margin-bottom:4px;">'+coEsc(b.desc||"")+'</div>'+bdg(b.cat,true)+(b.fav||b.numForn?'<div style="font-size:11px;color:#fff;margin-top:6px;font-weight:700;background:#6b4e8a;border-radius:6px;padding:3px 9px;display:inline-block;letter-spacing:.5px;text-transform:uppercase;">'+(b.fav?coEsc(b.fav):'')+(b.numForn?' #'+b.numForn:'')+(b.parc_at&&b.parc_tot?' · '+b.parc_at+'/'+b.parc_tot:'')+'</div>':'')+
+ (b.st==="p"&&d2<=3?'<div style="margin-top:4px;font-size:11px;color:'+(d2<=0?"var(--R)":"var(--O)")+';font-weight:700;background:'+(d2<=0?"rgba(201,33,39,.1)":"rgba(160,82,45,.1)")+';padding:2px 7px;border-radius:5px;display:inline-block;">'+(d2<0?"Vencido há "+Math.abs(d2)+"d":d2===0?"Vence HOJE":"Vence em "+d2+"d")+'</div>':'')+
+ '</div><div style="font-size:17px;font-weight:800;color:'+(b.st==="pago"?"#5a8a3a":"#C92127")+';margin-left:12px;flex-shrink:0;">'+fv(b.val)+'</div></div>'+
+ (b.cod?'<div style="background:rgba(107,78,138,.08);border:1px solid rgba(107,78,138,.25);border-radius:9px;padding:9px 12px;margin-bottom:8px;"><div style="font-size:10px;color:#6b4e8a;font-weight:700;margin-bottom:4px;">CÓDIGO</div><div style="font-size:11px;word-break:break-all;font-family:monospace;margin-bottom:7px;">'+coEsc(b.cod)+'</div><button class="btn pu sm" onclick="copCod('+b.id+')" style="width:100%;">Copiar código</button></div>':'')+
+ '<div style="display:flex;gap:5px;flex-wrap:wrap;">'+
+ (b.link?'<button onclick="abrirViewer(\''+b.link+'\', \''+coEsc(b.desc||"").replace(/'/g,"\\'")+'\', \'Boleto · vence '+fd(b.ven)+'\')" style="display:flex;align-items:center;gap:4px;padding:5px 9px;border-radius:7px;background:rgba(42,82,99,.1);border:1px solid rgba(42,82,99,.3);color:#2a5263;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Ver boleto</button>':'')+
+ (b.st==="p"&&U&&U.role!=="viewer"?'<button class="btn ok sm" onclick="pagarBolComLancamento('+b.id+')">Marcar pago</button>':'')+
+ '</div></div>';
+}
 function rCal(){
  var hoje=cmHoje();
  var ano=new Date().getFullYear(),m=CAL_M,nd=new Date(ano,m+1,0).getDate(),pd=new Date(ano,m,1).getDay();
@@ -5879,23 +5918,20 @@ function rCal(){
  '</div>';
  }
  h+='</div>';
- if(CAL_D&&bds.length){
+ // Detalhe inferior: com filtro de janela ativo, lista os pendentes do período (igual Pendentes);
+ // sem filtro, mostra o dia clicado no grid.
+ if(boFiltroAtual!=="todos"){
+ var winList=boAplicaFiltro(BOL.filter(function(b){return b.st==="p";}), hoje).sort(function(a,b){return new Date(a.ven)-new Date(b.ven);});
+ var winTot=winList.reduce(function(s,b){return s+b.val;},0);
+ h+='<div style="margin-top:13px;background:var(--BG);border:1px solid var(--R);border-radius:12px;overflow:hidden;">'+
+ '<div style="padding:10px 13px;background:rgba(201,33,39,.08);border-bottom:1px solid rgba(201,33,39,.2);display:flex;justify-content:space-between;align-items:center;"><div style="font-size:12px;font-weight:700;color:var(--R);">Pendentes · '+boFiltroLabel()+'</div><div style="font-size:14px;font-weight:800;color:var(--R);">'+fv(winTot)+'</div></div>'+
+ (winList.length?winList.map(function(b){return boCalItemHTML(b,hoje);}).join(""):'<div style="padding:20px;text-align:center;color:var(--MU);font-size:12px;">Nada pendente nesse período.</div>')+
+ '</div>';
+ } else if(CAL_D&&bds.length){
  var ds2=ano+"-"+("0"+(m+1)).slice(-2)+"-"+("0"+CAL_D).slice(-2),tv2=bds.reduce(function(s,b){return s+b.val;},0);
  h+='<div style="margin-top:13px;background:var(--BG);border:1px solid var(--R);border-radius:12px;overflow:hidden;">'+
  '<div style="padding:10px 13px;background:rgba(201,33,39,.08);border-bottom:1px solid rgba(201,33,39,.2);display:flex;justify-content:space-between;align-items:center;"><div style="font-size:12px;font-weight:700;color:var(--R);">'+fd(ds2)+'</div><div style="font-size:14px;font-weight:800;color:var(--R);">'+fv(tv2)+'</div></div>'+
- bds.map(function(b){
- var d2=Math.ceil((new Date(b.ven)-new Date(hoje))/86400000);
- return '<div style="padding:13px;border-bottom:1px solid var(--BR);">'+
- '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:9px;">'+
- '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;margin-bottom:4px;">'+b.desc+'</div>'+bdg(b.cat,true)+(b.fav||b.numForn?'<div style="font-size:11px;color:#fff;margin-top:6px;font-weight:700;background:#6b4e8a;border-radius:6px;padding:3px 9px;display:inline-block;letter-spacing:.5px;text-transform:uppercase;">'+(b.fav?b.fav:'')+(b.numForn?' #'+b.numForn:'')+(b.parc_at&&b.parc_tot?' · '+b.parc_at+'/'+b.parc_tot:'')+'</div>':'')+
- (b.st==="p"&&d2<=3?'<div style="margin-top:4px;font-size:11px;color:'+(d2<=0?"var(--R)":"var(--O)")+';font-weight:700;background:'+(d2<=0?"rgba(201,33,39,.1)":"rgba(160,82,45,.1)")+';padding:2px 7px;border-radius:5px;display:inline-block;">'+(d2<0?"Vencido há "+Math.abs(d2)+"d":d2===0?"Vence HOJE":"Vence em "+d2+"d")+'</div>':'')+
- '</div><div style="font-size:17px;font-weight:800;color:'+(b.st==="pago"?"#5a8a3a":"#C92127")+';margin-left:12px;flex-shrink:0;">'+fv(b.val)+'</div></div>'+
- (b.cod?'<div style="background:rgba(107,78,138,.08);border:1px solid rgba(107,78,138,.25);border-radius:9px;padding:9px 12px;margin-bottom:8px;"><div style="font-size:10px;color:#6b4e8a;font-weight:700;margin-bottom:4px;">CÓDIGO</div><div style="font-size:11px;word-break:break-all;font-family:monospace;margin-bottom:7px;">'+b.cod+'</div><button class="btn pu sm" onclick="copCod('+b.id+')" style="width:100%;">Copiar código</button></div>':'')+
- '<div style="display:flex;gap:5px;flex-wrap:wrap;">'+
- (b.link?'<button onclick="abrirViewer(\''+b.link+'\', \''+b.desc.replace(/'/g,"\\'")+'\', \'Boleto · vence '+fd(b.ven)+'\')" style="display:flex;align-items:center;gap:4px;padding:5px 9px;border-radius:7px;background:rgba(42,82,99,.1);border:1px solid rgba(42,82,99,.3);color:#2a5263;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Ver boleto</button>':'')+
- (b.st==="p"&&U&&U.role!=="viewer"?'<button class="btn ok sm" onclick="pagarBolComLancamento('+b.id+')">Marcar pago</button>':'')+
- '</div></div>';
- }).join("")+'</div>';
+ bds.map(function(b){return boCalItemHTML(b,hoje);}).join("")+'</div>';
  }
  h+='</div>'; ge("bo-list").innerHTML=h;
 }
