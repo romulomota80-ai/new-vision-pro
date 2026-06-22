@@ -3282,7 +3282,7 @@ async function rMlFatura(force){
    h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">';
    h+='<div><div style="font-size:11px;color:var(--MU);text-transform:uppercase;letter-spacing:.6px;">Pr&oacute;xima fatura &middot; '+(EF_CONTAS_LABEL[f.conta_interna_id]||f.conta_interna_id||'')+'</div>';
    h+='<div style="font-size:26px;font-weight:800;font-family:var(--FONT-M);color:'+cor+';margin-top:4px;">'+fv(f.valor_total)+'</div>';
-   h+='<div style="font-size:11px;color:var(--MU);margin-top:2px;">acumulado at&eacute; agora no per&iacute;odo aberto</div></div>';
+   h+='<div style="font-size:11px;color:var(--MU);margin-top:2px;">pendente de pagamento (s&oacute; o que voc&ecirc; paga; o resto j&aacute; sai da venda)</div></div>';
    h+='<div style="text-align:right;">';
    if(venc){ h+='<div style="font-size:11px;color:var(--MU);text-transform:uppercase;letter-spacing:.6px;">Vencimento</div><div style="font-size:16px;font-weight:800;color:'+cor+';">'+venc.split('-').reverse().join('/')+'</div>'+((dias!=null)?('<div style="font-size:11px;color:'+cor+';font-weight:700;">'+(dias<0?'venceu':(dias===0?'vence hoje':'em '+dias+' dia'+(dias>1?'s':'')))+'</div>'):''); }
    else { h+='<div style="font-size:11px;color:var(--MU);">sem vencimento ainda</div>'; }
