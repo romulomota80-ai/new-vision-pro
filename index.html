@@ -994,6 +994,21 @@ async function initSupabase(){
 }
 
 // ═══ CARREGAR TODOS OS DADOS ════════════════════════════════════
+// Pagina o extrato_bancario (PostgREST corta em 1000) e ignora linhas orfas (sem conta_id,
+// que nao aparecem em conta nenhuma). Sem isso, 1 conta enchia o limite e as outras sumiam.
+async function carregarExtratoBanc(){
+ var todos=[], ps=1000, off=0;
+ while(true){
+  var r=await sb.from("extrato_bancario").select("*").not("conta_id","is",null)
+        .order("data",{ascending:false}).order("id",{ascending:false}).range(off,off+ps-1);
+  if(r.error) return {data:todos, error:r.error};
+  if(!r.data||!r.data.length) break;
+  todos=todos.concat(r.data);
+  if(r.data.length<ps) break;
+  off+=ps; if(off>200000) break;
+ }
+ return {data:todos};
+}
 async function carregarTudo(){
  var [rLanc, rBol, rMps, rContas, rRec, rFixos, rCats, rForn, rPed, rContasBanc, rSaques, rRecebiveis, rProdutos, rVariacoes, rPedLivre, rPedPag, rExtrato] = await Promise.all([
  sb.from("lancamentos").select("*").order("data",{ascending:false}),
@@ -1012,7 +1027,7 @@ async function carregarTudo(){
  sb.from("produto_variacoes").select("*").order("sku"),
  sb.from("pedidos").select("*").eq("tipo","livre").order("created_at",{ascending:false}),
  sb.from("pedido_pagamentos").select("*"),
- sb.from("extrato_bancario").select("*").order("data",{ascending:false})
+ carregarExtratoBanc()
  ]);
  EXTRATO_BANC = (rExtrato && rExtrato.data) || [];
 
