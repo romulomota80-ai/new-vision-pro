@@ -491,6 +491,7 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
 
  <!-- CONTEÚDO PRINCIPAL -->
  <div class="main-content">
+ <button id="ia-fab" onclick="iaAnalisarAtual()" title="Analisar esta aba com IA" style="position:fixed;bottom:20px;right:20px;z-index:900;background:linear-gradient(135deg,#7c5cff,#5b8cff);color:#fff;border:none;border-radius:24px;padding:11px 17px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(0,0,0,.28);display:flex;align-items:center;gap:7px;">🤖 Analisar</button>
 
  <!-- DASHBOARD -->
  <div id="s-db" class="scr on">
@@ -3281,6 +3282,28 @@ async function rMlCaminho(force){
  });
  h+='</div>';
  s.innerHTML=h;
+}
+
+// ═══ ANALISAR COM IA (botao por aba — usa os agentes como contexto) ══
+function iaAnalisarAtual(){
+ var on=document.querySelector('.scr.on');
+ var ctx=on?on.id.replace(/^s-/,''):'db';
+ iaAnalisar(ctx);
+}
+async function iaAnalisar(contexto){
+ var prev=document.getElementById('ov-ia-an'); if(prev) prev.remove();
+ var ov=document.createElement('div'); ov.id='ov-ia-an';
+ ov.innerHTML='<div onclick="if(event.target===this)document.getElementById(\'ov-ia-an\').remove()" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;"><div style="background:var(--BG);border-radius:14px;max-width:640px;width:100%;max-height:85vh;overflow-y:auto;border:1px solid var(--BR);"><div style="padding:16px 18px;border-bottom:1px solid var(--BR);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:var(--BG);"><div style="font-size:14px;font-weight:800;">&#129302; An&aacute;lise da IA</div><button onclick="document.getElementById(\'ov-ia-an\').remove()" style="background:none;border:none;cursor:pointer;font-size:22px;color:var(--MU);">&times;</button></div><div id="ia-an-body" style="padding:18px;font-size:13px;line-height:1.65;color:var(--TX);">Analisando os dados e os alertas desta aba&hellip;</div></div></div>';
+ document.body.appendChild(ov);
+ try{
+  var r=await fetch('/api/analisar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contexto:contexto})});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  var j=await r.json();
+  var txt=(j&&(j.analise||j.resposta||j.texto))||'(sem resposta)';
+  var body=ge('ia-an-body'); if(body) body.innerHTML=String(txt).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
+ }catch(e){
+  var b2=ge('ia-an-body'); if(b2) b2.innerHTML='<div style="color:var(--MU);">A an&aacute;lise por IA ainda n&atilde;o est&aacute; dispon&iacute;vel.<br><span style="font-size:11px;">Aguardando o endpoint <code>/api/analisar</code> no backend.</span></div>';
+ }
 }
 
 // ═══ ALERTAS (central dos agentes — le agente_insights) ════════
