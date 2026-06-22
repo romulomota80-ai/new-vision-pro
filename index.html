@@ -3254,6 +3254,18 @@ function mlFatKey(f){
  var ref=f.periodo_inicio||f.periodo_fim||f.documento_id||f.data_vencimento||'';
  return 'MLFAT:'+(f.conta_interna_id||'?')+':'+String(ref).slice(0,10);
 }
+// Data real do campo; se vazia (fatura aberta), projeta do mesmo dia da ultima fatura da conta.
+function mlFatProjData(f, campo){
+ if(f[campo]) return String(f[campo]).slice(0,10);
+ var ant=(ML_FAT||[]).filter(function(x){return String(x.conta_interna_id)===String(f.conta_interna_id) && x!==f && x[campo];})
+                     .sort(function(a,b){return String(b[campo]).localeCompare(String(a[campo]));})[0];
+ if(!ant) return '';
+ var dia=new Date(String(ant[campo]).slice(0,10)+'T12:00:00').getDate();
+ var hj=new Date(); hj.setHours(0,0,0,0);
+ var cand=new Date(hj.getFullYear(), hj.getMonth(), dia, 12,0,0);
+ while(cand<hj){ cand=new Date(cand.getFullYear(), cand.getMonth()+1, dia, 12,0,0); }
+ return cand.toISOString().slice(0,10);
+}
 // Mantem os boletos das faturas ML sincronizados com o valor atual da fatura (ate marcar pago).
 async function mlFatSyncBoletos(){
  if(!FATURAS_ML||!FATURAS_ML.length||!Array.isArray(BOL)) return;
@@ -3273,21 +3285,9 @@ async function mlFatSyncBoletos(){
 async function mlFatCriarPagamento(key){
  var f=(ML_FAT||[]).filter(function(x){return mlFatKey(x)===key;})[0];
  if(!f){ toast('Fatura não encontrada — recarregue a página (Ctrl+Shift+R)',false); return; }
- var ven=(f.data_vencimento&&String(f.data_vencimento).slice(0,10))||(f.periodo_fim&&String(f.periodo_fim).slice(0,10))||'';
- var venProvisorio=false;
- if(!ven){
-  // usa o mesmo DIA de vencimento da ultima fatura dessa conta (faturas ML vencem sempre no mesmo dia)
-  var ant=(ML_FAT||[]).filter(function(x){return String(x.conta_interna_id)===String(f.conta_interna_id) && x!==f && x.data_vencimento;})
-                      .sort(function(a,b){return String(b.data_vencimento).localeCompare(String(a.data_vencimento));})[0];
-  if(ant){
-   var dia=new Date(String(ant.data_vencimento).slice(0,10)+'T12:00:00').getDate();
-   var hj=new Date(); hj.setHours(0,0,0,0);
-   var cand=new Date(hj.getFullYear(), hj.getMonth(), dia, 12, 0, 0);
-   while(cand<hj){ cand=new Date(cand.getFullYear(), cand.getMonth()+1, dia, 12, 0, 0); }
-   ven=cand.toISOString().slice(0,10);
-  } else { var _hj=new Date(); ven=new Date(_hj.getFullYear(),_hj.getMonth()+1,0).toISOString().slice(0,10); }
-  venProvisorio=true;
- }
+ var ven=mlFatProjData(f,'data_vencimento');
+ var venProvisorio=!f.data_vencimento;
+ if(!ven){ var _hj=new Date(); ven=new Date(_hj.getFullYear(),_hj.getMonth()+1,0).toISOString().slice(0,10); }
  var label=EF_CONTAS_LABEL[f.conta_interna_id]||f.conta_interna_id||'';
  var desc='Fatura Mercado Livre — '+label;
  var marca=mlFatKey(f);
@@ -3331,7 +3331,8 @@ async function rMlFatura(force){
   abertas.sort(function(a,b){return String(a.data_vencimento||'').localeCompare(String(b.data_vencimento||''));});
   h+='<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">';
   abertas.forEach(function(f){
-   var venc=f.data_vencimento?String(f.data_vencimento).slice(0,10):null;
+   var fechamento=mlFatProjData(f,'periodo_fim'), fechReal=!!f.periodo_fim;
+   var venc=mlFatProjData(f,'data_vencimento')||null, vencReal=!!f.data_vencimento;
    var dias=venc?Math.ceil((new Date(venc+'T00:00:00')-hoje)/86400000):null;
    var cor=(dias!=null&&dias<=3)?'#d9534f':((dias!=null&&dias<=7)?'#d6912b':'#6b4e8a');
    var itens=(ML_FAT_IT||[]).filter(function(i){
@@ -3345,8 +3346,9 @@ async function rMlFatura(force){
    h+='<div style="font-size:26px;font-weight:800;font-family:var(--FONT-M);color:'+cor+';margin-top:4px;">'+fv(f.valor_total)+'</div>';
    h+='<div style="font-size:11px;color:var(--MU);margin-top:2px;">pendente de pagamento (s&oacute; o que voc&ecirc; paga; o resto j&aacute; sai da venda)</div></div>';
    h+='<div style="text-align:right;">';
-   if(venc){ h+='<div style="font-size:11px;color:var(--MU);text-transform:uppercase;letter-spacing:.6px;">Vencimento</div><div style="font-size:16px;font-weight:800;color:'+cor+';">'+venc.split('-').reverse().join('/')+'</div>'+((dias!=null)?('<div style="font-size:11px;color:'+cor+';font-weight:700;">'+(dias<0?'venceu':(dias===0?'vence hoje':'em '+dias+' dia'+(dias>1?'s':'')))+'</div>'):''); }
-   else { h+='<div style="font-size:11px;color:var(--MU);">sem vencimento ainda</div>'; }
+   if(fechamento){ h+='<div style="font-size:10px;color:var(--MU);text-transform:uppercase;letter-spacing:.6px;">Fecha</div><div style="font-size:14px;font-weight:700;color:var(--TX);">'+fechamento.split('-').reverse().join('/')+(fechReal?'':' <span style="font-size:9px;color:var(--MU);font-weight:600;">prev.</span>')+'</div>'; }
+   if(venc){ h+='<div style="font-size:10px;color:var(--MU);text-transform:uppercase;letter-spacing:.6px;margin-top:6px;">Vencimento</div><div style="font-size:16px;font-weight:800;color:'+cor+';">'+venc.split('-').reverse().join('/')+(vencReal?'':' <span style="font-size:9px;color:var(--MU);font-weight:600;">prev.</span>')+'</div>'+((dias!=null)?('<div style="font-size:11px;color:'+cor+';font-weight:700;">'+(dias<0?'venceu':(dias===0?'vence hoje':'em '+dias+' dia'+(dias>1?'s':'')))+'</div>'):''); }
+   if(!fechamento && !venc){ h+='<div style="font-size:11px;color:var(--MU);">sem datas ainda</div>'; }
    h+='</div></div>';
    var tipos=Object.keys(porTipo);
    if(tipos.length){
