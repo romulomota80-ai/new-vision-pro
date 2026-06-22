@@ -739,7 +739,7 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
  <div class="lbar" id="fcbar" style="overflow-x:auto;flex-wrap:nowrap;">
   <button class="ltab on" data-fc="co" onclick="fcAba('co')">💰 Contas</button>
   <button class="ltab" data-fc="bk" onclick="fcAba('bk')">🔗 Bancos</button>
-  <button class="ltab" data-fc="sr" onclick="fcAba('sr')">💸 Saques & Recebíveis</button>
+  <button class="ltab" data-fc="sr" onclick="fcAba('sr')">💰 A receber</button>
   <button class="ltab" data-fc="mv" onclick="fcAba('mv')">🔄 Movimentações</button>
   <button class="ltab" data-fc="cm" onclick="fcAba('cm')">📤 Compromissos</button>
   <button class="ltab" data-fc="fi" onclick="fcAba('fi')">🏦 Financiamentos</button>
@@ -2318,7 +2318,7 @@ function fcAba(t){
  });
  if(t==="co" && typeof rContas==="function") rContas();
  if(t==="bk" && typeof rBancos==="function") rBancos();
- if(t==="sr" && typeof rSaquesRec==="function") rSaquesRec();
+ if(t==="sr" && typeof rAReceber==="function") rAReceber();
 }
 
 // ============ BANCOS (Open Finance) ============
@@ -3990,6 +3990,60 @@ function srSubAba(t){
  SR_CONTA_FILTRO="todas";
  SR_CONTA_VIEW=null;
  rSaquesRec();
+}
+
+// ── A RECEBER DAS PLATAFORMAS (substitui Saques & Recebíveis) ──
+function mpNomeReceb(r){
+ if(r.mp){ var m=MPS.filter(function(x){return x.id===r.mp;})[0]; if(m) return m.nome; }
+ if(r.origem){ return String(r.origem).split(' - ')[0]; }
+ return 'Outros';
+}
+function corMpReceb(nome){ var m=MPS.filter(function(x){return x.nome===nome;})[0]; return (m&&m.cor)?m.cor:'#6b4e8a'; }
+function rAReceber(){
+ var el=ge('fc-sr'); if(!el) return;
+ var pend=RECEBIVEIS.filter(function(r){ return (r.status||'previsto')==='previsto'; });
+ var hoje=new Date(); hoje.setHours(0,0,0,0);
+ function diasAte(d){ if(!d) return null; var dt=new Date(String(d).slice(0,10)+'T12:00:00'); return Math.ceil((dt-hoje)/86400000); }
+ var total=0,t7=0,t30=0,porMp={};
+ pend.forEach(function(r){
+  var v=r.valor||0; total+=v;
+  var dd=diasAte(r.data);
+  if(dd!=null&&dd<=7) t7+=v;
+  if(dd!=null&&dd<=30) t30+=v;
+  var nome=mpNomeReceb(r);
+  if(!porMp[nome]) porMp[nome]={nome:nome,total:0,itens:[]};
+  porMp[nome].total+=v; porMp[nome].itens.push(r);
+ });
+ var plats=Object.keys(porMp).map(function(k){return porMp[k];}).sort(function(a,b){return b.total-a.total;});
+ var h='';
+ h+='<div style="font-family:var(--FONT-H);font-size:18px;font-weight:800;margin-bottom:4px;">💰 A receber das plataformas</div>';
+ h+='<div style="font-size:11px;color:var(--MU);margin-bottom:14px;">Dinheiro das vendas que ainda vai cair (Mercado Livre/Mercado Pago, Shopee…).</div>';
+ h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;">';
+ h+=efKpi('Total a receber', fv(total), pend.length+' lançamentos', '#5a8a3a');
+ h+=efKpi('A cair em 7 dias', fv(t7), 'próximos 7d', 'var(--TX)');
+ h+=efKpi('A cair em 30 dias', fv(t30), 'próximos 30d', 'var(--TX)');
+ h+='</div>';
+ if(!pend.length){ h+='<div class="card" style="padding:36px;text-align:center;color:var(--MU);">Nada a receber no momento.</div>'; el.innerHTML=h; return; }
+ h+='<div style="display:flex;flex-direction:column;gap:10px;">';
+ plats.forEach(function(p){
+  var cor=corMpReceb(p.nome);
+  p.itens.sort(function(a,b){return String(a.data||'').localeCompare(String(b.data||''));});
+  h+='<div class="card" style="padding:0;overflow:hidden;">';
+  h+='<div style="padding:11px 14px;background:'+cor+'14;border-bottom:1px solid var(--BR);display:flex;justify-content:space-between;align-items:center;">';
+  h+='<div style="font-size:13px;font-weight:800;color:'+cor+';">'+p.nome+'</div>';
+  h+='<div style="font-size:15px;font-weight:800;font-family:var(--FONT-M);color:'+cor+';">'+fv(p.total)+'</div></div>';
+  p.itens.slice(0,60).forEach(function(r){
+   var dd=diasAte(r.data);
+   var dtxt=r.data?String(r.data).slice(0,10).split('-').reverse().join('/'):'—';
+   var ddtxt=dd!=null?(dd<0?'venceu':(dd===0?'hoje':'em '+dd+'d')):'';
+   h+='<div style="padding:9px 14px;border-top:1px solid var(--BR);display:flex;justify-content:space-between;align-items:center;gap:10px;">';
+   h+='<div style="font-size:11px;color:var(--MU);min-width:0;">'+dtxt+(ddtxt?' · '+ddtxt:'')+(r.obs?' · '+r.obs:'')+'</div>';
+   h+='<div style="font-size:13px;font-weight:700;font-family:var(--FONT-M);flex-shrink:0;">'+fv(r.valor)+'</div></div>';
+  });
+  h+='</div>';
+ });
+ h+='</div>';
+ el.innerHTML=h;
 }
 
 function rSaquesRec(){
