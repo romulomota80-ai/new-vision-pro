@@ -3031,15 +3031,16 @@ async function varDel(id){
 
 // ═══ ADS (Mercado Livre + Shopee) ══════════════════════════════
 var ADS_RAW=null, ADS_MKT='todos', ADS_CONTA='todas', ADS_PER=30;
-var ADS_ACOS_ALVO=0.20; // ACOS alvo (ajustavel). Acima disso = campanha "ruim".
+var ADS_ACOS_BOM=0.05;  // ACOS <= 5% = saudavel (no alvo: mantem os ~10% finais)
+var ADS_ACOS_RUIM=0.10; // ACOS > 10% = ruim. Entre 5% e 10% = atencao.
 function adsMktLabel(m){ return m==='ml'?'Mercado Livre':(m==='shopee'?'Shopee':(m||'—')); }
 function adsContaLabel(c){ return EF_CONTAS_LABEL[c]||c||'—'; }
 function adsSaude(inv,ven){
  if(inv<=0) return {k:'sem',lbl:'sem gasto',cor:'var(--MU)',bg:'rgba(150,150,150,.12)'};
  if(ven<=0) return {k:'ruim',lbl:'gastou sem vender',cor:'#d9534f',bg:'rgba(217,83,79,.16)'};
  var a=inv/ven;
- if(a>ADS_ACOS_ALVO) return {k:'ruim',lbl:'ACOS alto',cor:'#d9534f',bg:'rgba(217,83,79,.16)'};
- if(a>ADS_ACOS_ALVO*0.6) return {k:'aten',lbl:'atencao',cor:'#d6912b',bg:'rgba(214,145,43,.16)'};
+ if(a>ADS_ACOS_RUIM) return {k:'ruim',lbl:'ACOS alto',cor:'#d9534f',bg:'rgba(217,83,79,.16)'};
+ if(a>ADS_ACOS_BOM) return {k:'aten',lbl:'atencao',cor:'#d6912b',bg:'rgba(214,145,43,.16)'};
  return {k:'bom',lbl:'saudavel',cor:'#3a8a4a',bg:'rgba(58,138,74,.16)'};
 }
 function adsMkt(m){ ADS_MKT=m; ADS_CONTA='todas'; rAds(); }
@@ -3111,7 +3112,7 @@ async function rAds(force){
  h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;">';
  h+=efKpi('Investimento', fv(tInv), 'em Ads no per&iacute;odo', 'var(--R)');
  h+=efKpi('Vendas Ads', fv(tVen), fmtNum(tQtd)+' un atribu&iacute;das', 'var(--G)');
- h+=efKpi('ACOS', tVen>0?(acosTot*100).toFixed(1)+'%':'&#8212;', 'gasto &divide; venda Ads', acosTot>ADS_ACOS_ALVO?'#d9534f':'var(--TX)');
+ h+=efKpi('ACOS', tVen>0?(acosTot*100).toFixed(1)+'%':'&#8212;', 'gasto &divide; venda Ads', acosTot>ADS_ACOS_RUIM?'#d9534f':'var(--TX)');
  h+=efKpi('Ralos', fmtNum(ralos), 'campanhas no vermelho', ralos>0?'#d9534f':'var(--TX)');
  h+='</div>';
 
