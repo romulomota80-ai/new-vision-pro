@@ -1085,7 +1085,6 @@ async function carregarTudo(){
   CONTAS_BANC = rContasBanc.data.map(function(c){ return {
    id:c.id, nome:c.nome, banco:c.banco, tipo:c.tipo,
    saldo:parseFloat(c.saldo_atual)||0,
-   cheque:parseFloat(c.cheque_especial_limite)||0,
    cnpj:c.cnpj||"", agencia:c.agencia||"", numero:c.numero_conta||"",
    ativa:c.ativa!==false, obs:c.observacao||"",
    titular:c.titular||"", palavras_chave:c.palavras_chave||"",
@@ -3246,6 +3245,28 @@ function mlAba(t){
 }
 var ML_FAT=null, ML_FAT_IT=null;
 function mlFatAberta(f){ return f.aberto===true || f.status==='aberta' || f.status==='aberto'; }
+function mlFatTipoLabel(t){
+ var m={ads:'📣 Publicidade (Ads)', publicidade:'📣 Publicidade (Ads)', tarifa_venda:'Tarifa de venda', full_armazenagem:'📦 Envios / Full', envios_full:'📦 Envios / Full', estoque_antigo:'Estoque antigo', frete:'Frete', impostos:'Impostos', imposto:'Impostos', minha_pagina:'Minha página', outros:'Outros'};
+ return m[t]||String(t).replace(/_/g,' ');
+}
+async function mlFatCriarPagamento(i){
+ var f=(ML_FAT||[])[i]; if(!f) return;
+ if(!f.data_vencimento){ toast('Essa fatura ainda não tem vencimento',false); return; }
+ var label=EF_CONTAS_LABEL[f.conta_interna_id]||f.conta_interna_id||'';
+ var desc='Fatura Mercado Livre — '+label;
+ var ven=String(f.data_vencimento).slice(0,10);
+ var val=parseFloat(f.valor_total)||0;
+ if(BOL.filter(function(b){return b.desc===desc && b.ven===ven;})[0]){ toast('Já existe um pagamento dessa fatura no calendário',false); return; }
+ if(!confirm('Criar pagamento de '+fv(val)+' (Fatura ML '+label+') com vencimento '+ven.split('-').reverse().join('/')+'?')) return;
+ try{
+  var payload={descricao:desc, valor:val, vencimento:ven, status:'pendente', categoria:'Tarifas ML', recorrente:false, tipo:'boleto', favorecido:'Mercado Livre'};
+  var {data,error}=await sb.from('boletos').insert(payload).select().single();
+  if(error) throw error;
+  BOL.push({id:data.id, desc:desc, val:val, ven:ven, st:'p', cat:data.categoria, rec:false, cod:'', link:'', arq:null, tipo:'boleto', chave:'', fav:'Mercado Livre', parc_at:null, parc_tot:null});
+  toast('Pagamento criado no calendário ✓',true);
+  rMlFatura();
+ }catch(e){ toast('Erro: '+e.message,false); }
+}
 async function rMlFatura(force){
  var s=ge('ml-fa'); if(!s) return;
  if(force || !ML_FAT){
@@ -3290,10 +3311,18 @@ async function rMlFatura(force){
    h+='</div></div>';
    var tipos=Object.keys(porTipo);
    if(tipos.length){
-    h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;">';
-    tipos.sort(function(a,b){return porTipo[b]-porTipo[a];}).forEach(function(t){ h+='<span style="font-size:10px;background:var(--C2);border:1px solid var(--BR);border-radius:8px;padding:3px 8px;font-weight:600;">'+String(t).replace(/_/g,' ')+': <b>'+fv(porTipo[t])+'</b></span>'; });
+    h+='<div style="margin-top:12px;border-top:1px solid var(--BR);padding-top:10px;">';
+    h+='<div style="font-size:10px;color:var(--MU);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;">O que tem nessa fatura</div>';
+    tipos.sort(function(a,b){return porTipo[b]-porTipo[a];}).forEach(function(t){ h+='<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid var(--BR);"><span style="color:var(--TX);">'+mlFatTipoLabel(t)+'</span><span style="font-weight:700;font-family:var(--FONT-M);">'+fv(porTipo[t])+'</span></div>'; });
     h+='</div>';
-   } else { h+='<div style="font-size:10px;color:var(--MU);margin-top:10px;">Detalhamento por tipo entra ap&oacute;s o pr&oacute;ximo sync (cron 04:20).</div>'; }
+   } else { h+='<div style="font-size:10px;color:var(--MU);margin-top:10px;">O detalhamento por tipo entra ap&oacute;s o pr&oacute;ximo sync (cron 04:20).</div>'; }
+   var fDesc='Fatura Mercado Livre — '+(EF_CONTAS_LABEL[f.conta_interna_id]||f.conta_interna_id||'');
+   var fVen=f.data_vencimento?String(f.data_vencimento).slice(0,10):'';
+   var jaPg=BOL.filter(function(b){return b.desc===fDesc && b.ven===fVen;})[0];
+   h+='<div style="display:flex;justify-content:flex-end;align-items:center;margin-top:12px;">';
+   if(jaPg){ h+='<span style="font-size:11px;color:#3a8a4a;font-weight:700;">&#10003; Pagamento j&aacute; no calend&aacute;rio</span>'; }
+   else { h+='<button onclick="mlFatCriarPagamento('+ML_FAT.indexOf(f)+')" style="padding:6px 13px;border-radius:7px;background:rgba(107,78,138,.12);border:1px solid rgba(107,78,138,.4);color:#6b4e8a;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">&#10133; Criar pagamento no calend&aacute;rio</button>'; }
+   h+='</div>';
    h+='</div>';
   });
   h+='</div>';
@@ -3779,7 +3808,6 @@ function rContas(){
    h+='<div style="font-size:11px;color:var(--MU);margin-bottom:3px;">'+c.nome+'</div>';
    if(c.titular) h+='<div style="font-size:11px;font-weight:700;color:var(--TX);margin:-1px 0 4px;">👤 '+c.titular+'</div>';
    h+='<div style="font-size:22px;font-weight:800;color:'+(c.saldo>=0?"#5a8a3a":"#a04040")+';font-family:var(--FONT-M);">'+fv(c.saldo)+'</div>';
-   h+='<div onclick="contaSetCheque('+c.id+')" style="font-size:10px;color:var(--MU);margin-top:4px;cursor:pointer;" title="Clique para definir o limite do cheque especial">💳 Cheque especial: <b style="color:'+(c.cheque>0?'#6b4e8a':'var(--MU)')+';">'+(c.cheque>0?fv(c.cheque):'definir')+'</b></div>';
    if(c.of||c.ultima_sync){
     h+='<div id="csync-'+c.id+'" style="font-size:10px;color:var(--MU);margin-top:5px;">'+(c.ultima_sync?('🕐 Atualizado '+tempoAtras(c.ultima_sync)):'🕐 nunca atualizado')+'</div>';
    }
@@ -3817,18 +3845,6 @@ function rContas(){
  h+='</div></div></div>';
 
  el.innerHTML=h;
-}
-
-async function contaSetCheque(id){
- var c=CONTAS_BANC.filter(function(x){return x.id===id;})[0]; if(!c) return;
- var v=prompt('Limite do cheque especial de '+c.nome+' (R$):', c.cheque||0);
- if(v===null) return;
- var num=parseFloat(String(v).replace(/\./g,'').replace(',','.'))||0;
- try{
-  var u=await sb.from('contas_bancarias').update({cheque_especial_limite:num}).eq('id',id);
-  if(u.error) throw u.error;
-  c.cheque=num; toast('Cheque especial atualizado ✓',true); rContas();
- }catch(e){ toast('Erro: '+e.message,false); }
 }
 
 // Busca a cota de dados restante por conta (Open Finance) e preenche os cards.
@@ -6335,14 +6351,6 @@ function rCal(){
  var ano=new Date().getFullYear(),m=CAL_M,nd=new Date(ano,m+1,0).getDate(),pd=new Date(ano,m,1).getDay();
  var bm=BOL.filter(function(b){var d=new Date(b.ven+"T12:00:00");return d.getMonth()===m&&d.getFullYear()===ano;});
  var bpd={};bm.forEach(function(b){var d=new Date(b.ven+"T12:00:00").getDate();if(!bpd[d])bpd[d]=[];bpd[d].push(b);});
- // Avisa a Fatura ML (aberta) no dia do vencimento, como pagamento a vir
- (FATURAS_ML||[]).filter(mlFatAberta).forEach(function(f){
-  if(!f.data_vencimento) return;
-  var fdv=new Date(String(f.data_vencimento).slice(0,10)+"T12:00:00");
-  if(fdv.getMonth()!==m||fdv.getFullYear()!==ano) return;
-  var it={ven:String(f.data_vencimento).slice(0,10), val:parseFloat(f.valor_total)||0, desc:'💳 Fatura Mercado Livre — '+(EF_CONTAS_LABEL[f.conta_interna_id]||f.conta_interna_id||''), fav:'Fatura ML', st:'p', _faturaML:true};
-  bm.push(it); var dd=fdv.getDate(); if(!bpd[dd])bpd[dd]=[]; bpd[dd].push(it);
- });
  var bds=CAL_D&&bpd[CAL_D]?bpd[CAL_D]:[];
  var totalPend=bm.filter(function(b){return b.st==="p";}).reduce(function(s,b){return s+b.val;},0);
  var totalPago=bm.filter(function(b){return b.st==="pago";}).reduce(function(s,b){return s+b.val;},0);
