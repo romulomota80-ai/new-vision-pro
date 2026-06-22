@@ -3245,7 +3245,11 @@ function mlAba(t){
  if(t==='fa') rMlFatura();
 }
 var ML_FAT=null, ML_FAT_IT=null;
-function mlFatAberta(f){ return f.aberto===true || f.status==='aberta' || f.status==='aberto'; }
+function mlFatAberta(f){
+ var st=String(f.status||'').toLowerCase();
+ if(st==='pago'||st==='paga'||st==='cancelada'||st==='cancelado') return false; // resolvida -> nao mostra
+ return f.aberto===true || st.indexOf('abert')>=0 || st.indexOf('pendente')>=0;
+}
 function mlFatTipoLabel(t){
  var m={ads:'📣 Publicidade (Ads)', publicidade:'📣 Publicidade (Ads)', tarifa_venda:'Tarifa de venda', full_armazenagem:'📦 Envios / Full', envios_full:'📦 Envios / Full', estoque_antigo:'Estoque antigo', frete:'Frete', impostos:'Impostos', imposto:'Impostos', minha_pagina:'Minha página', outros:'Outros'};
  return m[t]||String(t).replace(/_/g,' ');
