@@ -721,9 +721,11 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
  <div class="chips" style="margin-bottom:14px;">
   <button class="chip on" data-ml="ef" onclick="mlAba('ef')">📦 Estoque Full</button>
   <button class="chip" data-ml="ca" onclick="mlAba('ca')">🚚 A caminho</button>
+  <button class="chip" data-ml="fa" onclick="mlAba('fa')">💳 Fatura</button>
  </div>
  <div id="ml-ef" style="display:block;"></div>
  <div id="ml-ca" style="display:none;"></div>
+ <div id="ml-fa" style="display:none;"></div>
 </div>
 <div id="s-ads" class="scr"></div>
 <div id="s-al" class="scr"></div>
@@ -3231,12 +3233,81 @@ var ML_SUBABA='ef', ML_INBOUND=null;
 function rMl(){ mlAba(ML_SUBABA); }
 function mlAba(t){
  ML_SUBABA=t;
- ['ef','ca'].forEach(function(x){
+ ['ef','ca','fa'].forEach(function(x){
   var bt=document.querySelector('[data-ml="'+x+'"]'); if(bt) bt.classList.toggle('on', x===t);
   var pn=ge('ml-'+x); if(pn) pn.style.display=(x===t)?'block':'none';
  });
  if(t==='ef') rEF();
  if(t==='ca') rMlCaminho();
+ if(t==='fa') rMlFatura();
+}
+var ML_FAT=null, ML_FAT_IT=null;
+function mlFatAberta(f){ return f.aberto===true || f.status==='aberta' || f.status==='aberto'; }
+async function rMlFatura(force){
+ var s=ge('ml-fa'); if(!s) return;
+ if(force || !ML_FAT){
+  s.innerHTML='<div style="padding:40px;text-align:center;color:var(--MU);">Carregando faturas...</div>';
+  try{
+   var rf=await sb.from('ml_faturas').select('*').order('data_vencimento',{ascending:false});
+   if(rf.error) throw rf.error;
+   ML_FAT=rf.data||[];
+   var ri=await sb.from('ml_fatura_itens').select('*');
+   ML_FAT_IT=(ri.error?[]:(ri.data||[]));
+  }catch(e){
+   s.innerHTML='<div class="card" style="padding:40px;text-align:center;color:var(--MU);"><div style="font-size:34px;margin-bottom:8px;">&#128179;</div><div style="font-size:13px;font-weight:700;color:var(--TX);">Fatura ainda n&atilde;o dispon&iacute;vel</div><div style="font-size:11px;margin-top:6px;">Aguardando o sync do backend (ml_faturas).</div></div>';
+   return;
+  }
+ }
+ var fats=ML_FAT||[];
+ var h='';
+ h+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px;">';
+ h+='<div style="font-family:var(--FONT-H);font-size:18px;font-weight:800;">&#128179; Fatura Mercado Livre</div>';
+ h+='<button class="btn" onclick="rMlFatura(true)">&#8635; Atualizar</button></div>';
+ h+='<div style="font-size:11px;color:var(--MU);margin-bottom:14px;">Custos que o ML cobra de uma vez (Ads + tarifa + Full + estoque antigo) &mdash; o acumulado do per&iacute;odo aberto + vencimento.</div>';
+ if(!fats.length){ h+='<div class="card" style="padding:40px;text-align:center;color:var(--MU);">Nenhuma fatura sincronizada ainda.</div>'; s.innerHTML=h; return; }
+ var hoje=new Date();
+ var abertas=fats.filter(mlFatAberta), fechadas=fats.filter(function(f){return !mlFatAberta(f);});
+ if(abertas.length){
+  abertas.sort(function(a,b){return String(a.data_vencimento||'').localeCompare(String(b.data_vencimento||''));});
+  h+='<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">';
+  abertas.forEach(function(f){
+   var venc=f.data_vencimento?String(f.data_vencimento).slice(0,10):null;
+   var dias=venc?Math.ceil((new Date(venc+'T00:00:00')-hoje)/86400000):null;
+   var cor=(dias!=null&&dias<=3)?'#d9534f':((dias!=null&&dias<=7)?'#d6912b':'#6b4e8a');
+   var itens=(ML_FAT_IT||[]).filter(function(i){return i.documento_id===f.documento_id;});
+   var porTipo={}; itens.forEach(function(i){ porTipo[i.tipo]=(porTipo[i.tipo]||0)+(parseFloat(i.valor)||0); });
+   h+='<div class="card" style="padding:16px;border:1px solid '+cor+'44;">';
+   h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">';
+   h+='<div><div style="font-size:11px;color:var(--MU);text-transform:uppercase;letter-spacing:.6px;">Pr&oacute;xima fatura &middot; '+(EF_CONTAS_LABEL[f.conta_interna_id]||f.conta_interna_id||'')+'</div>';
+   h+='<div style="font-size:26px;font-weight:800;font-family:var(--FONT-M);color:'+cor+';margin-top:4px;">'+fv(f.valor_total)+'</div>';
+   h+='<div style="font-size:11px;color:var(--MU);margin-top:2px;">acumulado at&eacute; agora no per&iacute;odo aberto</div></div>';
+   h+='<div style="text-align:right;">';
+   if(venc){ h+='<div style="font-size:11px;color:var(--MU);text-transform:uppercase;letter-spacing:.6px;">Vencimento</div><div style="font-size:16px;font-weight:800;color:'+cor+';">'+venc.split('-').reverse().join('/')+'</div>'+((dias!=null)?('<div style="font-size:11px;color:'+cor+';font-weight:700;">'+(dias<0?'venceu':(dias===0?'vence hoje':'em '+dias+' dia'+(dias>1?'s':'')))+'</div>'):''); }
+   else { h+='<div style="font-size:11px;color:var(--MU);">sem vencimento ainda</div>'; }
+   h+='</div></div>';
+   var tipos=Object.keys(porTipo);
+   if(tipos.length){
+    h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;">';
+    tipos.sort(function(a,b){return porTipo[b]-porTipo[a];}).forEach(function(t){ h+='<span style="font-size:10px;background:var(--C2);border:1px solid var(--BR);border-radius:8px;padding:3px 8px;font-weight:600;">'+String(t).replace(/_/g,' ')+': <b>'+fv(porTipo[t])+'</b></span>'; });
+    h+='</div>';
+   } else { h+='<div style="font-size:10px;color:var(--MU);margin-top:10px;">Detalhamento por tipo entra ap&oacute;s o pr&oacute;ximo sync (cron 04:20).</div>'; }
+   h+='</div>';
+  });
+  h+='</div>';
+ }
+ if(fechadas.length){
+  h+='<div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--TX);">Hist&oacute;rico de faturas</div>';
+  h+='<div class="card" style="padding:0;overflow:hidden;">';
+  fechadas.slice(0,24).forEach(function(f,idx){
+   var venc=f.data_vencimento?String(f.data_vencimento).slice(0,10).split('-').reverse().join('/'):'—';
+   h+='<div style="padding:11px 14px;display:flex;justify-content:space-between;align-items:center;'+(idx>0?'border-top:1px solid var(--BR);':'')+'">';
+   h+='<div><div style="font-size:12px;font-weight:600;">'+(EF_CONTAS_LABEL[f.conta_interna_id]||f.conta_interna_id||'')+' &middot; venc '+venc+'</div><div style="font-size:10px;color:var(--MU);">'+(f.status||'')+'</div></div>';
+   h+='<div style="font-size:14px;font-weight:800;font-family:var(--FONT-M);">'+fv(f.valor_total)+'</div>';
+   h+='</div>';
+  });
+  h+='</div>';
+ }
+ s.innerHTML=h;
 }
 async function rMlCaminho(force){
  var s=ge('ml-ca'); if(!s) return;
