@@ -2,6 +2,23 @@
 
 Log das mudanças e decisões. O mais recente em cima.
 
+## 2026-06-22
+
+### Ads / Marketing — planta escrita (`docs/ads.md`)
+- Usuário priorizou **Ads** (gasto alto). Quer "tudo": puxar dados, ver ACOS por
+  anúncio, recomendar cortes e **automatizar** (pausar/ajustar campanha). Plataformas:
+  **ML + Shopee**.
+- Decidido escrever o **contrato** front↔backend antes de codar: tabelas `ads_metrics`
+  (unificada ML+Shopee, grão diário) e `ads_campanhas` (estado p/ automação), o que o
+  backend precisa expor (sync ML/Shopee + endpoints de escrita `/api/ads/*`), e o que o
+  front/IA faz por fase. Travas de segurança da automação (dry-run, aprovação, guardrails,
+  kill switch). Roadmap aponta pro doc.
+- **Adiado:** a ideia de transformar a aba Produtos em "Anúncios" — usuário decidiu
+  focar em Ads primeiro.
+- Próximo passo executável **sem backend**: Fase 0 (painel macro de TACOS + alerta de
+  teto) usando `receitas.ads` que já existe. Backend (ML/Shopee Ads API) precisa do repo
+  `new-vision-backend` na sessão.
+
 ## 2026-06-21
 
 ### Romaneio por pedido (Fornecedores)

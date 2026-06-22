@@ -23,12 +23,15 @@ canal** (bot — hoje Telegram, futuro WhatsApp).
 ## Abas novas planejadas
 
 ### Ads / Marketing (ML + Shopee juntas; Meta no futuro)
-- Uma aba só pra todos os canais de anúncio.
-- KPIs: ACOS/ROAS por canal, campanha e produto; gasto de Ads vs faturamento.
-- Joga o custo de Ads na **margem real do produto** e na **DRE** (despesa operacional).
-- Já existe começo no código: `Margem bruta → Após ADS → Margem real`.
-- ⚠️ Fonte do dado: ML Ads API / Shopee Marketing API (pode exigir escopo extra).
-  Fallback inicial: **import CSV** (igual SKU), automatizar depois.
+- 📄 **Planta detalhada em `docs/ads.md`** (contrato de dados + backend + fases).
+- Dor do usuário: **gasto com Ads muito alto** → enxergar ralo (ACOS por anúncio),
+  recomendar cortes e (meta final) **automatizar** pausar/ajustar campanha.
+- Uma aba só pra todos os canais de anúncio. KPIs: ACOS/ROAS por canal, campanha e
+  produto; Ads vs faturamento (TACOS); joga o custo na **margem real** e na **DRE**.
+- Já existe começo no código: `Margem bruta → Após ADS → Margem real` (macro, manual).
+- ⚠️ Fonte do dado: ML Ads API / Shopee Marketing API (backend, pode exigir escopo
+  extra). Fallback inicial: **import CSV**. Fase 0 dá pra fazer **só no front** (TACOS
+  + alerta de teto) com o `receitas.ads` que já existe.
 
 ### Fechamento / DRE mensal
 - Resultado consolidado do mês em **regime de competência** (não caixa).
