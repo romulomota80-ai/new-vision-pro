@@ -3276,7 +3276,19 @@ async function mlFatCriarPagamento(conta){
  if(!f){ toast('Fatura não encontrada — recarregue a página (Ctrl+Shift+R)',false); return; }
  var ven=(f.data_vencimento&&String(f.data_vencimento).slice(0,10))||(f.periodo_fim&&String(f.periodo_fim).slice(0,10))||'';
  var venProvisorio=false;
- if(!ven){ var _hj=new Date(); ven=new Date(_hj.getFullYear(),_hj.getMonth()+1,0).toISOString().slice(0,10); venProvisorio=true; }
+ if(!ven){
+  // usa o mesmo DIA de vencimento da ultima fatura dessa conta (faturas ML vencem sempre no mesmo dia)
+  var ant=(ML_FAT||[]).filter(function(x){return String(x.conta_interna_id)===String(f.conta_interna_id) && x!==f && x.data_vencimento;})
+                      .sort(function(a,b){return String(b.data_vencimento).localeCompare(String(a.data_vencimento));})[0];
+  if(ant){
+   var dia=new Date(String(ant.data_vencimento).slice(0,10)+'T12:00:00').getDate();
+   var hj=new Date(); hj.setHours(0,0,0,0);
+   var cand=new Date(hj.getFullYear(), hj.getMonth(), dia, 12, 0, 0);
+   while(cand<hj){ cand=new Date(cand.getFullYear(), cand.getMonth()+1, dia, 12, 0, 0); }
+   ven=cand.toISOString().slice(0,10);
+  } else { var _hj=new Date(); ven=new Date(_hj.getFullYear(),_hj.getMonth()+1,0).toISOString().slice(0,10); }
+  venProvisorio=true;
+ }
  var label=EF_CONTAS_LABEL[f.conta_interna_id]||f.conta_interna_id||'';
  var desc='Fatura Mercado Livre — '+label;
  var marca=mlFatKey(f);
