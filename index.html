@@ -3270,6 +3270,18 @@ function mlFatProjData(f, campo){
  while(cand<hj){ cand=new Date(cand.getFullYear(), cand.getMonth()+1, dia, 12,0,0); }
  return cand.toISOString().slice(0,10);
 }
+// Vencimento: real se houver; senao = fechamento + offset (dias entre venc e fecha de uma fatura ref).
+function mlFatVenc(f){
+ if(f.data_vencimento) return {data:String(f.data_vencimento).slice(0,10), real:true};
+ var fecha=mlFatProjData(f,'periodo_fim');
+ if(!fecha) return {data:'', real:false};
+ var ref=(ML_FAT||[]).filter(function(x){return String(x.conta_interna_id)===String(f.conta_interna_id) && x!==f && x.data_vencimento && x.periodo_fim;})
+                     .sort(function(a,b){return String(b.periodo_fim).localeCompare(String(a.periodo_fim));})[0];
+ var off=6;
+ if(ref){ var dv=new Date(String(ref.data_vencimento).slice(0,10)+'T12:00:00'); var pf=new Date(String(ref.periodo_fim).slice(0,10)+'T12:00:00'); var o=Math.round((dv-pf)/86400000); if(o>=0&&o<=40) off=o; }
+ var d=new Date(fecha+'T12:00:00'); d.setDate(d.getDate()+off);
+ return {data:d.toISOString().slice(0,10), real:false};
+}
 // Mantem os boletos das faturas ML sincronizados com o valor atual da fatura (ate marcar pago).
 async function mlFatSyncBoletos(){
  if(!FATURAS_ML||!FATURAS_ML.length||!Array.isArray(BOL)) return;
@@ -3289,8 +3301,7 @@ async function mlFatSyncBoletos(){
 async function mlFatCriarPagamento(key){
  var f=(ML_FAT||[]).filter(function(x){return mlFatKey(x)===key;})[0];
  if(!f){ toast('Fatura não encontrada — recarregue a página (Ctrl+Shift+R)',false); return; }
- var ven=mlFatProjData(f,'data_vencimento');
- var venProvisorio=!f.data_vencimento;
+ var _v=mlFatVenc(f); var ven=_v.data; var venProvisorio=!_v.real;
  if(!ven){ var _hj=new Date(); ven=new Date(_hj.getFullYear(),_hj.getMonth()+1,0).toISOString().slice(0,10); }
  var label=EF_CONTAS_LABEL[f.conta_interna_id]||f.conta_interna_id||'';
  var desc='Fatura Mercado Livre — '+label;
@@ -3336,7 +3347,7 @@ async function rMlFatura(force){
   h+='<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">';
   abertas.forEach(function(f){
    var fechamento=mlFatProjData(f,'periodo_fim'), fechReal=!!f.periodo_fim;
-   var venc=mlFatProjData(f,'data_vencimento')||null, vencReal=!!f.data_vencimento;
+   var _v=mlFatVenc(f); var venc=_v.data||null, vencReal=_v.real;
    var dias=venc?Math.ceil((new Date(venc+'T00:00:00')-hoje)/86400000):null;
    var cor=(dias!=null&&dias<=3)?'#d9534f':((dias!=null&&dias<=7)?'#d6912b':'#6b4e8a');
    var itens=(ML_FAT_IT||[]).filter(function(i){
