@@ -7697,6 +7697,7 @@ async function foMigrarNumeros(){
 var FO_NOVA_DIVIDA = false;   // form "nova dívida" aberto no detalhe
 var FO_ABATER_PED = null;     // id do pedido livre com form "abater" aberto
 var AB_FILE_SEL = null;       // arquivo do comprovante escolhido no form abater (garante anexo no save)
+var AB_FILE_HASH = null;      // SHA-256 do comprovante escolhido (bloqueia reuso do mesmo arquivo)
 
 function foHoje(){ return cmHoje(); }
 
@@ -7978,8 +7979,23 @@ async function foSalvarDivida(fornId){
  }catch(e){ toast("Erro: "+e.message,false); if(btn){btn.disabled=false;btn.textContent="Criar dívida";} }
 }
 
-function pedAbaterForm(pedId){ FO_ABATER_PED=pedId; FO_NOVA_DIVIDA=false; AB_FILE_SEL=null; rFoDetalhe(); }
-function pedAbaterCancelar(){ FO_ABATER_PED=null; AB_FILE_SEL=null; rFoDetalhe(); }
+function pedAbaterForm(pedId){ FO_ABATER_PED=pedId; FO_NOVA_DIVIDA=false; AB_FILE_SEL=null; AB_FILE_HASH=null; rFoDetalhe(); }
+function pedAbaterCancelar(){ FO_ABATER_PED=null; AB_FILE_SEL=null; AB_FILE_HASH=null; rFoDetalhe(); }
+
+// SHA-256 (hex) do conteúdo do arquivo — identifica "o mesmo comprovante".
+async function sha256File(file){
+ var buf=await file.arrayBuffer();
+ var h=await crypto.subtle.digest('SHA-256', buf);
+ return Array.prototype.map.call(new Uint8Array(h), function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+}
+// Procura o mesmo hash em QUALQUER abatimento já lançado. Retorna o registro ou null.
+async function comprovanteDuplicado(hash){
+ if(!hash) return null;
+ try{
+  var dup=await sb.from('pedido_pagamentos').select('id,valor,data,pedido_id').eq('comprovante_hash',hash).limit(1);
+  return (dup && dup.data && dup.data.length) ? dup.data[0] : null;
+ }catch(_){ return null; }   // se a checagem falhar, não trava o fluxo
+}
 
 function foRecalcDivida(pedId){
  var p=PED_LIVRE.filter(function(x){return x.id===pedId;})[0]; if(!p) return;
@@ -7998,6 +8014,17 @@ async function abFileNome(pedId){
  if(sp) sp.textContent=nome;
  if(!f) return;
  if(f.size>10*1024*1024){ toast("Comprovante acima de 10MB.",false); return; }
+ // bloqueia o MESMO comprovante (hash) já usado em qualquer abatimento
+ if(sp) sp.textContent="⏳ verificando...";
+ AB_FILE_HASH=null;
+ try{ AB_FILE_HASH=await sha256File(f); }catch(_){}
+ var jaUsado=await comprovanteDuplicado(AB_FILE_HASH);
+ if(jaUsado){
+  AB_FILE_SEL=null; AB_FILE_HASH=null;
+  if(inp) inp.value=""; if(sp) sp.textContent="Comprovante";
+  toast("🚫 Esse comprovante já foi usado (abatimento de "+fv(jaUsado.valor)+" em "+fd(jaUsado.data)+"). Não dá pra usar de novo.",false);
+  return;
+ }
  if(sp) sp.textContent="⏳ lendo...";
  try{
   var form=new FormData(); form.append("file",f);
@@ -8027,6 +8054,16 @@ async function pedAbaterSalvar(pedId){
  if(!valor||valor<=0){ toast("Informe o valor a abater.",false); return; }
  if(!data){ toast("Informe a data.",false); return; }
  var btn=ge("ab-btn-"+pedId); if(btn){btn.disabled=true;btn.textContent="...";}
+ // garante o hash do arquivo e re-checa duplicado (evita corrida entre abas)
+ if(file && !AB_FILE_HASH){ try{ AB_FILE_HASH=await sha256File(file); }catch(_){} }
+ if(file){
+  var dupSave=await comprovanteDuplicado(AB_FILE_HASH);
+  if(dupSave){
+   toast("🚫 Esse comprovante já foi usado (abatimento de "+fv(dupSave.valor)+" em "+fd(dupSave.data)+").",false);
+   if(btn){btn.disabled=false;btn.textContent="Abater";}
+   return;
+  }
+ }
  try{
   var j=await coFetch(coAPI()+'/api/pedidos/'+pedId+'/pagamento',{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({valor:valor,data:data,obs:obs.trim()||null,origem:"manual"})});
   if(!j.ok) throw new Error(j.erro||"falhou");
@@ -8035,12 +8072,12 @@ async function pedAbaterSalvar(pedId){
   if(file){
    try{
     var url=await _uploadAnexo('abatimento_'+pag.id, file, 0);
-    await sb.from('pedido_pagamentos').update({comprovantes:[url], comprovante_url:url}).eq('id',pag.id);
-    pag.comprovante=url; pag.comps=[url];
+    await sb.from('pedido_pagamentos').update({comprovantes:[url], comprovante_url:url, comprovante_hash:AB_FILE_HASH||null}).eq('id',pag.id);
+    pag.comprovante=url; pag.comps=[url]; pag.comprovante_hash=AB_FILE_HASH||null;
    }catch(upErr){ toast('Abate criado, mas o comprovante falhou: '+upErr.message,false); }
   }
   foRecalcDivida(pedId);
-  FO_ABATER_PED=null; AB_FILE_SEL=null;
+  FO_ABATER_PED=null; AB_FILE_SEL=null; AB_FILE_HASH=null;
   toast("Abatido "+fv(valor)+(file?" + comprovante ✓":"")+(j.status==="quitado"?" — dívida quitada! 🎉":". Saldo: "+fv(j.saldo)),true);
   rFoDetalhe();
  }catch(e){ toast("Erro: "+e.message,false); if(btn){btn.disabled=false;btn.textContent="Abater";} }
