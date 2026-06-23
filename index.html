@@ -5292,7 +5292,7 @@ function rExt(){
  '<div style="display:flex;gap:4px;align-items:center;margin-top:4px;flex-wrap:wrap;">'+
  bdg(e.cat,true)+
  '<span style="font-size:9px;padding:1px 6px;border-radius:5px;font-weight:700;background:'+tipoBg+';color:'+tipoCor+';border:1px solid '+tipoCor+'30;">'+tipo+'</span>'+
- (e.comp?'':'<span style="font-size:9px;padding:1px 6px;border-radius:5px;font-weight:700;background:rgba(160,82,45,.1);color:#a0522d;border:1px solid rgba(160,82,45,.3);">sem comprovante</span>')+
+ (e.comp?'':(U&&U.role!=="viewer"?'<button onclick="exAnexarComprovante('+e.id+')" style="font-size:9px;padding:1px 7px;border-radius:5px;font-weight:700;background:rgba(37,99,235,.1);color:#2563eb;border:1px solid rgba(37,99,235,.3);cursor:pointer;font-family:inherit;">📎 Anexar comprovante</button>':'<span style="font-size:9px;padding:1px 6px;border-radius:5px;font-weight:700;background:rgba(160,82,45,.1);color:#a0522d;border:1px solid rgba(160,82,45,.3);">sem comprovante</span>'))+
  (e.img?'<button onclick="abrirViewer(\''+e.img+'\', \''+e.desc.replace(/'/g,"\\'")+'\', \'Comprovante · \'+\''+fd(e.data)+'\')" style="font-size:9px;padding:1px 6px;border-radius:5px;font-weight:700;background:rgba(90,138,58,.1);color:#5a8a3a;border:1px solid rgba(90,138,58,.3);cursor:pointer;font-family:inherit;">Ver comprovante</button>':'')+
  '<span style="font-size:10px;color:var(--MU);">'+fd(e.data)+'</span>'+
  '</div>'+
@@ -5305,6 +5305,29 @@ function rExt(){
 }
 
 function exNovo(){ EX_ID=null; ge("ex-tit").textContent="Novo Lançamento"; ["ex-d","ex-de","ex-vl"].forEach(function(id){ge(id).value="";}); ge("ex-c").value=""; ge("ex-mh").style.display="none"; ge("ex-form").style.display="block"; ge("ex-form").scrollIntoView({behavior:"smooth"}); }
+// Anexar comprovante a um lançamento do extrato (upload -> Supabase Storage -> imagem_url)
+function exAnexarComprovante(id){
+ var inp=document.createElement('input');
+ inp.type='file'; inp.accept='image/*,application/pdf';
+ inp.onchange=function(){ var f=inp.files&&inp.files[0]; if(f) _exEnviarComprovante(id,f); };
+ inp.click();
+}
+async function _exEnviarComprovante(id,file){
+ try{
+  toast('Enviando comprovante...');
+  var ext=(file.name.split('.').pop()||'jpg').toLowerCase();
+  var path='comprovantes/lanc-'+id+'-'+Date.now()+'.'+ext;
+  var up=await sb.storage.from('comprovantes').upload(path,file,{contentType:file.type,upsert:false});
+  if(up.error) throw up.error;
+  var url=sb.storage.from('comprovantes').getPublicUrl(path).data.publicUrl;
+  var u=await sb.from('lancamentos').update({imagem_url:url, comprovante:true}).eq('id',id);
+  if(u.error) throw u.error;
+  var e=EXT.filter(function(x){return x.id===id;})[0];
+  if(e){ e.img=url; e.comp=true; }
+  toast('Comprovante anexado ✓', true);
+  rExt();
+ }catch(err){ toast('Erro: '+err.message, false); }
+}
 function exEdit(id){ var e=EXT.filter(function(x){ return x.id===id; })[0]; if(!e)return; EX_ID=id; ge("ex-tit").textContent="Editar"; ge("ex-d").value=e.data; ge("ex-c").value=e.cat; ge("ex-de").value=e.desc; ge("ex-vl").value=e.val; ge("ex-mh").style.display=isMov(e.cat)?"block":"none"; ge("ex-form").style.display="block"; ge("ex-form").scrollIntoView({behavior:"smooth"}); }
 function exFechar(){ ge("ex-form").style.display="none"; }
 
