@@ -7696,6 +7696,7 @@ async function foMigrarNumeros(){
 // ═══ PEDIDO LIVRE (saldo devedor) ══════════════════════════════
 var FO_NOVA_DIVIDA = false;   // form "nova dívida" aberto no detalhe
 var FO_ABATER_PED = null;     // id do pedido livre com form "abater" aberto
+var AB_FILE_SEL = null;       // arquivo do comprovante escolhido no form abater (garante anexo no save)
 
 function foHoje(){ return cmHoje(); }
 
@@ -7977,8 +7978,8 @@ async function foSalvarDivida(fornId){
  }catch(e){ toast("Erro: "+e.message,false); if(btn){btn.disabled=false;btn.textContent="Criar dívida";} }
 }
 
-function pedAbaterForm(pedId){ FO_ABATER_PED=pedId; FO_NOVA_DIVIDA=false; rFoDetalhe(); }
-function pedAbaterCancelar(){ FO_ABATER_PED=null; rFoDetalhe(); }
+function pedAbaterForm(pedId){ FO_ABATER_PED=pedId; FO_NOVA_DIVIDA=false; AB_FILE_SEL=null; rFoDetalhe(); }
+function pedAbaterCancelar(){ FO_ABATER_PED=null; AB_FILE_SEL=null; rFoDetalhe(); }
 
 function foRecalcDivida(pedId){
  var p=PED_LIVRE.filter(function(x){return x.id===pedId;})[0]; if(!p) return;
@@ -7992,6 +7993,7 @@ function foRecalcDivida(pedId){
 async function abFileNome(pedId){
  var inp=ge("ab-file-"+pedId), sp=ge("ab-fn-"+pedId);
  var f=inp&&inp.files&&inp.files[0];
+ AB_FILE_SEL=f||null;   // guarda o arquivo p/ o save anexar com segurança
  var nome=f?(f.name.length>16?f.name.slice(0,16)+"…":f.name):"Comprovante";
  if(sp) sp.textContent=nome;
  if(!f) return;
@@ -8021,7 +8023,7 @@ async function pedAbaterSalvar(pedId){
  var data=(ge("ab-data-"+pedId)||{}).value||null;
  var obs=(ge("ab-obs-"+pedId)||{}).value||"";
  var fileInp=ge("ab-file-"+pedId);
- var file=fileInp&&fileInp.files&&fileInp.files[0];
+ var file=(fileInp&&fileInp.files&&fileInp.files[0])||AB_FILE_SEL;
  if(!valor||valor<=0){ toast("Informe o valor a abater.",false); return; }
  if(!data){ toast("Informe a data.",false); return; }
  var btn=ge("ab-btn-"+pedId); if(btn){btn.disabled=true;btn.textContent="...";}
@@ -8038,7 +8040,7 @@ async function pedAbaterSalvar(pedId){
    }catch(upErr){ toast('Abate criado, mas o comprovante falhou: '+upErr.message,false); }
   }
   foRecalcDivida(pedId);
-  FO_ABATER_PED=null;
+  FO_ABATER_PED=null; AB_FILE_SEL=null;
   toast("Abatido "+fv(valor)+(file?" + comprovante ✓":"")+(j.status==="quitado"?" — dívida quitada! 🎉":". Saldo: "+fv(j.saldo)),true);
   rFoDetalhe();
  }catch(e){ toast("Erro: "+e.message,false); if(btn){btn.disabled=false;btn.textContent="Abater";} }
