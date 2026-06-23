@@ -3684,6 +3684,9 @@ function rContas(){
    if(c.of||c.ultima_sync){
     h+='<div id="csync-'+c.id+'" style="font-size:10px;color:var(--MU);margin-top:5px;">'+(c.ultima_sync?('🕐 Atualizado '+tempoAtras(c.ultima_sync)):'🕐 nunca atualizado')+'</div>';
    }
+   if(c.of){
+    h+='<div id="cota-'+c.id+'" style="font-size:10px;color:var(--MU);margin-top:3px;"></div>';
+   }
    if(c.agencia||c.numero){
     h+='<div style="font-size:10px;color:var(--MU);margin-top:6px;">';
     if(c.agencia) h+='Ag '+c.agencia+' ';
@@ -3718,6 +3721,7 @@ function rContas(){
  h+='</div></div></div>';
 
  el.innerHTML=h;
+ carregarLimitesOF();   // preenche a contagem de atualizacoes (hoje/mes) em cada card OF
 }
 
 // Busca a cota de dados restante por conta (Open Finance) e preenche os cards.
@@ -3728,10 +3732,11 @@ async function carregarLimitesOF(){
   var d = await r.json();
   (d.contas||[]).forEach(function(c){
    var el = ge('cota-'+c.conta_id); if(!el) return;
-   var critico = c.restante_hoje<=2;
-   el.style.color = critico ? '#a04040' : 'var(--MU)';
-   el.innerHTML = '📊 cota hoje '+c.usos_hoje+'/'+c.limite_diario+
-     ' (restam '+c.restante_hoje+') · mês ~'+c.usos_mes+'/'+c.limite_mensal;
+   var travadoMes = (c.limite_mensal - c.usos_mes) <= 0;
+   var travadoHoje = c.restante_hoje <= 0;
+   el.style.color = (travadoMes||travadoHoje) ? '#a04040' : (c.restante_hoje<=2 ? '#b8860b' : 'var(--MU)');
+   el.innerHTML = '🔄 '+c.usos_hoje+'/'+c.limite_diario+' atualizações hoje · '+c.usos_mes+'/'+c.limite_mensal+' no mês'+
+     (travadoMes ? ' · <b>limite do mês atingido</b>' : (travadoHoje ? ' · <b>limite de hoje atingido</b>' : ''));
   });
  }catch(e){ /* silencioso */ }
 }
