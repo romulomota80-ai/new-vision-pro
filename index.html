@@ -1038,9 +1038,10 @@ async function carregarTudo(){
  sb.from("produto_variacoes").select("*").order("sku"),
  sb.from("pedidos").select("*").eq("tipo","livre").order("created_at",{ascending:false}),
  sb.from("pedido_pagamentos").select("*"),
- carregarExtratoBanc()
+ Promise.resolve({data:[]})
  ]);
- EXTRATO_BANC = (rExtrato && rExtrato.data) || [];
+ EXTRATO_BANC = [];
+ carregarExtratoBanc().then(function(r){ EXTRATO_BANC=(r&&r.data)||[]; }).catch(function(){}); // 2o plano: nao trava o boot/contas
  try{ var rFatML = await sb.from("ml_faturas").select("*"); FATURAS_ML = (rFatML && rFatML.data) || []; }catch(eF){ FATURAS_ML = []; }
 
  // Lançamentos
