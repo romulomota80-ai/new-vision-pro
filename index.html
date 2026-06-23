@@ -952,6 +952,15 @@ function fv(v){ return (v||0).toLocaleString("pt-BR",{style:"currency",currency:
 function fk(v){ var n=v||0; return Math.abs(n)>=1000?"R$ "+(n/1000).toFixed(1)+"k":fv(n); }
 function fkc(v){ var n=v||0; if(n>=1e6)return(n/1e6).toFixed(1)+"M"; if(n>=1000)return(n/1000).toFixed(n>=10000?0:1)+"k"; return "R$"+n.toFixed(0); }
 function fd(d){ return d?new Date(d+"T12:00:00").toLocaleDateString("pt-BR"):""; }
+// Data de HOJE no fuso de Brasilia, 'YYYY-MM-DD' (robusto a qualquer fuso do browser).
+function hojeBRT(){ return new Date().toLocaleDateString("en-CA",{timeZone:"America/Sao_Paulo"}); }
+// Serializa um Date (em componentes LOCAIS) como 'YYYY-MM-DD' sem cair pro UTC do toISOString.
+function ymdLocal(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+// Data 'YYYY-MM-DD' em BRT a N dias de hoje (N negativo = passado). Robusto a qualquer fuso.
+function dataBRTrel(dias){ return new Date(Date.now()+(dias||0)*86400000).toLocaleDateString("en-CA",{timeZone:"America/Sao_Paulo"}); }
+// Dia-calendario 'YYYY-MM-DD' em BRT a partir de um timestamp OU de uma data crua.
+// date-only ('YYYY-MM-DD') volta como esta (nao desloca); timestamp converte pro fuso BRT.
+function diaBRTde(s){ if(!s) return ""; var str=String(s); if(/^\d{4}-\d{2}-\d{2}$/.test(str)) return str; var d=new Date(str); return isNaN(d.getTime())?str.split("T")[0]:d.toLocaleDateString("en-CA",{timeZone:"America/Sao_Paulo"}); }
 function ge(id){ return document.getElementById(id); }
 function tc(){ return MPS.reduce(function(a,m){ return a.concat(m.contas); },[]); }
 function cR(m){ return EXT.filter(function(e){ return e.mes===m&&(!ANO_DRE||(e.data&&e.data.substring(0,4)===ANO_DRE))&&!isMov(e.cat); }).reduce(function(s,e){ return s+e.val; },0); }
@@ -1407,9 +1416,9 @@ function cmCalcularInsights(){
       ins.push({c:"#b8860b",t:"Dia "+dtF+" puxado",d:"R$ "+fv(mV)+" vencendo so nesse dia."});
     }
   }
-  var mesA=(new Date()).toISOString().substring(0,7);
+  var mesA=hojeBRT().substring(0,7);
   var mA=new Date(); mA.setMonth(mA.getMonth()-1);
-  var mAS=mA.toISOString().substring(0,7);
+  var mAS=ymdLocal(mA).substring(0,7);
   var pgA=(BOL||[]).filter(function(b){return b.st==="pago"&&b.ven&&b.ven.substring(0,7)===mesA;}).reduce(function(s,x){return s+(parseFloat(x.val)||0);},0);
   pgA+=(EXT||[]).filter(function(l){return l.data&&l.data.substring(0,7)===mesA;}).reduce(function(s,x){return s+(parseFloat(x.val)||0);},0);
   var pgAnt=(BOL||[]).filter(function(b){return b.st==="pago"&&b.ven&&b.ven.substring(0,7)===mAS;}).reduce(function(s,x){return s+(parseFloat(x.val)||0);},0);
@@ -1832,7 +1841,7 @@ var VD_CONTAS_INFO = {};
 function vdFmt(n){ return 'R$ ' + Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function vdFmtN(n){ return Number(n||0).toLocaleString('pt-BR'); }
 function vdFmtPct(n){ return (Number(n||0)).toFixed(2).replace('.',',') + '%'; }
-function vdFmtData(iso){ if(!iso) return '-'; var d=new Date(iso); return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}) + ' ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }
+function vdFmtData(iso){ if(!iso) return '-'; var d=new Date(iso); return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',timeZone:'America/Sao_Paulo'}) + ' ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'}); }
 
 
 // ============================================================
@@ -2953,7 +2962,7 @@ async function rAds(force){
  }
 
  var corte=null;
- if(ADS_PER>0){ var dc=new Date(); dc.setDate(dc.getDate()-ADS_PER); corte=dc.toISOString().slice(0,10); }
+ if(ADS_PER>0){ corte=dataBRTrel(-ADS_PER); }
  var dados=ADS_RAW.filter(function(r){
   if(ADS_MKT!=='todos' && r.marketplace!==ADS_MKT) return false;
   if(ADS_CONTA!=='todas' && r.conta_interna_id!==ADS_CONTA) return false;
@@ -3317,7 +3326,7 @@ async function rAl(force){
   h+='<div class="card" style="padding:12px 14px;opacity:'+(resolvido?'.6':'1')+';">';
   h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">';
   h+='<span style="background:'+sv.bg+';color:'+sv.cor+';padding:1px 8px;border-radius:10px;font-size:9px;font-weight:700;text-transform:uppercase;">'+sv.lbl+'</span>';
-  h+='<span style="font-size:10px;color:var(--MU);">'+(r.agente||'')+(r.criado_em?(' &middot; '+String(r.criado_em).slice(0,10).split('-').reverse().join('/')):'')+'</span>';
+  h+='<span style="font-size:10px;color:var(--MU);">'+(r.agente||'')+(r.criado_em?(' &middot; '+diaBRTde(r.criado_em).split('-').reverse().join('/')):'')+'</span>';
   if(resolvido) h+='<span style="font-size:9px;color:var(--MU);">('+r.status+')</span>';
   h+='</div>';
   h+='<div style="font-size:13px;font-weight:700;color:var(--TX);">'+(r.titulo||'')+'</div>';
@@ -4070,20 +4079,21 @@ function rSaquesRec(){
  // ===== KPIs DINAMICOS (Shopee = saques, ML/TikTok = recebidos) =====
  var ehSaque = (SR_TAB === "shopee" || SR_TAB === "outros");
  var labelTipo = ehSaque ? "Sacado" : "Recebido";
- var hjStr = new Date().toISOString().slice(0,10);
+ var hjStr = hojeBRT();                       // 'YYYY-MM-DD' em BRT (nao mais UTC)
  var mesAtual = hjStr.substring(0,7);
- 
- // Calcula inicio da semana (segunda)
- var hjDt = new Date();
+
+ // Calcula inicio da semana (segunda) a partir do dia-calendario BRT
+ var _p = hjStr.split("-");
+ var hjDt = new Date(+_p[0], +_p[1]-1, +_p[2]); // meia-noite local do dia BRT
  var diaSem = hjDt.getDay(); // 0=dom 1=seg
  var diasAteSeg = diaSem===0 ? 6 : diaSem-1;
  var iniSem = new Date(hjDt);
  iniSem.setDate(hjDt.getDate() - diasAteSeg);
- var iniSemStr = iniSem.toISOString().slice(0,10);
- 
+ var iniSemStr = ymdLocal(iniSem);            // serializa local, sem virar UTC
+
  // Mes anterior pra comparacao
  var mesAntDt = new Date(hjDt.getFullYear(), hjDt.getMonth()-1, 1);
- var mesAntStr = mesAntDt.toISOString().slice(0,7);
+ var mesAntStr = ymdLocal(mesAntDt).substring(0,7);
  
  // Filtro base: por aba (SR_TAB) e/ou por conta especifica
  var origensTabKpi = getOrigensPorTab(SR_TAB);
@@ -4146,7 +4156,7 @@ function rSaquesRec(){
  var futuros = recsBase.filter(function(r){return r.status==="previsto" && r.data>=hjStr;}).sort(function(a,b){return a.data.localeCompare(b.data);});
  var proxRec = futuros[0];
  var totalReceber30 = recsBase.filter(function(r){
-   var d30 = new Date(Date.now()+30*86400000).toISOString().slice(0,10);
+   var d30 = dataBRTrel(30);
    return r.status==="previsto" && r.data>=hjStr && r.data<=d30;
  }).reduce(function(s,x){return s+x.valor;},0);
  
@@ -7207,8 +7217,8 @@ function foCalcularStats(nome, fid){
  var datas = [];
  boletosDele.filter(function(b){return b.st==="pago";}).forEach(function(b){datas.push(b.ven);});
  lancDele.forEach(function(e){datas.push(e.data);});
- extratoDele.forEach(function(x){datas.push((x.data||"").split("T")[0]);});
- abatDele.forEach(function(x){ if(x.data) datas.push((x.data||"").split("T")[0]); });
+ extratoDele.forEach(function(x){datas.push(diaBRTde(x.data));});
+ abatDele.forEach(function(x){ if(x.data) datas.push(diaBRTde(x.data)); });
  datas.sort();
  var ultimoPag = datas.length ? datas[datas.length-1] : null;
 
@@ -7223,7 +7233,7 @@ function foCalcularStats(nome, fid){
  if(mes){ porMes[mes] = (porMes[mes]||0) + e.val; }
  });
  extratoDele.forEach(function(x){
- var mes = x.data ? x.data.slice(0,7) : null;
+ var mes = x.data ? diaBRTde(x.data).slice(0,7) : null;
  if(mes){ porMes[mes] = (porMes[mes]||0) + Math.abs(parseFloat(x.valor)||0); }
  });
  abatDele.forEach(function(x){
@@ -7350,7 +7360,7 @@ function coRenderPend(){
  var h = '<div style="font-size:12px;color:var(--MU);margin-bottom:10px;">'+CO_PEND.length+' débito(s) não reconhecido(s)</div>';
  h += '<div style="display:flex;flex-direction:column;gap:10px;">';
  CO_PEND.forEach(function(r){
- var dia = (r.data||"").split("T")[0];
+ var dia = diaBRTde(r.data);
  var cp = (r.contraparte||"").trim();
  h += '<div class="card" style="padding:14px;">';
  h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:10px;">';
@@ -7391,7 +7401,7 @@ function coRenderLink(){
  var h = '<div style="font-size:12px;color:var(--MU);margin-bottom:10px;">'+CO_LINK.length+' débito(s) vinculado(s)</div>';
  h += '<div style="display:flex;flex-direction:column;gap:8px;">';
  CO_LINK.forEach(function(r){
- var dia = (r.data||"").split("T")[0];
+ var dia = diaBRTde(r.data);
  var nomeForn = r.fornecedor ? r.fornecedor.nome : ("#"+r.fornecedor_id);
  var conc = r.conciliado;
  h += '<div class="card" style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">';
@@ -7421,7 +7431,7 @@ function coRenderLink(){
 async function coAbaterPedido(extratoId, pedId){
  var r = CO_LINK.filter(function(x){return x.id===extratoId;})[0]; if(!r) return;
  var valor = Math.abs(parseFloat(r.valor)||0);
- var dia = (r.data||"").split("T")[0];
+ var dia = diaBRTde(r.data);
  if(!confirm("Abater "+fv(valor)+" do saldo devedor deste fornecedor?")) return;
  try{
   var j = await coFetch(coAPI()+'/api/pedidos/'+pedId+'/pagamento',{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({valor:valor,data:dia,origem:"conciliacao",extrato_id:extratoId,obs:r.descricao||null})});
@@ -7953,7 +7963,7 @@ function foExtratoHTML(itens){
   '</div>';
  h += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px;">';
  itens.slice().sort(function(a,b){ return (b.data||"").localeCompare(a.data||""); }).forEach(function(x){
-  var dia = (x.data||"").split("T")[0];
+  var dia = diaBRTde(x.data);
   var cp = (x.contraparte||"").trim();
   h += '<div class="card" style="padding:12px 14px;border:1px solid rgba(90,138,58,.3);background:rgba(90,138,58,.04);display:flex;justify-content:space-between;align-items:center;gap:10px;">'+
    '<div style="min-width:0;">'+
@@ -9366,7 +9376,7 @@ function shAPI(path){
  var url = (typeof BACKEND_URL!=="undefined"&&BACKEND_URL?BACKEND_URL:'') + path + (SH_CONTA ? (sep+'conta='+encodeURIComponent(SH_CONTA)) : '');
  return fetch(url).then(function(r){ return r.json(); });
 }
-function shFdISO(s){ if(!s) return '—'; try{ return new Date(s).toLocaleDateString("pt-BR"); }catch(e){ return s; } }
+function shFdISO(s){ if(!s) return '—'; try{ var str=String(s); if(/^\d{4}-\d{2}-\d{2}$/.test(str)) return new Date(str+"T12:00:00").toLocaleDateString("pt-BR"); return new Date(str).toLocaleDateString("pt-BR",{timeZone:"America/Sao_Paulo"}); }catch(e){ return s; } }
 function shEsc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function shKpi(label, value, cor, sub){
  return '<div class="card" style="padding:14px 16px;flex:1;min-width:150px;">'
