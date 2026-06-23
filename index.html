@@ -7777,9 +7777,11 @@ function foSaldoDevedorHTML(f){
 
   if(FO_ABATER_PED===p.id){
    h += '<div style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;background:var(--C1);padding:10px;border-radius:8px;border:1px dashed var(--AC);">'+
-    '<div style="flex:1;min-width:100px;"><label style="font-size:10px;">Valor *</label><input type="number" step="0.01" id="ab-valor-'+p.id+'" placeholder="'+p.saldo.toFixed(2)+'" style="width:100%;"></div>'+
+    '<div style="flex:1;min-width:100px;"><label style="font-size:10px;">Valor *</label><input type="number" step="0.01" id="ab-valor-'+p.id+'" value="'+p.saldo.toFixed(2)+'" style="width:100%;"></div>'+
     '<div style="flex:1;min-width:100px;"><label style="font-size:10px;">Data</label><input type="date" id="ab-data-'+p.id+'" value="'+foHoje()+'" style="width:100%;"></div>'+
     '<div style="flex:2;min-width:120px;"><label style="font-size:10px;">Obs</label><input type="text" id="ab-obs-'+p.id+'" placeholder="opcional" style="width:100%;"></div>'+
+    '<label for="ab-file-'+p.id+'" style="display:flex;align-items:center;gap:5px;padding:7px 11px;border:1px dashed var(--BR);border-radius:7px;cursor:pointer;font-size:11px;color:#2563eb;white-space:nowrap;" title="Anexar comprovante (opcional)">📎 <span id="ab-fn-'+p.id+'">Comprovante</span></label>'+
+    '<input type="file" id="ab-file-'+p.id+'" accept="image/*,application/pdf" onchange="abFileNome('+p.id+')" style="display:none;">'+
     '<button class="btn sm" id="ab-btn-'+p.id+'" onclick="pedAbaterSalvar('+p.id+')">Abater</button>'+
     '<button class="btn g sm" onclick="pedAbaterCancelar()">×</button>'+
     '</div>';
@@ -7985,20 +7987,31 @@ function foRecalcDivida(pedId){
  p.status = abatido>=p.total ? "quitado" : "ativo";
 }
 
+function abFileNome(pedId){ var inp=ge("ab-file-"+pedId), sp=ge("ab-fn-"+pedId); if(inp&&sp){ var f=inp.files&&inp.files[0]; sp.textContent=f?(f.name.length>16?f.name.slice(0,16)+"…":f.name):"Comprovante"; } }
 async function pedAbaterSalvar(pedId){
  var valor=parseFloat((ge("ab-valor-"+pedId)||{}).value||0);
  var data=(ge("ab-data-"+pedId)||{}).value||null;
  var obs=(ge("ab-obs-"+pedId)||{}).value||"";
+ var fileInp=ge("ab-file-"+pedId);
+ var file=fileInp&&fileInp.files&&fileInp.files[0];
  if(!valor||valor<=0){ toast("Informe o valor a abater.",false); return; }
  if(!data){ toast("Informe a data.",false); return; }
  var btn=ge("ab-btn-"+pedId); if(btn){btn.disabled=true;btn.textContent="...";}
  try{
   var j=await coFetch(coAPI()+'/api/pedidos/'+pedId+'/pagamento',{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({valor:valor,data:data,obs:obs.trim()||null,origem:"manual"})});
   if(!j.ok) throw new Error(j.erro||"falhou");
-  PED_PAG.push({id:j.pagamento.id,pedidoId:pedId,valor:valor,data:data,origem:"manual",extratoId:null,obs:obs.trim()||"",comprovante:null,comps:[]});
+  var pag={id:j.pagamento.id,pedidoId:pedId,valor:valor,data:data,origem:"manual",extratoId:null,obs:obs.trim()||"",comprovante:null,comps:[]};
+  PED_PAG.push(pag);
+  if(file){
+   try{
+    var url=await _uploadAnexo('abatimento_'+pag.id, file, 0);
+    await sb.from('pedido_pagamentos').update({comprovantes:[url], comprovante_url:url}).eq('id',pag.id);
+    pag.comprovante=url; pag.comps=[url];
+   }catch(upErr){ toast('Abate criado, mas o comprovante falhou: '+upErr.message,false); }
+  }
   foRecalcDivida(pedId);
   FO_ABATER_PED=null;
-  toast("Abatido "+fv(valor)+(j.status==="quitado"?" — dívida quitada! 🎉":". Saldo: "+fv(j.saldo)),true);
+  toast("Abatido "+fv(valor)+(file?" + comprovante ✓":"")+(j.status==="quitado"?" — dívida quitada! 🎉":". Saldo: "+fv(j.saldo)),true);
   rFoDetalhe();
  }catch(e){ toast("Erro: "+e.message,false); if(btn){btn.disabled=false;btn.textContent="Abater";} }
 }
