@@ -10195,18 +10195,21 @@ async function rShTaxas(){
 var PLAT_NOME = {ml:'Mercado Livre', shopee:'Shopee'};
 function fchNomePlat(p){ return PLAT_NOME[p] || (p.charAt(0).toUpperCase()+p.slice(1)); }
 
+// FIX #2: constante única para base URL da seção Fechamento
+var FCH_BASE = (typeof BACKEND_URL!=="undefined"&&BACKEND_URL) ? BACKEND_URL : '';
+
 async function fchRender(){
  var mes = (document.getElementById('fch-mes').value||'').slice(0,7);
  if(!mes) return;
  var body = document.getElementById('fch-body');
  body.innerHTML = '<div style="color:var(--MU);padding:20px 0;">Carregando…</div>';
  try{
-  var base = (typeof BACKEND_URL!=="undefined"&&BACKEND_URL) ? BACKEND_URL : '';
-  var r = await fetch(base+'/api/fechamento?mes='+mes).then(function(x){ return x.json(); });
+  var r = await fetch(FCH_BASE+'/api/fechamento?mes='+mes).then(function(x){ return x.json(); });
   var fmt = function(v){ return 'R$ '+(+v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); };
   var html = '';
   if(r.status==='fechado'){
-   var dFch = r.fechado_em ? new Date(r.fechado_em).toLocaleDateString('pt-BR') : '—';
+   // FIX #4: fuso explícito BRT na formatação de fechado_em
+   var dFch = r.fechado_em ? new Date(r.fechado_em).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'}) : '—';
    html += '<div class="tmov" style="margin-bottom:12px;">📌 Fechado em '+dFch+'</div>';
   }
   // Cabeçalho das colunas
@@ -10262,7 +10265,8 @@ async function fchRender(){
    +'<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Faturamento</span><span>'+fmt(tot.faturamento)+'</span></div>'
    +'<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Lucro s/ADS</span><span>'+fmt(tot.lucro_sem_ads)+'</span></div>'
    +'<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Lucro c/ADS</span><span>'+fmt(tot.lucro_com_ads)+'</span></div>'
-   +(tot.ads_produtos!=null?'<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--MU);"><span>ADS total</span><span>− '+fmt(tot.ads_produtos)+'</span></div>':'')
+   // FIX #3: ADS sempre exibido no rodapé (consistente com os cards)
+   +'<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--MU);"><span>ADS total</span><span>− '+fmt(tot.ads_produtos)+'</span></div>'
    +(cg?'<div style="border-top:1px solid var(--BR);margin:8px 0;"></div>'+cg:'')
    +'<div class="sv" style="margin-top:12px;font-size:16px;">Lucro final: '+fmt(r.lucro_final)+'</div>'
    +'</div>';
@@ -10276,18 +10280,24 @@ async function fchFechar(){
  var mes = (document.getElementById('fch-mes').value||'').slice(0,7);
  if(!mes){ alert('Selecione o mês.'); return; }
  if(!confirm('Fechar '+mes+'?\nOs números ficam congelados (dá pra reabrir a qualquer momento).')) return;
- var base = (typeof BACKEND_URL!=="undefined"&&BACKEND_URL) ? BACKEND_URL : '';
- await fetch(base+'/api/fechamento/fechar',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mes:mes})});
- fchRender();
+ // FIX #1: checar res.ok; só chamar fchRender() se POST foi bem-sucedido
+ try{
+  var res = await fetch(FCH_BASE+'/api/fechamento/fechar',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mes:mes})});
+  if(!res.ok){ var err=await res.json().catch(function(){return {};}); toast('Erro ao fechar: '+(err.error||res.status),false); return; }
+  fchRender();
+ }catch(e){ toast('Erro ao fechar: '+e.message,false); }
 }
 
 async function fchReabrir(){
  var mes = (document.getElementById('fch-mes').value||'').slice(0,7);
  if(!mes){ alert('Selecione o mês.'); return; }
  if(!confirm('Reabrir '+mes+'?\nVolta a recalcular ao vivo.')) return;
- var base = (typeof BACKEND_URL!=="undefined"&&BACKEND_URL) ? BACKEND_URL : '';
- await fetch(base+'/api/fechamento/reabrir',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mes:mes})});
- fchRender();
+ // FIX #1: checar res.ok; só chamar fchRender() se POST foi bem-sucedido
+ try{
+  var res = await fetch(FCH_BASE+'/api/fechamento/reabrir',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mes:mes})});
+  if(!res.ok){ var err=await res.json().catch(function(){return {};}); toast('Erro ao reabrir: '+(err.error||res.status),false); return; }
+  fchRender();
+ }catch(e){ toast('Erro ao reabrir: '+e.message,false); }
 }
 </script>
 </body></html>
