@@ -6485,9 +6485,6 @@ function rLu(){
  '</button>';
  }).join("")+'</div>';
 
- // Botão: puxar faturamento/lucro/ADS reais da aba Vendas (preenche, não salva)
- h2+='<div style="display:flex;justify-content:flex-end;margin:2px 0 10px;"><button class="btn" onclick="fchPuxarVendas()" style="font-size:11px;padding:7px 16px;background:rgba(59,105,120,.1);border:1px solid rgba(59,105,120,.3);color:#5a8ca8;font-weight:700;cursor:pointer;">↓ Puxar das Vendas — '+(LM.charAt(0)+LM.slice(1).toLowerCase())+'</button></div>';
-
  // Resumo automático no topo (atualiza em tempo real via rLu)
  if(fl2>0){
  var scCor=sl>=0?"#5a8a3a":"#a04040";
@@ -6548,7 +6545,7 @@ function rLu(){
  '</div></div>';
  });
  h2+='</div>';
- h2+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px;"><button class="btn" onclick="fchToggleDetalhe(\''+c.id+'\',\''+(c.conta_interna_id||'')+'\',this)" style="font-size:11px;padding:6px 14px;background:var(--BG);border:1px solid var(--BR);color:var(--MU);cursor:pointer;">▸ Detalhes</button><button class="btn" id="btn-sv-'+c.id+'" onclick="salvarConta(\''+c.id+'\',\''+LM+'\',\'btn-sv-'+c.id+'\')" style="font-size:11px;padding:6px 18px;">Salvar</button></div>';
+ h2+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px;flex-wrap:wrap;"><div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn" onclick="fchPuxarConta(\''+c.id+'\',\''+(c.conta_interna_id||'')+'\',this)" style="font-size:11px;padding:6px 14px;background:rgba(59,105,120,.1);border:1px solid rgba(59,105,120,.3);color:#5a8ca8;font-weight:700;cursor:pointer;">↓ Puxar das Vendas</button><button class="btn" onclick="fchToggleDetalhe(\''+c.id+'\',\''+(c.conta_interna_id||'')+'\',this)" style="font-size:11px;padding:6px 14px;background:var(--BG);border:1px solid var(--BR);color:var(--MU);cursor:pointer;">▸ Detalhes</button></div><button class="btn" id="btn-sv-'+c.id+'" onclick="salvarConta(\''+c.id+'\',\''+LM+'\',\'btn-sv-'+c.id+'\')" style="font-size:11px;padding:6px 18px;">Salvar</button></div>';
  h2+='<div id="det-'+c.id+'" style="display:none;margin-top:8px;"></div>';
  h2+='</div>';
  });
@@ -10214,24 +10211,22 @@ async function fchGet(mesISO){
  return r;
 }
 function fchContaApi(r, ciId){ return (r.contas||[]).filter(function(c){ return c.conta===ciId; })[0]||null; }
-async function fchPuxarVendas(){
+async function fchPuxarConta(contaId, ciId, btn){
  var mesISO=fchMesISO();
- toast('Puxando das Vendas ('+mesISO+')…');
+ var old=btn?btn.innerHTML:'';
+ if(btn){ btn.disabled=true; btn.innerHTML='Puxando…'; }
  try{
   var r=await fchGet(mesISO);
   if(!r || r.error){ toast('Erro ao puxar: '+((r&&r.error)||'sem resposta'),false); return; }
-  var n=0;
-  tc().forEach(function(c){
-   var a=fchContaApi(r, c.conta_interna_id);
-   if(!a) return;
-   var inpF=ge('rc-'+c.id+'-f'), inpL=ge('rc-'+c.id+'-l'), inpA=ge('rc-'+c.id+'-a');
-   if(inpF) inpF.value=fmtNum(a.faturamento);
-   if(inpL) inpL.value=fmtNum(a.lucro_sem_ads);
-   if(inpA) inpA.value=fmtNum(a.ads);
-   if(inpF||inpL||inpA) n++;
-  });
-  toast(n? ('Puxado de '+n+' conta(s) — confira e clique Salvar') : 'Nenhuma conta casou com a Vendas', n>0);
+  var a=fchContaApi(r, ciId);
+  if(!a){ toast('Sem venda no mês ('+mesISO+') pra esta conta',false); return; }
+  var inpF=ge('rc-'+contaId+'-f'), inpL=ge('rc-'+contaId+'-l'), inpA=ge('rc-'+contaId+'-a');
+  if(inpF) inpF.value=fmtNum(a.faturamento);
+  if(inpL) inpL.value=fmtNum(a.lucro_sem_ads);
+  if(inpA) inpA.value=fmtNum(a.ads);
+  toast('Puxado — confira e clique Salvar');
  }catch(e){ toast('Erro ao puxar: '+e.message,false); }
+ finally{ if(btn){ btn.disabled=false; btn.innerHTML=old; } }
 }
 async function fchToggleDetalhe(contaId, ciId, btn){
  var box=ge('det-'+contaId); if(!box) return;
