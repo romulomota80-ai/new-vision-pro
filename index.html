@@ -1104,7 +1104,7 @@ async function carregarTudo(){
  MPS = (rMps.data||[]).map(function(m){ return {
  id:m.id, nome:m.nome, cor:m.cor,
  contas: contas.filter(function(c){ return c.marketplace_id===m.id; })
- .map(function(c){ return {id:c.id, nome:c.nome, contaPadrao:c.conta_bancaria_padrao||null}; })
+ .map(function(c){ return {id:c.id, nome:c.nome, conta_interna_id:String(c.nome||"").toLowerCase().trim().replace(/\s+/g,"_").replace(/[^a-z0-9_]/g,""), contaPadrao:c.conta_bancaria_padrao||null}; })
  }; });
 
  // Receitas
@@ -6485,6 +6485,9 @@ function rLu(){
  '</button>';
  }).join("")+'</div>';
 
+ // Botão: puxar faturamento/lucro/ADS reais da aba Vendas (preenche, não salva)
+ h2+='<div style="display:flex;justify-content:flex-end;margin:2px 0 10px;"><button class="btn" onclick="fchPuxarVendas()" style="font-size:11px;padding:7px 16px;background:rgba(59,105,120,.1);border:1px solid rgba(59,105,120,.3);color:#5a8ca8;font-weight:700;cursor:pointer;">↓ Puxar das Vendas — '+(LM.charAt(0)+LM.slice(1).toLowerCase())+'</button></div>';
+
  // Resumo automático no topo (atualiza em tempo real via rLu)
  if(fl2>0){
  var scCor=sl>=0?"#5a8a3a":"#a04040";
@@ -6545,7 +6548,8 @@ function rLu(){
  '</div></div>';
  });
  h2+='</div>';
- h2+='<div style="display:flex;justify-content:flex-end;margin-top:8px;"><button class="btn" id="btn-sv-'+c.id+'" onclick="salvarConta(\''+c.id+'\',\''+LM+'\',\'btn-sv-'+c.id+'\')" style="font-size:11px;padding:6px 18px;">Salvar</button></div>';
+ h2+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px;"><button class="btn" onclick="fchToggleDetalhe(\''+c.id+'\',\''+(c.conta_interna_id||'')+'\',this)" style="font-size:11px;padding:6px 14px;background:var(--BG);border:1px solid var(--BR);color:var(--MU);cursor:pointer;">▸ Detalhes</button><button class="btn" id="btn-sv-'+c.id+'" onclick="salvarConta(\''+c.id+'\',\''+LM+'\',\'btn-sv-'+c.id+'\')" style="font-size:11px;padding:6px 18px;">Salvar</button></div>';
+ h2+='<div id="det-'+c.id+'" style="display:none;margin-top:8px;"></div>';
  h2+='</div>';
  });
  h2+='</div>';
@@ -10197,6 +10201,63 @@ function fchNomePlat(p){ return PLAT_NOME[p] || (p.charAt(0).toUpperCase()+p.sli
 
 // FIX #2: constante única para base URL da seção Fechamento
 var FCH_BASE = (typeof BACKEND_URL!=="undefined"&&BACKEND_URL) ? BACKEND_URL : '';
+
+// ── Puxar das Vendas + Detalhes por conta (consomem /api/fechamento) ──────────
+// Reutiliza o endpoint /api/fechamento como fonte do dado REAL por conta/produto.
+// Os totais por conta (faturamento/lucro_sem_ads/ads) batem com a aba Vendas.
+var FCH_CACHE = {}; // mesISO -> resposta /api/fechamento (evita refetch entre contas)
+function fchMesISO(){ var mi=MESES.indexOf(LM); return ANO_DRE+'-'+String(mi+1).padStart(2,'0'); }
+async function fchGet(mesISO){
+ if(FCH_CACHE[mesISO]) return FCH_CACHE[mesISO];
+ var r = await fetch(FCH_BASE+'/api/fechamento?mes='+mesISO).then(function(x){ return x.json(); });
+ if(r && !r.error) FCH_CACHE[mesISO]=r;
+ return r;
+}
+function fchContaApi(r, ciId){ return (r.contas||[]).filter(function(c){ return c.conta===ciId; })[0]||null; }
+async function fchPuxarVendas(){
+ var mesISO=fchMesISO();
+ toast('Puxando das Vendas ('+mesISO+')…');
+ try{
+  var r=await fchGet(mesISO);
+  if(!r || r.error){ toast('Erro ao puxar: '+((r&&r.error)||'sem resposta'),false); return; }
+  var n=0;
+  tc().forEach(function(c){
+   var a=fchContaApi(r, c.conta_interna_id);
+   if(!a) return;
+   var inpF=ge('rc-'+c.id+'-f'), inpL=ge('rc-'+c.id+'-l'), inpA=ge('rc-'+c.id+'-a');
+   if(inpF) inpF.value=fmtNum(a.faturamento);
+   if(inpL) inpL.value=fmtNum(a.lucro_sem_ads);
+   if(inpA) inpA.value=fmtNum(a.ads);
+   if(inpF||inpL||inpA) n++;
+  });
+  toast(n? ('Puxado de '+n+' conta(s) — confira e clique Salvar') : 'Nenhuma conta casou com a Vendas', n>0);
+ }catch(e){ toast('Erro ao puxar: '+e.message,false); }
+}
+async function fchToggleDetalhe(contaId, ciId, btn){
+ var box=ge('det-'+contaId); if(!box) return;
+ if(box.style.display!=='none'){ box.style.display='none'; if(btn)btn.innerHTML='▸ Detalhes'; return; }
+ box.style.display='block'; if(btn)btn.innerHTML='▾ Detalhes';
+ box.innerHTML='<div style="color:var(--MU);font-size:12px;padding:8px 0;">Carregando produtos…</div>';
+ try{
+  var r=await fchGet(fchMesISO());
+  if(!r || r.error){ box.innerHTML='<div style="color:#e57373;font-size:12px;">Erro: '+((r&&r.error)||'sem dados')+'</div>'; return; }
+  var a=fchContaApi(r, ciId);
+  if(!a){ box.innerHTML='<div style="color:var(--MU);font-size:12px;padding:8px 0;">Sem dados de venda no mês pra esta conta.</div>'; return; }
+  var prods=[];
+  (a.plataformas||[]).forEach(function(p){ (p.produtos||[]).forEach(function(pr){ prods.push(pr); }); });
+  prods.sort(function(x,y){ return (y.lucro_sem_ads||0)-(x.lucro_sem_ads||0); });
+  if(!prods.length){ box.innerHTML='<div style="color:var(--MU);font-size:12px;padding:8px 0;">Sem produtos detalhados (conta sem ML/Shopee no mês).</div>'; return; }
+  var baixa=prods.filter(function(pr){ var m=pr.faturamento>0?(pr.lucro_sem_ads/pr.faturamento*100):0; return m<15; }).length;
+  var hdr='<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--MU);text-transform:uppercase;font-weight:700;padding:4px 0;border-bottom:1px solid var(--BR);"><span style="flex:1;">Produto</span><span style="min-width:62px;text-align:right;">Fat.</span><span style="min-width:62px;text-align:right;">Lucro</span><span style="min-width:42px;text-align:right;">Mg</span></div>';
+  var rows=prods.slice(0,50).map(function(pr){
+   var mg=pr.faturamento>0?(pr.lucro_sem_ads/pr.faturamento*100):0;
+   var mc=mg>=25?'#5a8a3a':mg>=15?'#b8860b':'#a04040';
+   return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;padding:4px 0;border-bottom:1px solid var(--BR);"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--TX);">'+(pr.titulo||pr.sku||'—')+'</span><span style="min-width:62px;text-align:right;color:#5a8ca8;">'+fk(pr.faturamento)+'</span><span style="min-width:62px;text-align:right;color:'+mc+';font-weight:700;">'+fk(pr.lucro_sem_ads)+'</span><span style="min-width:42px;text-align:right;color:'+mc+';font-weight:700;">'+mg.toFixed(0)+'%</span></div>';
+  }).join('');
+  var resumo='<div style="display:flex;gap:10px;flex-wrap:wrap;margin:0 0 8px;font-size:10px;color:var(--MU);"><span>'+prods.length+' produtos</span>'+(baixa?'<span style="color:#a04040;font-weight:700;">⚠ '+baixa+' com margem &lt;15%</span>':'')+(prods.length>50?'<span>(top 50 por lucro)</span>':'')+'</div>';
+  box.innerHTML='<div class="card cp" style="background:var(--BG);">'+resumo+hdr+rows+'</div>';
+ }catch(e){ box.innerHTML='<div style="color:#e57373;font-size:12px;">Erro: '+e.message+'</div>'; }
+}
 
 async function fchRender(){
  var mesEl = document.getElementById('fch-mes');
