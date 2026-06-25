@@ -1970,14 +1970,16 @@ async function vdAddcRenderConectadas(){
   }catch(e){ box.innerHTML='<div style="color:#e57373;">Erro ao listar: '+e.message+'</div>'; }
 }
 async function vdSyncConta(ci, btn){
+  // janela = mês corrente inteiro (do dia 1): dias = dia-do-mês em BRT
+  var diaMes = parseInt(hojeBRT().slice(8,10),10) || 31;
   var old=btn?btn.innerHTML:''; if(btn){ btn.disabled=true; btn.innerHTML='Sincronizando…'; }
   try{
     var url, body;
-    if(ADDC_MKT==='ml'){ url=vdApiBase()+'/api/ml/sync/orders'; body={conta_interna_id:ci, days:30}; }
-    else { url=vdApiBase()+'/api/shopee/orders/sync'; body={conta:ci, dias:30}; }
+    if(ADDC_MKT==='ml'){ url=vdApiBase()+'/api/ml/sync/orders'; body={conta_interna_id:ci, days:diaMes}; }
+    else { url=vdApiBase()+'/api/shopee/orders/sync'; body={conta:ci, dias:diaMes}; }
     var res=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
     if(!res.ok && res.status!==202){ var er=await res.json().catch(function(){return{};}); throw new Error(er.error||('HTTP '+res.status)); }
-    toast('Sync iniciado — as vendas aparecem em alguns minutos');
+    toast('Sync do mês corrente iniciado — as vendas aparecem em alguns minutos');
   }catch(e){ toast('Erro no sync: '+e.message,false); }
   finally{ if(btn){ btn.disabled=false; btn.innerHTML=old; } }
 }
@@ -2104,7 +2106,7 @@ async function vdSkuCadastrar(){
 }
 
 async function vdSkuCadastrarDireto(sku){
-  if(!confirm('📦 '+sku+'\n\nCadastrar custo/imposto deste SKU?\nVendas já registradas mantêm custo zero.\nApenas vendas FUTURAS usarão os novos valores.\n\nContinuar?')) return;
+  if(!confirm('📦 '+sku+'\n\nCadastrar custo/imposto deste SKU?\nRecalcula TODAS as vendas (ML e Shopee), incluindo o histórico.\n\nContinuar?')) return;
   var c = prompt('Custo R$ para '+sku+':','0,00'); if(c===null) return;
   c = parseFloat(c.replace(',','.')) || 0;
   var i = '3,3'; if(VD_USA_IMPOSTO){ i = prompt('Imposto % para '+sku+':','3,3'); if(i===null) return; }
