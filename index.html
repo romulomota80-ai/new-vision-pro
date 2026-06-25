@@ -303,6 +303,15 @@ body.vd-no-imp button[onclick*="vdSkuZerarImpostoTodos"] { display: none !import
 <div class="toast" id="toast"></div>
 
 <!-- OVERLAY VIEWER DE COMPROVANTE/BOLETO (imagem ou PDF) -->
+<div class="overlay" id="ov-addconta" style="z-index:10000;" onclick="if(event.target===this)vdFecharAddConta()">
+ <div style="background:var(--C1);border:1px solid var(--BR);border-radius:16px;width:92vw;max-width:560px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--BR);">
+   <div style="font-size:15px;font-weight:700;color:var(--TX);">Adicionar conta</div>
+   <div onclick="vdFecharAddConta()" style="cursor:pointer;color:var(--MU);font-size:22px;line-height:1;">&times;</div>
+  </div>
+  <div id="addconta-body" style="padding:18px;overflow:auto;"></div>
+ </div>
+</div>
 <div class="overlay" id="ov-view" style="z-index:10000;" onclick="if(event.target===this)fecharViewer()">
  <div style="background:var(--C1);border:1px solid var(--BR);border-radius:16px;width:92vw;max-width:1000px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;">
   <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--BR);gap:12px;">
@@ -1887,11 +1896,90 @@ async function rVd(){
   nav += '<div onclick="VD_SUBABA=\'visao\';rVd()" style="padding:12px 18px;cursor:pointer;border-bottom:'+(sa==='visao'?'2px solid #dc2626':'2px solid transparent')+';font-weight:'+(sa==='visao'?'600':'400')+';color:'+(sa==='visao'?'#dc2626':'#666')+';user-select:none;">📊 Visão Geral</div>';
   nav += '<div onclick="VD_SUBABA=\'skus\';rVd()" style="padding:12px 18px;cursor:pointer;border-bottom:'+(sa==='skus'?'2px solid #dc2626':'2px solid transparent')+';font-weight:'+(sa==='skus'?'600':'400')+';color:'+(sa==='skus'?'#dc2626':'#666')+';user-select:none;">📦 Cadastro SKU</div>';
   nav += '<div onclick="VD_SUBABA=\'vsc\';rVd()" style="padding:12px 18px;cursor:pointer;border-bottom:'+(sa==='vsc'?'2px solid #dc2626':'2px solid transparent')+';font-weight:'+(sa==='vsc'?'600':'400')+';color:'+(sa==='vsc'?'#dc2626':'#666')+';user-select:none;">⚠️ Vendas sem custo</div>';
+  nav += '<div style="margin-left:auto;display:flex;align-items:center;"><button class="btn" onclick="vdAbrirAddConta()" style="font-size:12px;padding:8px 14px;background:var(--R);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;">+ Adicionar conta</button></div>';
   nav += '</div>';
   pane.innerHTML = nav + '<div id="vd-content" style="padding:14px;"></div>';
   if(sa === 'skus') await rVdSkus();
   else if(sa === 'vsc') await rVdVendasSemCusto();
   else await rVdVisao();
+}
+
+// ── Adicionar conta (ML/Shopee): OAuth + cadastro em `contas` + sync ─────────
+var ADDC_MKT = 'ml'; // marketplace selecionado no modal
+function vdSlug(s){ return String(s||'').toLowerCase().trim().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,''); }
+function vdApiBase(){ return (typeof BACKEND_URL!=='undefined'&&BACKEND_URL)?BACKEND_URL:''; }
+function vdAbrirAddConta(){
+  ADDC_MKT='ml';
+  var ov=ge('ov-addconta'); if(!ov) return;
+  ge('addconta-body').innerHTML = vdAddcHTML();
+  ov.classList.add('on');
+  vdAddcRenderConectadas();
+}
+function vdFecharAddConta(){ var ov=ge('ov-addconta'); if(ov) ov.classList.remove('on'); }
+function vdAddcSetMkt(m){ ADDC_MKT=m; ge('addconta-body').innerHTML=vdAddcHTML(); vdAddcRenderConectadas(); var n=ge('addc-nome'); if(n)n.focus(); }
+function vdAddcSlugLive(){ var n=ge('addc-nome'), s=ge('addc-slug'); if(n&&s){ s.textContent=vdSlug(n.value)||'—'; } }
+function vdAddcMktBtn(id,label,bg,fg){
+  var on=ADDC_MKT===id;
+  return '<button onclick="vdAddcSetMkt(\''+id+'\')" style="flex:1;padding:10px;border-radius:10px;border:2px solid '+(on?bg:'var(--BR)')+';background:'+(on?bg:'var(--BG)')+';color:'+(on?fg:'var(--TX)')+';font-weight:700;font-size:13px;cursor:pointer;">'+label+'</button>';
+}
+function vdAddcHTML(){
+  var ml = ADDC_MKT==='ml';
+  return ''
+   +'<div style="display:flex;gap:8px;margin-bottom:14px;">'+vdAddcMktBtn('ml','Mercado Livre','#FFE600','#333')+vdAddcMktBtn('shopee','Shopee','#EE4D2D','#fff')+'</div>'
+   +'<label style="font-size:11px;color:var(--MU);text-transform:uppercase;font-weight:700;">Nome da conta</label>'
+   +'<input id="addc-nome" oninput="vdAddcSlugLive()" placeholder="ex.: '+(ml?'Use Lay Store':'Use Lay Shopee')+'" style="width:100%;margin-top:5px;padding:9px 11px;border:1px solid var(--BR);border-radius:8px;background:var(--BG);color:var(--TX);font-size:14px;font-family:inherit;">'
+   +'<div style="font-size:11px;color:var(--MU);margin-top:6px;">id interno: <code id="addc-slug" style="color:#5a8ca8;">—</code></div>'
+   +'<button class="btn" onclick="vdConectarConta()" style="width:100%;margin-top:14px;padding:11px;background:var(--R);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">Conectar '+(ml?'Mercado Livre':'Shopee')+'</button>'
+   +'<div style="font-size:11px;color:var(--MU);margin-top:8px;line-height:1.5;">Abre o login da loja numa nova aba. Autorize e volte aqui — a conta fica cadastrada no sistema (aparece no Fechamento) e as vendas passam a sincronizar.</div>'
+   +'<div style="border-top:1px solid var(--BR);margin:16px 0 12px;"></div>'
+   +'<div style="font-size:12px;font-weight:700;color:var(--TX);margin-bottom:8px;">Contas '+(ml?'Mercado Livre':'Shopee')+' conectadas</div>'
+   +'<div id="addc-conectadas" style="color:var(--MU);font-size:12px;">Carregando…</div>';
+}
+async function vdConectarConta(){
+  var nome=(ge('addc-nome').value||'').trim();
+  if(!nome){ toast('Digite o nome da conta',false); return; }
+  var slug=vdSlug(nome);
+  if(!slug){ toast('Nome inválido',false); return; }
+  try{
+    var resp=await sb.from('contas').upsert({id:slug, marketplace_id:ADDC_MKT, nome:nome},{onConflict:'id'});
+    if(resp.error) throw resp.error;
+  }catch(e){ toast('Erro ao cadastrar conta: '+e.message,false); return; }
+  // reflete em memória (MPS) pra aparecer no Fechamento sem recarregar
+  var mp=MPS.filter(function(m){return m.id===ADDC_MKT;})[0];
+  if(mp && !mp.contas.some(function(c){return c.id===slug;})) mp.contas.push({id:slug,nome:nome,conta_interna_id:slug,contaPadrao:null});
+  // abre o OAuth da loja
+  var url = ADDC_MKT==='ml'
+    ? vdApiBase()+'/api/ml/auth?conta_interna_id='+encodeURIComponent(slug)
+    : vdApiBase()+'/api/shopee/auth?conta='+encodeURIComponent(slug);
+  window.open(url,'_blank');
+  toast('Conta cadastrada — autorize na aba que abriu');
+  vdAddcRenderConectadas();
+}
+async function vdAddcRenderConectadas(){
+  var box=ge('addc-conectadas'); if(!box) return;
+  try{
+    var url = ADDC_MKT==='ml' ? vdApiBase()+'/api/ml/contas' : vdApiBase()+'/api/shopee/shops';
+    var r = await fetch(url).then(function(x){return x.json();});
+    var lista = ADDC_MKT==='ml' ? (Array.isArray(r)?r:[]) : ((r&&r.lojas)||[]);
+    if(!lista.length){ box.innerHTML='<div style="color:var(--MU);">Nenhuma conta conectada ainda.</div>'; return; }
+    box.innerHTML = lista.map(function(c){
+      var ci=c.conta_interna_id||'';
+      var nm=ADDC_MKT==='ml'?(c.nickname||ci):(c.shop_name||ci);
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--BR);gap:8px;"><div style="min-width:0;"><div style="font-size:13px;font-weight:700;color:var(--TX);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+nm+'</div><div style="font-size:10px;color:var(--MU);">'+ci+'</div></div><button class="btn" onclick="vdSyncConta(\''+ci+'\',this)" style="font-size:11px;padding:6px 12px;background:var(--BG);border:1px solid var(--BR);color:var(--TX);cursor:pointer;white-space:nowrap;">Sincronizar agora</button></div>';
+    }).join('');
+  }catch(e){ box.innerHTML='<div style="color:#e57373;">Erro ao listar: '+e.message+'</div>'; }
+}
+async function vdSyncConta(ci, btn){
+  var old=btn?btn.innerHTML:''; if(btn){ btn.disabled=true; btn.innerHTML='Sincronizando…'; }
+  try{
+    var url, body;
+    if(ADDC_MKT==='ml'){ url=vdApiBase()+'/api/ml/sync/orders'; body={conta_interna_id:ci, days:30}; }
+    else { url=vdApiBase()+'/api/shopee/orders/sync'; body={conta:ci, dias:30}; }
+    var res=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+    if(!res.ok && res.status!==202){ var er=await res.json().catch(function(){return{};}); throw new Error(er.error||('HTTP '+res.status)); }
+    toast('Sync iniciado — as vendas aparecem em alguns minutos');
+  }catch(e){ toast('Erro no sync: '+e.message,false); }
+  finally{ if(btn){ btn.disabled=false; btn.innerHTML=old; } }
 }
 
 async function rVdSkus(){
