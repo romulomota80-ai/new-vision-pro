@@ -1862,7 +1862,7 @@ function rCm(){
 var VD_CONTA = 'todas';
 var VD_DATA_INI = null;
 var VD_DATA_FIM = null;
-var VD_STATUS = 'todos';
+var VD_STATUS = 'paid';
 var VD_MODALIDADE = 'todas'; /*PATCH_FILTRO_MODALIDADE*/
 var VD_BUSCA = '';
 var VD_PAGINA = 1;
@@ -1870,7 +1870,7 @@ var VD_POR_PAG = 50;
 var VD_DADOS = [];
 var VD_CONTAS_INFO = {};
 
-function vdFmt(n){ return 'R$ ' + Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+// (vdFmt duplicada REMOVIDA — vale a definicao de baixo, que nao embute 'R$ '; evita footgun)
 function vdFmtN(n){ return Number(n||0).toLocaleString('pt-BR'); }
 function vdFmtPct(n){ return (Number(n||0)).toFixed(2).replace('.',',') + '%'; }
 function vdFmtData(iso){ if(!iso) return '-'; var d=new Date(iso); return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',timeZone:'America/Sao_Paulo'}) + ' ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'}); }
@@ -9040,8 +9040,11 @@ function vdVisaoRender(){
   var naoTrocas = dados.filter(function(d){return d.eh_troca_devolucao !== true;});
   // COMPETENCIA: conta a venda no mes em que vendeu se ainda estava ativa no fechamento do periodo
   // (paga OU estornada DEPOIS do fim do periodo). Estorno dentro do periodo nao conta como venda.
-  var _fimMs = new Date(VD_DATA_FIM + 'T23:59:59-03:00').getTime();
-  function _ehVendaComp(d){ return d.status==='paid' || (d.data_estorno && new Date(d.data_estorno).getTime() > _fimMs); }
+  // mês BRT (ano*12+mês) de uma data — espelha routes/faturamento.js: a venda conta no MÊS em
+  // que vendeu, a menos que tenha sido estornada DENTRO do mesmo mês. (antes comparava com o fim
+  // do FILTRO -> janelas 7d/30d/custom que cruzam mês classificavam o estorno errado.)
+  function _brtYM(s){ if(!s) return -1; var d=new Date(s); if(isNaN(d.getTime())) return -1; var b=new Date(d.getTime()-3*3600000); return b.getUTCFullYear()*12 + b.getUTCMonth(); }
+  function _ehVendaComp(d){ if(d.status==='paid') return true; if(!d.data_estorno) return false; return _brtYM(d.data_estorno) > _brtYM(d.data_venda); }
   var aprov = naoTrocas.filter(_ehVendaComp);
   var canc = naoTrocas.filter(function(d){return !_ehVendaComp(d);});
   var trocasSum = trocas.reduce(function(t,d){return t+(parseFloat(d.preco_total)||0);},0);
@@ -9182,7 +9185,7 @@ function vdVisaoRender(){
   h += '<div style="background:rgba(255,255,255,.7);'+_scs+'"><div style="'+_sl+'color:#8a93a6;">Qtd Aprovadas</div><div style="'+_sv+'color:var(--TX);">'+aprov.length+'</div></div>';
   h += '<div style="background:linear-gradient(135deg,#fdedec,#fbe2e0);'+_scs+'"><div style="'+_sl+'color:var(--NEG);">Qtd Canceladas</div><div style="'+_sv+'color:var(--NEG);">'+canc.length+'</div></div>';
   h += '<div style="background:rgba(255,255,255,.7);'+_scs+'"><div style="'+_sl+'color:#8a93a6;">Ticket Medio</div><div style="'+_sv+'color:var(--TX);">R$ '+vdFmt(ticketMedio)+'</div></div>';
-  h += '<div style="background:rgba(255,255,255,.7);'+_scs+'"><div style="'+_sl+'color:#8a93a6;">Taxa Cancel.</div><div style="'+_sv+'color:var(--TX);">'+(dados.length>0?(canc.length/dados.length*100).toFixed(1):'0')+'%</div></div>';
+  h += '<div style="background:rgba(255,255,255,.7);'+_scs+'"><div style="'+_sl+'color:#8a93a6;">Taxa Cancel.</div><div style="'+_sv+'color:var(--TX);">'+((aprov.length+canc.length)>0?(canc.length/(aprov.length+canc.length)*100).toFixed(1):'0')+'%</div></div>';
   h += '</div>';
   
   // Filtros
