@@ -9247,7 +9247,8 @@ function vdVisaoRender(){
       var dtBR = dt.toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'})+' '+dt.toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'});
       var mcV = parseFloat(d.mc_valor)||0;
       var mcP = parseFloat(d.mc_pct)||0;
-      var cor = mcP>=15?'var(--G)':mcP>=5?'var(--Y)':'var(--NEG)';
+      var _semCmv = !((parseFloat(d.cmv_total_snap)||0) > 0);
+      var cor = _semCmv ? 'var(--MU)' : (mcP>=15?'var(--G)':mcP>=5?'var(--Y)':'var(--NEG)');
       var modal = d.modalidade || '-';
       if(modal==='fulfillment') modal='Full';
       else if(modal==='self_service') modal='Flex';
@@ -9260,14 +9261,14 @@ function vdVisaoRender(){
       var _logoShopee = '<span title="Shopee" style="display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:50%;background:#EE4D2D;flex-shrink:0;box-shadow:0 1px 3px rgba(238,77,45,.45);"><svg width="11" height="11" viewBox="0 0 24 24"><path d="M6 8.2h12l-.82 11a1.6 1.6 0 0 1-1.6 1.5H8.42a1.6 1.6 0 0 1-1.6-1.5L6 8.2z" fill="#fff"/><path d="M8.6 8.4V6.7a3.4 3.4 0 0 1 6.8 0v1.7" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/></svg></span>';
       var _logoML = '<span title="Mercado Livre" style="display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:50%;background:#FFE600;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.2);"><svg width="13" height="13" viewBox="0 0 32 32"><path d="M5 14.5c0 6.6 5 10.5 11 10.5s11-3.9 11-10.5c0-1.3-1.1-2.1-2.4-1.6-1.9.7-3.2 2.1-5.5 2.1-1.9 0-2.8-1.1-3.8-1.1s-1.9 1.1-3.8 1.1c-2.3 0-3.6-1.4-5.5-2.1C6.1 12.4 5 13.2 5 14.5z" fill="#2D3277"/></svg></span>';
       var _mk = (d.marketplace==='Shopee') ? _logoShopee : _logoML;
-      var _ct = d.marketplace==='Shopee' ? 'verssene' : (d.conta_interna_id||'-');
+      var _ct = d.conta_interna_id||'-';
       h += '<td style="padding:8px;font-size:11px;white-space:nowrap;"><span style="display:inline-flex;align-items:center;gap:7px;">'+_mk+'<span>'+_ct+'</span></span></td>';
       h += '<td style="padding:8px;font-family:var(--FONT-M),monospace;font-size:11px;letter-spacing:-.2px;color:var(--TX);">'+(d.sku||'-')+'</td>';
       h += '<td style="padding:8px;font-size:11px;">'+dtBR+'</td>';
       h += '<td style="padding:8px;text-align:center;font-size:11px;">'+modal+'</td>';
       h += '<td style="padding:8px;text-align:right;">R$ '+vdFmt(d.preco_total)+'</td>';
       h += '<td style="padding:8px;text-align:center;">'+(d.qty||1)+'</td>';
-      h += '<td style="padding:8px;text-align:right;color:var(--NEG);">'+vdFmt(d.cmv_total_snap)+'</td>';
+      h += '<td style="padding:8px;text-align:right;color:var(--NEG);">'+(_semCmv?'<span title="Sem custo cadastrado — margem incompleta" style="color:var(--Y);">⚠ </span>':'')+vdFmt(d.cmv_total_snap)+'</td>';
       h += '<td style="padding:8px;text-align:right;color:var(--Y);">'+vdFmt(d.comissao_ml)+'</td>';
       h += '<td style="padding:8px;text-align:right;color:var(--B);">'+vdFmt(d.frete_seller)+'</td>';
       h += '<td style="padding:8px;text-align:right;font-weight:600;color:'+cor+';">'+vdFmt(mcV)+'</td>';
