@@ -1991,13 +1991,11 @@ async function rVdSkus(){
     var r1 = await sb.from('ml_skus_cmv').select('*').order('atualizado_em', { ascending: false });
     if(r1.error) throw r1.error;
     VD_SKU_DADOS = r1.data || [];
-    var r2 = await sb.from('ml_orders').select('sku,item_id,titulo').not('sku','is',null).limit(30000);
-    if(r2.error) throw r2.error;
-    var c = {};
-    (r2.data || []).forEach(function(v){ if(!v.sku) return; if(!c[v.sku]) c[v.sku]={qty:0,item_id:v.item_id||null,titulo:v.titulo||null}; c[v.sku].qty++; if(!c[v.sku].item_id&&v.item_id) c[v.sku].item_id=v.item_id; if(!c[v.sku].titulo&&v.titulo) c[v.sku].titulo=v.titulo; });
     var cad = {};
     VD_SKU_DADOS.forEach(function(s){ cad[s.sku] = true; });
-    VD_SKU_SEM_CUSTO = Object.keys(c).filter(function(s){return !cad[s];}).map(function(s){return{sku:s,qty:c[s].qty,item_id:c[s].item_id,titulo:c[s].titulo};}).sort(function(a,b){return b.qty-a.qty;});
+    // TODOS os SKUs ML sem custo (endpoint server-side; o select via REST era capado em 1000 -> via só ~1/5)
+    var _ml = await fetch('/api/ml/vendas/sem-custo').then(function(r){return r.json();}).catch(function(){return {itens:[]};});
+    VD_SKU_SEM_CUSTO = (_ml.itens||[]).filter(function(s){return !cad[s.sku];}).map(function(s){return{sku:s.sku,qty:s.qty,item_id:s.item_id,titulo:s.titulo};});
     // SKUs SHOPEE sem custo (ml_skus_cmv é compartilhada ML+Shopee) — todas as lojas; agrupa pelo título do anúncio
     try {
       var _sh = await fetch('/api/shopee/sem-custo?limit=3000').then(function(r){return r.json();});
