@@ -591,3 +591,29 @@ escrow + `comissao_esperada`/`divergencia_comissao`), `shopee_carteira` (wallet/
   terminal.
 - Sync automático diário do extrato.
 - Revisar segurança: RLS do Supabase e repositório privado.
+
+---
+
+## 2026-06-24 — Handoff (reskin + aba Fechamento) — SALVO, NÃO DEPLOYADO
+
+Tudo construído e revisado, **nada subiu pra produção** (bloqueio de cota Netlify, ver abaixo). Persistido no GitHub em branches de trabalho. `main` dos dois repos NÃO foi tocado nesta sessão.
+
+### 1) Reskin visual — branch `reskin-visual` (repo new-vision-pro)
+- Repaginação do **app inteiro**: modo claro minimalista (off-white, sidebar branca) + modo escuro grafite premium (`#0f1115`/`#161920`), títulos em Plus Jakarta Sans.
+- Abordagem **token-driven**: só CSS/variáveis + ~160 cores chumbadas integradas ao tema. **JS/markup/lógica intocados.**
+- Acessibilidade: zoom liberado, `color-scheme`, `:focus-visible`, `:disabled`, `prefers-reduced-motion`, fim de `transition:all`, toast estilizado.
+- Commit do reskin: `b4533a3` (também já está em `main` deste repo desde a aprovação anterior do dia; o que faltou foi o deploy passar pela cota).
+
+### 2) Aba Fechamento (DRE mensal com snapshot) — construída + revisada
+- **Backend** (repo new-vision-backend, branch `feat-fechamento`): `routes/fechamento.js` (`montarFechamento(mes)` + GET ao vivo/foto + POST fechar/reabrir), tabela `fechamentos_mensais` (snapshot), drill-down **Conta → Plataforma → Produto** (Fat · Lucro s/ADS · Lucro c/ADS · ADS), custos gerais abatidos 1x no consolidado.
+- **Front** (branch `feat-fechamento-front`): aba "Fechamento" no visual novo, árvore expansível, botões Fechar/Reabrir.
+- **Review final (math ponta-a-ponta com dados reais):** `lucro_final ≈ R$ 676,6k` em junho/2026, **bate com a fórmula da aba Lucro**; sem double-count de ADS nem de imposto. Fix pré-produção backend: commit `ee2bbe9` (documenta invariante de imposto, valida `?mes=`, arredonda subtotais).
+- **3 realidades do dado (não são bugs):**
+  1. **ADS por produto = 0 hoje** — `ads_metrics` não tem SKU amarrado, então todo o ADS (~R$152k) aparece em "ADS sem produto" no consolidado. Acende sozinho quando o ADS vier com SKU.
+  2. **Soma dos produtos ≠ subtotal da plataforma (~0,4%)** — drift conhecido do rollup; o **total geral é o número certo**, produtos são pra análise.
+  3. Conferir o ~R$676,6k contra a aba Lucro de junho quando subir.
+
+### 3) BLOQUEIO — deploy travado na cota Netlify
+- **Nada sobe** (reskin nem fechamento) até liberar a conta. Erro: *"Account credit usage exceeded — new deploys are blocked until credits are added"*. Recarregar crédito não destravou sozinho.
+- **Ação:** app.netlify.com → time **verssene** → **Billing → Usage limits / Spending limit** — procurar cap batido e aumentar / habilitar usage-based billing.
+- Quando liberar: subir reskin + fechamento; o **backend do fechamento** precisa de restart do serviço (pm2) no servidor pra carregar `routes/fechamento.js`.
