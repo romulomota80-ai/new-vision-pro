@@ -1998,7 +1998,7 @@ async function rVdSkus(){
     VD_SKU_SEM_CUSTO = (_ml.itens||[]).filter(function(s){return !cad[s.sku];}).map(function(s){return{sku:s.sku,qty:s.qty,item_id:s.item_id,titulo:s.titulo};});
     // SKUs SHOPEE sem custo (ml_skus_cmv é compartilhada ML+Shopee) — todas as lojas; agrupa pelo título do anúncio
     try {
-      var _sh = await fetch('/api/shopee/sem-custo?limit=3000').then(function(r){return r.json();});
+      var _sh = await fetch('/api/shopee/sem-custo?agrupado=1&limit=3000').then(function(r){return r.json();});
       if (_sh && _sh.itens && _sh.itens.length) {
         var _ja = {}; VD_SKU_SEM_CUSTO.forEach(function(s){ _ja[s.sku] = true; });
         var _agg = {};
@@ -2127,6 +2127,18 @@ function vdSkuFiltro(f){
   vdSkuRender();
 }
 
+// Atualiza as listas EM MEMORIA apos cadastrar um SKU e re-renderiza so' a tela (sem re-baixar
+// tudo -> nao "recarrega a pagina"). Mantem o toast de "N vendas recalculadas".
+function vdSkuAplicarLocal(sku, c, i){
+  var _sl = (sku||'').toLowerCase();
+  VD_SKU_SEM_CUSTO = (VD_SKU_SEM_CUSTO||[]).filter(function(s){ return (s.sku||'').toLowerCase() !== _sl; });
+  if(typeof VSC_DADOS !== 'undefined' && VSC_DADOS){ VSC_DADOS = VSC_DADOS.filter(function(v){ return (v.sku||'').toLowerCase() !== _sl; }); if(typeof VSC_TOTAL !== 'undefined') VSC_TOTAL = VSC_DADOS.length; }
+  var _ex = (VD_SKU_DADOS||[]).filter(function(s){ return (s.sku||'').toLowerCase() === _sl; })[0];
+  if(_ex){ _ex.custo = c; _ex.imposto_pct = i; } else { VD_SKU_DADOS.push({ sku:sku, custo:c, imposto_pct:i }); }
+  if(typeof VD_SUBABA === 'string' && VD_SUBABA === 'vsc'){ if(typeof vdVscRender === 'function') vdVscRender(); }
+  else { if(typeof vdSkuRender === 'function') vdSkuRender(); }
+}
+
 async function vdSkuCadastrar(){
   var s = (ge('vd-sku-nov').value||'').trim();
   var c = parseFloat((ge('vd-cus-nov').value||'').replace(',','.')) || 0;
@@ -2138,7 +2150,7 @@ async function vdSkuCadastrar(){
     var nUpd = (r.data!=null) ? r.data : 0;
     if(typeof toast==='function') toast('✓ '+s+' salvo! '+nUpd+' vendas recalculadas','sucesso'); else alert('Salvo! '+nUpd+' vendas recalculadas');
     ge('vd-sku-nov').value=''; ge('vd-cus-nov').value=''; ge('vd-imp-nov').value='3,3';
-    rVdSkus();
+    vdSkuAplicarLocal(s, c, i);
   } catch(e){ alert('Erro: '+e.message); }
 }
 
@@ -2153,7 +2165,8 @@ async function vdSkuCadastrarDireto(sku){
     var r = await sb.rpc('aplicar_custo_periodo', { p_sku:sku, p_custo:c, p_imposto:i, p_de:'2020-01-01', p_ate:null });
     if(r.error) throw r.error;
     var nUpd = (r.data!=null) ? r.data : 0;
-    if(typeof toast==='function') toast('✓ Cadastrado! '+nUpd+' vendas recalculadas','sucesso'); if(typeof VD_SUBABA==='string' && VD_SUBABA==='vsc'){ rVdVendasSemCusto(); } else { rVdSkus(); } /*PATCH_VSC_REDIRECT*/
+    if(typeof toast==='function') toast('✓ Cadastrado! '+nUpd+' vendas recalculadas','sucesso');
+    vdSkuAplicarLocal(sku, c, i); /*PATCH_VSC_REDIRECT*/
   } catch(e){ alert('Erro: '+e.message); }
 }
 
