@@ -1998,6 +1998,21 @@ async function rVdSkus(){
     var cad = {};
     VD_SKU_DADOS.forEach(function(s){ cad[s.sku] = true; });
     VD_SKU_SEM_CUSTO = Object.keys(c).filter(function(s){return !cad[s];}).map(function(s){return{sku:s,qty:c[s].qty,item_id:c[s].item_id,titulo:c[s].titulo};}).sort(function(a,b){return b.qty-a.qty;});
+    // SKUs SHOPEE sem custo (ml_skus_cmv é compartilhada ML+Shopee) — todas as lojas; agrupa pelo título do anúncio
+    try {
+      var _sh = await fetch('/api/shopee/sem-custo?limit=3000').then(function(r){return r.json();});
+      if (_sh && _sh.itens && _sh.itens.length) {
+        var _ja = {}; VD_SKU_SEM_CUSTO.forEach(function(s){ _ja[s.sku] = true; });
+        var _agg = {};
+        _sh.itens.forEach(function(it){
+          if(!it.sku || cad[it.sku] || _ja[it.sku]) return;
+          if(!_agg[it.sku]) _agg[it.sku] = {sku:it.sku, qty:0, item_id:null, titulo:it.item_title||null, _mk:'Shopee'};
+          _agg[it.sku].qty += (parseInt(it.qty)||1);
+          if(!_agg[it.sku].titulo && it.item_title) _agg[it.sku].titulo = it.item_title;
+        });
+        Object.keys(_agg).forEach(function(k){ VD_SKU_SEM_CUSTO.push(_agg[k]); });
+      }
+    } catch(_eSh){ console.warn('Shopee sem-custo (cadastro):', _eSh); }
   } catch(e) {
     cont.innerHTML = '<div style="padding:20px;color:var(--NEG);background:rgba(201,33,39,.08);border-radius:8px;">❌ Erro: '+(e.message||e)+'</div>';
     return;
