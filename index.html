@@ -8967,16 +8967,20 @@ async function rVdVisao(){
     var iniUTC = vdBRTtoUTC(VD_DATA_INI + ' 00:00:00');
     var fimUTC = vdBRTtoUTC(VD_DATA_FIM + ' 23:59:59');
     var todos = [];
-    // contas ML selecionadas (look_store/moda_mix). Se nenhuma marcada, nao consulta o ML.
-    var _mlSel = (VD_CONTAS_SEL || []).filter(function(c){ return c==='look_store' || c==='moda_mix'; });
-    if(_mlSel.length > 0){
-      // KEYSET via backend /api/ml/vendas (service_role, sem statement_timeout do anon;
-      // cursor em (data_venda,id) -> custo constante por pagina, nao estoura em mes cheio).
-      var _contaQS = (_mlSel.length === 1) ? ('&conta=' + _mlSel[0]) : ''; // 2 marcadas = todas do ML
-      var _buscaQS = VD_BUSCA ? ('&busca=' + encodeURIComponent(VD_BUSCA)) : '';
+    // Lista de contas DISPONIVEIS (dinamica: ML + Shopee, do banco). Carrega 1x e cacheia.
+    if(!window.VD_CONTAS_DISP){
+      try{ var _cc = await fetch('/api/ml/vendas/contas').then(function(r){return r.json();}); window.VD_CONTAS_DISP = (_cc && _cc.contas) || []; }
+      catch(_eCC){ window.VD_CONTAS_DISP = [{id:'look_store',mk:'ml'},{id:'moda_mix',mk:'ml'},{id:'verssene_shopee',mk:'shopee'}]; }
+      if(!window._VD_SEL_INIT){ window.VD_CONTAS_SEL = (window.VD_CONTAS_DISP||[]).map(function(a){return a.id;}); window._VD_SEL_INIT = true; }
+    }
+    var _mk = {}; (window.VD_CONTAS_DISP||[]).forEach(function(a){ _mk[a.id] = a.mk; });
+    var _buscaQS = VD_BUSCA ? ('&busca=' + encodeURIComponent(VD_BUSCA)) : '';
+    // ML: cada conta ML marcada, paginada por keyset (cursor data_venda,id).
+    var _mlSel = (VD_CONTAS_SEL || []).filter(function(c){ return _mk[c] === 'ml'; });
+    for(var _im = 0; _im < _mlSel.length; _im++){
       var _cd = '', _ci = '', _guard = 0;
       while(_guard++ < 1000){
-        var _url = '/api/ml/vendas?de=' + VD_DATA_INI + '&ate=' + VD_DATA_FIM + _contaQS + _buscaQS + '&limit=2000'
+        var _url = '/api/ml/vendas?de=' + VD_DATA_INI + '&ate=' + VD_DATA_FIM + '&conta=' + encodeURIComponent(_mlSel[_im]) + _buscaQS + '&limit=2000'
           + (_cd ? ('&cursor_data=' + encodeURIComponent(_cd) + '&cursor_id=' + encodeURIComponent(_ci)) : '');
         var j = await fetch(_url).then(function(r){ return r.json(); });
         if(j && j.erro) throw new Error(j.erro);
@@ -9013,12 +9017,14 @@ async function rVdVisao(){
     
     todos.forEach(function(v){ if(!v.marketplace) v.marketplace='ML'; });
     // Mescla vendas Shopee (mesmo formato) quando a Shopee esta marcada
-    if((VD_CONTAS_SEL || []).indexOf('verssene_shopee') >= 0){
+    // Shopee: busca CADA loja Shopee marcada pelo seu nome (antes pegava 1 loja so' -> com 2+ contas sumia).
+    var _shSel = (VD_CONTAS_SEL || []).filter(function(c){ return _mk[c] === 'shopee'; });
+    for(var _is = 0; _is < _shSel.length; _is++){
       try{
-        var _shUrl = '/api/shopee/vendas?de='+VD_DATA_INI+'&ate='+VD_DATA_FIM+(VD_BUSCA?('&busca='+encodeURIComponent(VD_BUSCA)):'');
+        var _shUrl = '/api/shopee/vendas?conta='+encodeURIComponent(_shSel[_is])+'&de='+VD_DATA_INI+'&ate='+VD_DATA_FIM+(VD_BUSCA?('&busca='+encodeURIComponent(VD_BUSCA)):'');
         var _sh = await fetch(_shUrl).then(function(r){return r.json();});
         if(_sh && _sh.itens && _sh.itens.length){ todos = todos.concat(_sh.itens); }
-      }catch(_eSh){ console.warn('Shopee vendas:', _eSh); }
+      }catch(_eSh){ console.warn('Shopee vendas '+_shSel[_is]+':', _eSh); }
     }
     VD_DADOS = todos;
     vdVisaoRender();
@@ -9188,14 +9194,17 @@ function vdVisaoRender(){
   h += '<div><div style="'+_fl+'">Data Inicio (BRT)</div><input class="vd-fil" type="date" value="'+VD_DATA_INI+'" onchange="VD_DATA_INI=this.value;VD_PERIODO=\'custom\'" style="'+_fi+'"></div>';
   h += '<div><div style="'+_fl+'">Data Fim (BRT)</div><input class="vd-fil" type="date" value="'+VD_DATA_FIM+'" onchange="VD_DATA_FIM=this.value;VD_PERIODO=\'custom\'" style="'+_fi+'"></div>';
   h += '<div style="grid-column:span 2;"><div style="'+_fl+'">Contas (marque e clique em Pesquisar)</div><div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;padding:8px 0;">'
-    + [['look_store','LOOK_STORE'],['moda_mix','MODA_MIX'],['verssene_shopee','VERSSENE (Shopee)']].map(function(o){
-        var ck = (VD_CONTAS_SEL||[]).indexOf(o[0]) >= 0 ? ' checked' : '';
-        return '<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--TX);cursor:pointer;white-space:nowrap;"><input class="vd-chk" type="checkbox"'+ck+' onchange="vdToggleConta(\''+o[0]+'\',this.checked)" style="cursor:pointer;width:16px;height:16px;">'+o[1]+'</label>';
+    + (window.VD_CONTAS_DISP||[]).map(function(o){
+        var ck = (VD_CONTAS_SEL||[]).indexOf(o.id) >= 0 ? ' checked' : '';
+        var _tag = o.mk==='shopee'
+          ? ' <span style="font-size:9px;background:var(--O);color:#fff;padding:1px 5px;border-radius:3px;">Shopee</span>'
+          : ' <span style="font-size:9px;background:var(--B);color:#fff;padding:1px 5px;border-radius:3px;">ML</span>';
+        return '<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--TX);cursor:pointer;white-space:nowrap;"><input class="vd-chk" type="checkbox"'+ck+' onchange="vdToggleConta(\''+o.id+'\',this.checked)" style="cursor:pointer;width:16px;height:16px;">'+o.id.replace(/_/g,' ').toUpperCase()+_tag+'</label>';
       }).join('')
     + '</div></div>';
   h += '<div><div style="'+_fl+'">Status</div><select class="vd-fil" onchange="VD_STATUS=this.value;vdVisaoRender()" style="'+_fi+'"><option value="paid"'+(VD_STATUS==='paid'?' selected':'')+'>Aprovadas</option><option value="cancelled"'+(VD_STATUS==='cancelled'?' selected':'')+'>Canceladas</option><option value="todos"'+(VD_STATUS==='todos'?' selected':'')+'>Todas</option></select></div>';
   /* PATCH_FILTRO_VISAO_MODALIDADE - dropdown Modalidade */
-  h += '<div><div style="'+_fl+'">Modalidade</div><select class="vd-fil" onchange="VD_MODALIDADE=this.value;VD_PAGINA=1;rVdVisao()" style="'+_fi+'"><option value="todas"'+(VD_MODALIDADE==='todas'?' selected':'')+'>Todas</option><option value="flex"'+(VD_MODALIDADE==='flex'?' selected':'')+'>Flex</option><option value="full"'+(VD_MODALIDADE==='full'?' selected':'')+'>Full</option><option value="agencia"'+(VD_MODALIDADE==='agencia'?' selected':'')+'>Agencia</option></select></div>';
+  h += '<div><div style="'+_fl+'">Modalidade</div><select class="vd-fil" onchange="VD_MODALIDADE=this.value;vdVisaoRender()" style="'+_fi+'"><option value="todas"'+(VD_MODALIDADE==='todas'?' selected':'')+'>Todas</option><option value="flex"'+(VD_MODALIDADE==='flex'?' selected':'')+'>Flex</option><option value="full"'+(VD_MODALIDADE==='full'?' selected':'')+'>Full</option><option value="agencia"'+(VD_MODALIDADE==='agencia'?' selected':'')+'>Agencia</option></select></div>';
   h += '<div><div style="'+_fl+'">Buscar SKU/Anuncio</div><input class="vd-fil" type="text" placeholder="..." value="'+(VD_BUSCA||'')+'" oninput="VD_BUSCA=this.value" onkeydown="if(event.key===\'Enter\')rVdVisao()" style="'+_fi+'"></div>';
   // VD_BOTAO_PESQUISAR_INSTALADO
   h += '<div style="display:flex;align-items:flex-end;grid-column:span 1;"><button class="vd-btn" onclick="VD_PAGINA=1;rVdVisao()" style="padding:9px 16px;background:linear-gradient(135deg,#7c5cff,#5b8cff);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;width:100%;white-space:nowrap;box-shadow:0 4px 14px -3px rgba(108,84,255,.5);">🔍 Pesquisar</button></div>';
