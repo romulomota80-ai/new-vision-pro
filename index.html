@@ -1991,13 +1991,13 @@ async function rVdSkus(){
     var r1 = await sb.from('ml_skus_cmv').select('*').order('atualizado_em', { ascending: false });
     if(r1.error) throw r1.error;
     VD_SKU_DADOS = r1.data || [];
-    var r2 = await sb.from('ml_orders').select('sku').not('sku','is',null).limit(30000);
+    var r2 = await sb.from('ml_orders').select('sku,item_id,titulo').not('sku','is',null).limit(30000);
     if(r2.error) throw r2.error;
     var c = {};
-    (r2.data || []).forEach(function(v){ if(v.sku) c[v.sku] = (c[v.sku] || 0) + 1; });
+    (r2.data || []).forEach(function(v){ if(!v.sku) return; if(!c[v.sku]) c[v.sku]={qty:0,item_id:v.item_id||null,titulo:v.titulo||null}; c[v.sku].qty++; if(!c[v.sku].item_id&&v.item_id) c[v.sku].item_id=v.item_id; if(!c[v.sku].titulo&&v.titulo) c[v.sku].titulo=v.titulo; });
     var cad = {};
     VD_SKU_DADOS.forEach(function(s){ cad[s.sku] = true; });
-    VD_SKU_SEM_CUSTO = Object.keys(c).filter(function(s){return !cad[s];}).map(function(s){return{sku:s,qty:c[s]};}).sort(function(a,b){return b.qty-a.qty;});
+    VD_SKU_SEM_CUSTO = Object.keys(c).filter(function(s){return !cad[s];}).map(function(s){return{sku:s,qty:c[s].qty,item_id:c[s].item_id,titulo:c[s].titulo};}).sort(function(a,b){return b.qty-a.qty;});
   } catch(e) {
     cont.innerHTML = '<div style="padding:20px;color:var(--NEG);background:rgba(201,33,39,.08);border-radius:8px;">❌ Erro: '+(e.message||e)+'</div>';
     return;
@@ -2029,31 +2029,56 @@ function vdSkuRender(){
   h += '<div style="flex:1;min-width:100px;"><label style="font-size:11px;color:var(--MU);">Custo R$</label><br><input id="vd-cus-nov" placeholder="0,00" style="width:100%;padding:6px;border:1px solid var(--BR);border-radius:6px;"></div>';
   h += '<div style="flex:1;min-width:80px;"><label style="font-size:11px;color:var(--MU);">Imposto %</label><br><input id="vd-imp-nov" value="3,3" style="width:100%;padding:6px;border:1px solid var(--BR);border-radius:6px;"></div>';
   h += '<button onclick="vdSkuCadastrar()" style="background:#dc2626;color:#fff;padding:8px 18px;border:none;border-radius:6px;font-weight:600;cursor:pointer;">+ Cadastrar</button></div></div>';
+  h += '<div style="background:var(--C2);border:1px solid var(--BR);border-radius:10px;overflow:hidden;">';
+  h += '<div style="padding:10px 14px;border-bottom:1px solid var(--BR);display:flex;gap:8px;flex-wrap:wrap;align-items:center;">';
+  h += '<input id="vd-sku-busca" value="'+VD_SKU_BUSCA.replace(/"/g,'&quot;')+'" placeholder="🔍 Buscar SKU..." oninput="VD_SKU_BUSCA=this.value;VD_SKU_PAGINA=1;vdSkuFiltrar()" style="flex:1;min-width:160px;padding:6px;border:1px solid var(--BR);border-radius:6px;">';
+  h += '<select onchange="VD_SKU_FILTRO=this.value;VD_SKU_PAGINA=1;vdSkuFiltrar()" style="padding:6px;border:1px solid var(--BR);border-radius:6px;font-size:12px;">';
+  h += '<option value="todos"'+(VD_SKU_FILTRO==='todos'?' selected':'')+'>Todos ('+(totalCad+totalSem)+')</option>';
+  h += '<option value="com_custo"'+(VD_SKU_FILTRO==='com_custo'?' selected':'')+'>Com custo ('+totalCad+')</option>';
+  h += '<option value="sem_custo"'+(VD_SKU_FILTRO==='sem_custo'?' selected':'')+'>Sem custo ('+totalSem+')</option>';
+  h += '</select>';
+  h += '<span id="vd-sku-cnt" style="font-size:12px;color:var(--MU);"></span></div>';
+  h += '<div id="vd-sku-res"></div>';
+  h += '</div>';
+  cont.innerHTML = h;
+  vdSkuFiltrar();
+}
+
+// Atualiza SO' a lista de SKUs + contador, SEM recriar o input de busca — assim o
+// campo nao perde o foco a cada tecla (bug antigo: o oninput chamava vdSkuRender(),
+// que reconstruia o proprio input). Chamado pelo oninput da busca, pelo filtro e pela paginacao.
+function vdSkuFiltrar(){
+  var res = ge('vd-sku-res'); if(!res) return;
+  var _skusComCusto = VD_SKU_DADOS.filter(function(s){return (parseFloat(s.custo)||0) > 0;});
+  var _skusZerados = VD_SKU_DADOS.filter(function(s){return !((parseFloat(s.custo)||0) > 0);});
   var dados;
-  if(VD_SKU_FILTRO === 'sem_custo') dados = _skusZerados.slice().concat(VD_SKU_SEM_CUSTO.map(function(s){return {sku:s.sku, custo:null, imposto_pct:null, _sem:true};}));
+  if(VD_SKU_FILTRO === 'sem_custo') dados = _skusZerados.slice().concat(VD_SKU_SEM_CUSTO.map(function(s){return {sku:s.sku, custo:null, imposto_pct:null, _sem:true, item_id:s.item_id, titulo:s.titulo};}));
   else if(VD_SKU_FILTRO === 'com_custo') dados = _skusComCusto.slice();
-  else { dados = VD_SKU_DADOS.slice(); VD_SKU_SEM_CUSTO.forEach(function(s){dados.push({sku:s.sku, custo:null, imposto_pct:null, _sem:true});}); }
+  else { dados = VD_SKU_DADOS.slice(); VD_SKU_SEM_CUSTO.forEach(function(s){dados.push({sku:s.sku, custo:null, imposto_pct:null, _sem:true, item_id:s.item_id, titulo:s.titulo});}); }
   if(VD_SKU_BUSCA){ var b = VD_SKU_BUSCA.toLowerCase(); dados = dados.filter(function(d){return (d.sku||'').toLowerCase().indexOf(b)>=0;}); }
+  // organiza por ANÚNCIO/produto: SKUs do mesmo item_id ficam juntos (ordenados pelo título do anúncio); sem anúncio cai ordenado por SKU
+  dados.sort(function(a,b){ var ka=(a.titulo||a.item_id||a.sku||'').toString().toLowerCase(), kb=(b.titulo||b.item_id||b.sku||'').toString().toLowerCase(); if(ka<kb)return -1; if(ka>kb)return 1; return (a.sku||'').localeCompare(b.sku||''); });
   var total = dados.length;
   var totalPag = Math.max(1, Math.ceil(total/VD_SKU_POR_PAG));
   if(VD_SKU_PAGINA > totalPag) VD_SKU_PAGINA = totalPag;
   var ini = (VD_SKU_PAGINA-1)*VD_SKU_POR_PAG;
   var fim = Math.min(ini+VD_SKU_POR_PAG, total);
   var pagD = dados.slice(ini, fim);
-  h += '<div style="background:var(--C2);border:1px solid var(--BR);border-radius:10px;overflow:hidden;">';
-  h += '<div style="padding:10px 14px;border-bottom:1px solid var(--BR);display:flex;gap:8px;flex-wrap:wrap;align-items:center;">';
-  h += '<input value="'+VD_SKU_BUSCA.replace(/"/g,'&quot;')+'" placeholder="🔍 Buscar SKU..." oninput="VD_SKU_BUSCA=this.value;VD_SKU_PAGINA=1;vdSkuRender()" style="flex:1;min-width:160px;padding:6px;border:1px solid var(--BR);border-radius:6px;">';
-  h += '<select onchange="VD_SKU_FILTRO=this.value;VD_SKU_PAGINA=1;vdSkuRender()" style="padding:6px;border:1px solid var(--BR);border-radius:6px;font-size:12px;">';
-  h += '<option value="todos"'+(VD_SKU_FILTRO==='todos'?' selected':'')+'>Todos ('+(totalCad+totalSem)+')</option>';
-  h += '<option value="com_custo"'+(VD_SKU_FILTRO==='com_custo'?' selected':'')+'>Com custo ('+totalCad+')</option>';
-  h += '<option value="sem_custo"'+(VD_SKU_FILTRO==='sem_custo'?' selected':'')+'>Sem custo ('+totalSem+')</option>';
-  h += '</select>';
-  h += '<span style="font-size:12px;color:var(--MU);">'+(total>0?ini+1:0)+'-'+fim+' de '+total+'</span></div>';
+  var cntEl = ge('vd-sku-cnt'); if(cntEl) cntEl.innerHTML = (total>0?ini+1:0)+'-'+fim+' de '+total;
+  var h = '';
   if(total === 0){
     h += '<div style="padding:40px;text-align:center;color:var(--MU);">Nenhum SKU encontrado.</div>';
   } else {
     h += '<div style="overflow-x:auto;"><table style="width:100%;font-size:12px;border-collapse:collapse;"><thead style="background:var(--C2);color:var(--MU);text-align:left;"><tr><th style="padding:8px;">SKU</th><th style="padding:8px;text-align:center;width:60px;">Status</th><th style="padding:8px;text-align:right;width:110px;">Custo R$</th><th style="padding:8px;text-align:right;width:80px;">Imp %</th><th style="padding:8px;width:180px;">Ações</th></tr></thead><tbody>';
+    var _lastGrp = null;
     pagD.forEach(function(s){
+      var _grp = s.item_id || s.titulo || null;
+      if(_grp && _grp !== _lastGrp){
+        _lastGrp = _grp;
+        var _gc = pagD.filter(function(x){return (x.item_id||x.titulo)===_grp;}).length;
+        var _gt = String(s.titulo||('Anúncio '+s.item_id)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        h += '<tr style="background:var(--C1);"><td colspan="'+(VD_USA_IMPOSTO?5:4)+'" style="padding:7px 9px;font-size:11px;font-weight:700;color:var(--TX);border-top:2px solid var(--BR2);">📦 '+_gt+' <span style="font-weight:400;color:var(--MU);">· '+_gc+' SKU'+(_gc!==1?'s':'')+'</span></td></tr>';
+      } else if(!_grp){ _lastGrp = null; }
       var sem = s._sem;
       var bg = sem ? 'background:#FAEEDA22;' : '';
       var st = sem ? '<span title="Sem custo" style="color:var(--NEG);font-size:16px;">⚠</span>' : '<span title="Completo" style="color:var(--G);font-size:16px;">✓</span>';
@@ -2074,14 +2099,13 @@ function vdSkuRender(){
     h += '</tbody></table></div>';
     if(totalPag > 1){
       h += '<div style="padding:10px 14px;border-top:1px solid var(--BR);display:flex;justify-content:space-between;font-size:12px;color:var(--MU);"><span>Página '+VD_SKU_PAGINA+' de '+totalPag+'</span><div style="display:flex;gap:4px;">';
-      h += '<button onclick="VD_SKU_PAGINA=1;vdSkuRender()" '+(VD_SKU_PAGINA===1?'disabled':'')+' style="padding:4px 10px;border:1px solid var(--BR);background:var(--C2);border-radius:4px;cursor:pointer;">«</button>';
-      h += '<button onclick="VD_SKU_PAGINA=Math.max(1,VD_SKU_PAGINA-1);vdSkuRender()" '+(VD_SKU_PAGINA===1?'disabled':'')+' style="padding:4px 10px;border:1px solid var(--BR);background:var(--C2);border-radius:4px;cursor:pointer;">‹</button>';
-      h += '<button onclick="VD_SKU_PAGINA=Math.min('+totalPag+',VD_SKU_PAGINA+1);vdSkuRender()" '+(VD_SKU_PAGINA===totalPag?'disabled':'')+' style="padding:4px 10px;border:1px solid var(--BR);background:var(--C2);border-radius:4px;cursor:pointer;">›</button>';
-      h += '<button onclick="VD_SKU_PAGINA='+totalPag+';vdSkuRender()" '+(VD_SKU_PAGINA===totalPag?'disabled':'')+' style="padding:4px 10px;border:1px solid var(--BR);background:var(--C2);border-radius:4px;cursor:pointer;">»</button></div></div>';
+      h += '<button onclick="VD_SKU_PAGINA=1;vdSkuFiltrar()" '+(VD_SKU_PAGINA===1?'disabled':'')+' style="padding:4px 10px;border:1px solid var(--BR);background:var(--C2);border-radius:4px;cursor:pointer;">«</button>';
+      h += '<button onclick="VD_SKU_PAGINA=Math.max(1,VD_SKU_PAGINA-1);vdSkuFiltrar()" '+(VD_SKU_PAGINA===1?'disabled':'')+' style="padding:4px 10px;border:1px solid var(--BR);background:var(--C2);border-radius:4px;cursor:pointer;">‹</button>';
+      h += '<button onclick="VD_SKU_PAGINA=Math.min('+totalPag+',VD_SKU_PAGINA+1);vdSkuFiltrar()" '+(VD_SKU_PAGINA===totalPag?'disabled':'')+' style="padding:4px 10px;border:1px solid var(--BR);background:var(--C2);border-radius:4px;cursor:pointer;">›</button>';
+      h += '<button onclick="VD_SKU_PAGINA='+totalPag+';vdSkuFiltrar()" '+(VD_SKU_PAGINA===totalPag?'disabled':'')+' style="padding:4px 10px;border:1px solid var(--BR);background:var(--C2);border-radius:4px;cursor:pointer;">»</button></div></div>';
     }
   }
-  h += '</div>';
-  cont.innerHTML = h;
+  res.innerHTML = h;
 }
 
 function vdSkuFiltro(f){
