@@ -2015,6 +2015,7 @@ async function rVdSkus(){
     cont.innerHTML = '<div style="padding:20px;color:var(--NEG);background:rgba(201,33,39,.08);border-radius:8px;">❌ Erro: '+(e.message||e)+'</div>';
     return;
   }
+  if(VD_SUBABA !== 'skus') return;
   vdSkuRender();
 }
 
@@ -8993,6 +8994,7 @@ async function rVdVisao(){
     for(var _im = 0; _im < _mlSel.length; _im++){
       var _cd = '', _ci = '', _guard = 0;
       while(_guard++ < 1000){
+        if(VD_SUBABA !== 'visao') return; // trocou de sub-aba durante o load -> aborta (nao sobrescreve)
         var _url = '/api/ml/vendas?de=' + VD_DATA_INI + '&ate=' + VD_DATA_FIM + '&conta=' + encodeURIComponent(_mlSel[_im]) + _buscaQS + '&limit=2000'
           + (_cd ? ('&cursor_data=' + encodeURIComponent(_cd) + '&cursor_id=' + encodeURIComponent(_ci)) : '');
         var j = await fetch(_url).then(function(r){ return r.json(); });
@@ -9039,6 +9041,7 @@ async function rVdVisao(){
         if(_sh && _sh.itens && _sh.itens.length){ todos = todos.concat(_sh.itens); }
       }catch(_eSh){ console.warn('Shopee vendas '+_shSel[_is]+':', _eSh); }
     }
+    if(VD_SUBABA !== 'visao') return; // usuario trocou de sub-aba enquanto carregava
     VD_DADOS = todos;
     vdVisaoRender();
   } catch(e){
@@ -9402,6 +9405,7 @@ async function rVdVendasSemCusto(){
     cont.innerHTML = '<div style="padding:20px;color:var(--NEG);background:rgba(201,33,39,.08);border-radius:8px;">❌ Erro: '+(e.message||e)+'</div>';
     return;
   }
+  if(VD_SUBABA !== 'vsc') return;
   vdVscRender();
 }
 
