@@ -9348,35 +9348,30 @@ async function rVdVendasSemCusto(){
   cont.innerHTML = '<div style="padding:40px;text-align:center;color:var(--MU);">⏳ Carregando vendas sem custo...</div>';
   
   try {
-    if (VSC_CONTA === 'verssene_shopee') {
-      VSC_DADOS = []; VSC_TOTAL = 0;
-    } else {
-      var qCount = sb.from('ml_orders').select('*', { count: 'exact', head: true }).or('cmv_total_snap.eq.0,cmv_total_snap.is.null');
-      if (VSC_CONTA) qCount = qCount.eq('conta_interna_id', VSC_CONTA);
-      var r1 = await qCount;
-      VSC_TOTAL = r1.count || 0;
-
-      var ini = (VSC_PAGINA - 1) * VSC_POR_PAG;
+    var dados = [];
+    // ML sem custo (poucas; <=1000) — exclui canceladas/trocas
+    if (VSC_CONTA !== 'verssene_shopee') {
       var q = sb.from('ml_orders')
         .select('id, conta_interna_id, sku, item_title, preco_total, qty, data_venda, mc_valor, mc_pct')
         .or('cmv_total_snap.eq.0,cmv_total_snap.is.null')
-        .order('data_venda', { ascending: false })
-        .range(ini, ini + VSC_POR_PAG - 1);
+        .eq('status','paid').neq('eh_troca_devolucao', true)
+        .order('data_venda', { ascending: false }).order('id', { ascending: false }).limit(1000);
       if (VSC_CONTA) q = q.eq('conta_interna_id', VSC_CONTA);
       var r2 = await q;
       if (r2.error) throw r2.error;
-      VSC_DADOS = (r2.data || []).map(function(v){ v.marketplace='ML'; return v; });
+      dados = (r2.data || []).map(function(v){ v.marketplace='ML'; return v; });
     }
-    // Shopee sem custo (Todas ou Verssene), so na 1a pagina pra nao repetir
-    if ((VSC_CONTA === '' || VSC_CONTA === 'verssene_shopee') && VSC_PAGINA === 1) {
+    // Shopee sem custo (todas as lojas, ou a filtrada) — carregado UMA vez; paginacao client-side
+    if (VSC_CONTA === '' || VSC_CONTA === 'verssene_shopee') {
       try {
-        var _sc = await fetch('/api/shopee/sem-custo?conta=verssene_shopee&limit=500').then(function(r){return r.json();});
-        if (_sc && _sc.itens && _sc.itens.length) {
-          VSC_DADOS = _sc.itens.concat(VSC_DADOS);
-          VSC_TOTAL += _sc.itens.length;
-        }
+        var _scUrl = '/api/shopee/sem-custo?limit=5000' + (VSC_CONTA==='verssene_shopee'?'&conta=verssene_shopee':'');
+        var _sc = await fetch(_scUrl).then(function(r){return r.json();});
+        if (_sc && _sc.itens && _sc.itens.length) dados = _sc.itens.concat(dados);
       } catch(_eSc) { console.warn('Shopee sem-custo:', _eSc); }
     }
+    VSC_DADOS = dados;
+    VSC_TOTAL = dados.length;
+    if (VSC_PAGINA > Math.ceil((VSC_TOTAL||1)/VSC_POR_PAG)) VSC_PAGINA = 1;
   } catch(e) {
     cont.innerHTML = '<div style="padding:20px;color:var(--NEG);background:rgba(201,33,39,.08);border-radius:8px;">❌ Erro: '+(e.message||e)+'</div>';
     return;
@@ -9419,7 +9414,7 @@ function vdVscRender(){
     h += '<th style="padding:10px;font-weight:600;color:var(--MU);text-align:center;">Ação</th>';
     h += '</tr></thead><tbody>';
     
-    VSC_DADOS.forEach(function(v){
+    VSC_DADOS.slice((VSC_PAGINA-1)*VSC_POR_PAG,(VSC_PAGINA-1)*VSC_POR_PAG+VSC_POR_PAG).forEach(function(v){
       var d = '-';
       if (v.data_venda){
         var dt = new Date(v.data_venda);
@@ -9432,7 +9427,7 @@ function vdVscRender(){
       h += '<tr style="border-bottom:1px solid #f3f4f6;">';
       h += '<td style="padding:8px 10px;color:var(--MU);white-space:nowrap;">'+d+'</td>';
       var _mkv = v.marketplace==='Shopee' ? '<span style="background:#FFE8D9;color:var(--O);padding:1px 4px;border-radius:3px;font-size:9px;font-weight:700;margin-right:3px;">SHOPEE</span>' : (v.marketplace==='ML' ? '<span style="background:#FFF3CD;color:var(--Y);padding:1px 4px;border-radius:3px;font-size:9px;font-weight:700;margin-right:3px;">ML</span>' : '');
-      h += '<td style="padding:8px 10px;color:var(--MU);white-space:nowrap;">'+_mkv+(v.marketplace==='Shopee'?'verssene':(v.conta_interna_id||''))+'</td>';
+      h += '<td style="padding:8px 10px;color:var(--MU);white-space:nowrap;">'+_mkv+(v.conta_interna_id||'verssene')+'</td>';
       h += '<td style="padding:8px 10px;font-family:monospace;font-size:11px;">'+(v.sku||'<span style="color:#aaa;">sem SKU</span>')+'</td>';
       h += '<td style="padding:8px 10px;color:var(--MU);" title="'+title.replace(/"/g,'&quot;')+'">'+titleShort+'</td>';
       h += '<td style="padding:8px 10px;text-align:right;white-space:nowrap;">R$ '+(parseFloat(v.preco_total)||0).toFixed(2).replace('.',',')+'</td>';
@@ -9453,10 +9448,10 @@ function vdVscRender(){
     h += '<div style="padding:10px 14px;margin-top:8px;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--MU);background:var(--C2);border:1px solid var(--BR);border-radius:8px;flex-wrap:wrap;gap:8px;">';
     h += '<span>Página '+VSC_PAGINA+' de '+totalPag+' · '+VSC_TOTAL.toLocaleString('pt-BR')+' vendas</span>';
     h += '<div style="display:flex;gap:4px;">';
-    h += '<button onclick="VSC_PAGINA=1;rVdVendasSemCusto()" '+(VSC_PAGINA===1?'disabled':'')+' style="padding:4px 10px;border:1px solid var(--BR);background:var(--C2);border-radius:4px;cursor:pointer;">«</button>';
-    h += '<button onclick="VSC_PAGINA=Math.max(1,VSC_PAGINA-1);rVdVendasSemCusto()" '+(VSC_PAGINA===1?'disabled':'')+' style="padding:4px 10px;border:1px solid var(--BR);background:var(--C2);border-radius:4px;cursor:pointer;">‹</button>';
-    h += '<button onclick="VSC_PAGINA=Math.min('+totalPag+',VSC_PAGINA+1);rVdVendasSemCusto()" '+(VSC_PAGINA===totalPag?'disabled':'')+' style="padding:4px 10px;border:1px solid var(--BR);background:var(--C2);border-radius:4px;cursor:pointer;">›</button>';
-    h += '<button onclick="VSC_PAGINA='+totalPag+';rVdVendasSemCusto()" '+(VSC_PAGINA===totalPag?'disabled':'')+' style="padding:4px 10px;border:1px solid var(--BR);background:var(--C2);border-radius:4px;cursor:pointer;">»</button>';
+    h += '<button onclick="VSC_PAGINA=1;vdVscRender()" '+(VSC_PAGINA===1?'disabled':'')+' style="padding:4px 10px;border:1px solid var(--BR);background:var(--C2);border-radius:4px;cursor:pointer;">«</button>';
+    h += '<button onclick="VSC_PAGINA=Math.max(1,VSC_PAGINA-1);vdVscRender()" '+(VSC_PAGINA===1?'disabled':'')+' style="padding:4px 10px;border:1px solid var(--BR);background:var(--C2);border-radius:4px;cursor:pointer;">‹</button>';
+    h += '<button onclick="VSC_PAGINA=Math.min('+totalPag+',VSC_PAGINA+1);vdVscRender()" '+(VSC_PAGINA===totalPag?'disabled':'')+' style="padding:4px 10px;border:1px solid var(--BR);background:var(--C2);border-radius:4px;cursor:pointer;">›</button>';
+    h += '<button onclick="VSC_PAGINA='+totalPag+';vdVscRender()" '+(VSC_PAGINA===totalPag?'disabled':'')+' style="padding:4px 10px;border:1px solid var(--BR);background:var(--C2);border-radius:4px;cursor:pointer;">»</button>';
     h += '</div></div>';
   }
   
