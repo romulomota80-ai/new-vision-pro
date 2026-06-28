@@ -9081,7 +9081,7 @@ function vdVisaoRender(){
   }
   var aprovSum = s(aprov,'preco_total');
   var cancSum = s(canc,'preco_total');
-  var faturamentoML = aprovSum + cancSum;
+  var faturamentoML = aprovSum; // faturamento = SO vendas pagas; cancelado NAO entra (era aprovSum+cancSum -> inflava)
   var custoTotal = s(aprov,'cmv_total_snap');
   var impostoTotal = s(aprov,'imposto_valor');
   var custoImp = custoTotal + impostoTotal;
