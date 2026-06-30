@@ -8982,10 +8982,22 @@ async function rVdVisao(){
     var fimUTC = vdBRTtoUTC(VD_DATA_FIM + ' 23:59:59');
     var todos = [];
     // Lista de contas DISPONIVEIS (dinamica: ML + Shopee, do banco). Carrega 1x e cacheia.
-    if(!window.VD_CONTAS_DISP){
-      try{ var _cc = await fetch('/api/ml/vendas/contas').then(function(r){return r.json();}); window.VD_CONTAS_DISP = (_cc && _cc.contas) || []; }
-      catch(_eCC){ window.VD_CONTAS_DISP = [{id:'look_store',mk:'ml'},{id:'moda_mix',mk:'ml'},{id:'verssene_shopee',mk:'shopee'}]; }
-      if(!window._VD_SEL_INIT){ window.VD_CONTAS_SEL = (window.VD_CONTAS_DISP||[]).map(function(a){return a.id;}); window._VD_SEL_INIT = true; }
+    if(!window.VD_CONTAS_DISP || window._VD_CONTAS_FALLBACK){
+      try{
+        var _r = await fetch('/api/ml/vendas/contas');
+        var _cc = _r.ok ? await _r.json() : null;
+        var _lst = (_cc && _cc.contas) || [];
+        if(!_lst.length){ throw new Error('lista vazia'); }
+        window.VD_CONTAS_DISP = _lst; window._VD_CONTAS_FALLBACK = false;   // lista real recebida -> cacheia
+      }
+      catch(_eCC){
+        // backend engasgou: usa fallback minimo SO' por enquanto e marca pra
+        // refazer o fetch no proximo render (nao trava a aba em 3 contas)
+        if(!window.VD_CONTAS_DISP){ window.VD_CONTAS_DISP = [{id:'look_store',mk:'ml'},{id:'moda_mix',mk:'ml'},{id:'verssene_shopee',mk:'shopee'}]; }
+        window._VD_CONTAS_FALLBACK = true;
+      }
+      // so' fixa a selecao inicial (todas marcadas) quando ja' temos a lista REAL
+      if(!window._VD_SEL_INIT && !window._VD_CONTAS_FALLBACK){ window.VD_CONTAS_SEL = (window.VD_CONTAS_DISP||[]).map(function(a){return a.id;}); window._VD_SEL_INIT = true; }
     }
     var _mk = {}; (window.VD_CONTAS_DISP||[]).forEach(function(a){ _mk[a.id] = a.mk; });
     var _buscaQS = VD_BUSCA ? ('&busca=' + encodeURIComponent(VD_BUSCA)) : '';
